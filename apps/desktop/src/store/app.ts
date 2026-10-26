@@ -84,6 +84,7 @@ import { ended, instanceKey, type Mark } from './status'
 import { applySubagent } from './subagents'
 import { away, named, readTabs, screenPlace, type Tab, type TabPlace, Tabs, writeTabs } from './tabs'
 import { type CommandOutcome, leaveExecutorTab, runCommand, showExecutorTab } from './terminals'
+import { setPluginThemes } from './theme'
 import { applyEvent, EMPTY_THREAD, fromHistory, terminalText, type Thread } from './thread'
 import {
   failed as usageFailed,
@@ -1841,6 +1842,11 @@ export class HomeSession {
     // An older server has no screens to give.
     const { screens } = await this.client.call('plugin.screens', {}).catch(() => ({ screens: [] }))
     this.$screens.set(screens)
+    // Likewise for themes: the look stays as it was.
+    const themes = await this.client.call('plugin.themes', {}).catch(() => undefined)
+    if (themes) {
+      setPluginThemes(themes.themes)
+    }
   }
 
   /** A change on the Plugins screen; what the server refuses is said there, and the screen is read
