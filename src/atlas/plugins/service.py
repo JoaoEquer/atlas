@@ -43,13 +43,17 @@ from atlas.plugins.model import (
     ON_SKILL,
     SCREEN_FILE,
     SKILLS_FOLDER,
+    THEMES_FOLDER,
     Admission,
     Manifest,
+    ManifestError,
     Pairing,
+    Theme,
     VersionError,
     admission,
     new_code,
     normal_code,
+    parse_theme,
     plugin_servers,
     satisfies,
 )
@@ -196,6 +200,14 @@ class PluginScreen:
     source: str
     #: Its desktop powers (`atlas.desktop`, version 23), which the app gives it.
     desktop: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PluginTheme:
+    """A theme of a plugin that is on (version 24), as the app paints it."""
+
+    plugin: str
+    theme: Theme
 
 
 #: The largest screen Atlas hands the app: a plugin's whole screen in one file.
@@ -491,6 +503,23 @@ class Plugins:
                     view.manifest.desktop,
                 )
             )
+        return found
+
+    def themes(self) -> list[PluginTheme]:
+        """The themes of the plugins that are on (version 24), for the app to offer. A file that
+        cannot be read, or is no theme, marks its plugin."""
+        found: list[PluginTheme] = []
+        for view in self.all():
+            if not view.running or view.manifest is None or not view.manifest.themes:
+                continue
+            for name in view.manifest.themes:
+                file = view.folder / THEMES_FOLDER / f"{name}.json"
+                try:
+                    theme = parse_theme(name, file.read_text(encoding="utf-8", errors="replace"))
+                except (OSError, ManifestError) as error:
+                    self.failed(view.name, f"Its theme {name} cannot be read: {error}")
+                    continue
+                found.append(PluginTheme(view.name, theme))
         return found
 
     async def cli_commands(self) -> list[LoadedCli]:

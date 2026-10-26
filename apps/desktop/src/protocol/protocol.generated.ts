@@ -463,6 +463,21 @@ export interface PluginScreenRow {
   /** What it may do outside the app's window (step 17b): `shortcut`, `paste`. */
   desktop: string[]
 }
+export interface PluginThemes {
+  themes: PluginThemeRow[]
+}
+/** A theme a plugin brings (SDK version 24): colors for the app, which it offers beside light and dark. */
+export interface PluginThemeRow {
+  plugin: string
+  name: string
+  label: string
+  /** `light` or `dark`: the look the theme sits on. */
+  base: string
+  /** Each named color of the app it repaints (`background`) and its hex color. */
+  colors: Record<string, string>
+  /** The label in a language, by locale (`pt-BR`), where it has one. */
+  labels: Record<string, string>
+}
 /** A plugin's screen calls its Python (step 16m, SDK version 17). */
 export interface PluginCallParams {
   plugin: string
@@ -1694,6 +1709,8 @@ export interface RpcMethods {
   'plugin.secret': { params: PluginSecretParams; result: PluginRow }
   /** Change a setting a plugin declares, and start it again if it is on. */
   'plugin.setting': { params: PluginSettingParams; result: PluginRow }
+  /** The themes of the plugins that are on, for the app to offer beside light and dark (SDK version 24); read again on plugins.changed. */
+  'plugin.themes': { params: Empty; result: PluginThemes }
   /** A file of the server's machine for the side panel's preview, at most 5 MB, by what it is: HTML, Markdown, an image or text (step 15). */
   'preview.read': { params: PreviewReadParams; result: PreviewRead }
   /** Check a provider's key where it costs nothing, and store it in the vault unless the provider refuses it. The key is never sent back. */
@@ -1852,6 +1869,7 @@ export const RPC_METHODS = [
   'plugin.screens',
   'plugin.secret',
   'plugin.setting',
+  'plugin.themes',
   'preview.read',
   'provider.connect',
   'provider.list',

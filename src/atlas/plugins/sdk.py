@@ -54,7 +54,9 @@ Claude's extra usage, Codex's credits), so a limit that bills rather than stops 
 (`PluginContext.register_reader`, step 17a): the voice plugin writes down what an audio file says,
 from the app and from every channel alike. Version 22 lets a tool send the user a file
 (`ToolHost.send_file`): Atlas keeps it in the home, shows it in the app, and hands it to a channel
-that sends files (`FileChannel.send_file`); the voice plugin's spoken answers go so.
+that sends files (`FileChannel.send_file`); the voice plugin's spoken answers go so. Version 24
+lets a plugin bring themes (`atlas.themes`): `themes/<name>.json`, colors for the app,
+with no Python and no screen; the app offers them beside light and dark.
 
 **What costs credit is declared and shown:** `llm` and `notify` call the user's model on the
 plugin's own initiative, so the manifest says `"llm": true` or `"notify": true` and the consent
@@ -99,7 +101,7 @@ from typing import Any, Literal, Protocol
 #: pays on past its limits; 20, a session's tokens of context; 21, attachment readers; 22, files
 #: a tool sends the user, and a channel that sends them; 23, a screen's desktop powers (a global
 #: shortcut, pasting into the program in focus).
-API_VERSION = 23
+API_VERSION = 24
 
 
 @dataclass(frozen=True, slots=True)

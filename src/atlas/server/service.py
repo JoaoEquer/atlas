@@ -291,6 +291,8 @@ from atlas.server.protocol import (
     PluginSecretRow,
     PluginSettingParams,
     PluginSettingRow,
+    PluginThemeRow,
+    PluginThemes,
     PreviewPayload,
     PreviewRead,
     PreviewReadParams,
@@ -571,6 +573,7 @@ class Gateway:
             "plugin.setting": self._plugin_setting,
             "plugin.reload": self._plugin_reload,
             "plugin.screens": self._plugin_screens,
+            "plugin.themes": self._plugin_themes,
             "plugin.call": self._plugin_call_python,
             "marketplace.list": self._marketplace_list,
             "marketplace.page": self._marketplace_page,
@@ -1731,6 +1734,22 @@ class Gateway:
             [
                 PluginScreenRow(screen.plugin, screen.source, list(screen.desktop))
                 for screen in found
+            ]
+        )
+
+    async def _plugin_themes(self, connection: Connection, params: Empty) -> PluginThemes:
+        found = await asyncio.to_thread(self.plugins.themes)
+        return PluginThemes(
+            [
+                PluginThemeRow(
+                    item.plugin,
+                    item.theme.name,
+                    item.theme.label,
+                    item.theme.base,
+                    dict(item.theme.colors),
+                    dict(item.theme.labels),
+                )
+                for item in found
             ]
         )
 
