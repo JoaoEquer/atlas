@@ -672,7 +672,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 ## What the SDK offers
 
-Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 23), and the ACP
+Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 24), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
 (`SCREEN_API` 3). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
@@ -715,8 +715,43 @@ with `desktop` declared `ctx.shortcut`, `ctx.paste` and `ctx.bar`. From `@atlas/
 imports `useValue` and `host`: `host.state` (`connection`, `conversation`, `home`),
 `host.request`, `host.openPage`, `host.send`, `host.insertText` and `host.togglePanel`.
 
+## Themes
+
+A plugin can bring colors for the app (`atlas.api` 24). A theme is data: one file,
+`themes/<name>.json`, with no Python and no screen, and the manifest names it.
+
+```json
+{ "name": "sand", "atlas": { "api": 24, "themes": ["sand"] } }
+```
+
+```json
+{
+  "label": "Sand",
+  "labels": { "pt-BR": "Areia" },
+  "base": "light",
+  "colors": { "background": "#e9e3d3", "subtle": "#e2dbc9", "working": "#2d63a8" }
+}
+```
+
+- `base` is the look the theme sits on, `light` or `dark`: the app keeps its own light and dark
+  classes, and the theme repaints steps of the palette over it.
+- `colors` names the app's own colors and gives each a hex color (`#rgb`, `#rrggbb` or
+  `#rrggbbaa`). The app paints every screen with these names and no others: `background`,
+  `foreground`, `soft`, `muted-foreground`, `faint`, `subtle`, `raised`, `muted`, `hover`,
+  `selected`, `border`, `border-strong`, `primary`, `primary-foreground`, `ring`, `scrim`,
+  and the states `working`, `waiting`, `waiting-text`, `waiting-foreground`, `done`, `done-text`,
+  `failed`, `failed-text`, `danger`, `added` and `removed`. A color left out keeps the base's. A
+  name that is not one of these, and anything that is not a hex color (a URL, a gradient, a rule),
+  refuse the plugin, so a theme can only paint.
+- `label` is the name in the settings list, and `labels` the same by language.
+- A file is at most 64 KB.
+
+The consent says it adds the themes and that nothing runs. A theme is offered in the settings,
+beside light and dark, only while its plugin is on; a user who chose it and turned the plugin off
+sees the system's look until it is on again.
+
 ## Not yet
 
 Atlas lists a plugin that brings any of these, and refuses to turn it on: LSP servers, output
-styles, themes and workflows. A screen has a page and a panel; a status bar, a palette and
-themes are not in the app.
+styles and workflows. A screen has a page and a panel; a status bar and a palette are not in the
+app.
