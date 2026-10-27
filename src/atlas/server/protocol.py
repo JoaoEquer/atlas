@@ -752,6 +752,27 @@ class PluginScreens:
 
 
 @dataclass(frozen=True, slots=True)
+class PluginThemeRow:
+    """A theme a plugin brings (SDK version 24): colors for the app, which it offers
+    beside light and dark."""
+
+    plugin: str
+    name: str
+    label: str
+    #: `light` or `dark`: the look the theme sits on.
+    base: str
+    #: Each named color of the app it repaints (`background`) and its hex color.
+    colors: dict[str, str]
+    #: The label in a language, by locale (`pt-BR`), where it has one.
+    labels: dict[str, str] = field(default_factory=dict[str, str])
+
+
+@dataclass(frozen=True, slots=True)
+class PluginThemes:
+    themes: list[PluginThemeRow]
+
+
+@dataclass(frozen=True, slots=True)
 class PluginCallParams:
     """A plugin's screen calls its Python (step 16m, SDK version 17)."""
 
@@ -2159,6 +2180,13 @@ METHODS: Mapping[str, Method] = {
             PluginScreens,
             "The screens of the plugins that are on, for the app to load (step 16m); read again "
             "on plugins.changed.",
+        ),
+        Method(
+            "plugin.themes",
+            Empty,
+            PluginThemes,
+            "The themes of the plugins that are on, for the app to offer beside light and dark "
+            "(SDK version 24); read again on plugins.changed.",
         ),
         Method(
             "plugin.call",

@@ -35,6 +35,7 @@ from atlas.plugins.model import (
     PYTHON,
     SCREEN_FILE,
     SKILLS_FOLDER,
+    THEMES_FOLDER,
     Manifest,
     ManifestError,
     Pairing,
@@ -183,6 +184,7 @@ def read_plugin(folder: Path, bundled: bool) -> Found:
             agents=[file.stem for file in command_files(folder / AGENTS_FOLDER)],
             monitors_text=monitors_text,
             screen=(folder / SCREEN_FILE).is_file(),
+            themes=_themes(folder / THEMES_FOLDER),
         )
     except OSError as error:
         return Found(
@@ -244,6 +246,17 @@ def _inside(folder: Path, path: str) -> Path:
     if not found.is_file():
         raise HookConfigError(f"{MANIFEST}: the path {path!r} is not there.")
     return found
+
+
+def _themes(folder: Path) -> dict[str, str]:
+    """The text of the files of a plugin's `themes/`, by name (version 24)."""
+    if not folder.is_dir():
+        return {}
+    return {
+        child.stem: child.read_text(encoding="utf-8", errors="replace")
+        for child in sorted(folder.iterdir())
+        if child.is_file() and child.suffix == ".json" and not child.name.startswith(".")
+    }
 
 
 def _programs(folder: Path) -> list[str]:

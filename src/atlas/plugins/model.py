@@ -93,6 +93,25 @@ READER_KINDS = ("audio",)
 #: The SDK version of a screen's desktop powers (step 17b), and the powers a screen may declare.
 DESKTOP_API = 23
 DESKTOP_POWERS = ("paste", "shortcut")
+#: The SDK version of themes (`atlas.themes`, version 24): the colors a plugin gives the app, one
+#: `themes/<name>.json` each. A theme is data: no Python, no screen, nothing runs.
+THEMES_API = 24
+THEMES_FOLDER = "themes"
+#: The largest theme file Atlas reads.
+THEME_BYTES = 64 * 1024
+THEME_BASES = ("light", "dark")
+#: What a theme paints: the app's named colors (`apps/desktop/src/styles.css`, step 9d), the only
+#: names a screen paints with. A test keeps this list the same as the app's.
+THEME_TOKENS = (
+    "background", "foreground", "soft", "muted-foreground", "faint", "subtle", "raised", "muted",
+    "hover", "selected", "border", "border-strong", "primary", "primary-foreground", "ring",
+    "scrim", "working", "waiting", "waiting-text", "waiting-foreground", "done", "done-text",
+    "failed", "failed-text", "danger", "added", "removed",
+)  # fmt: skip
+#: What it paints with: a hex color, and nothing else, so a theme can never carry a URL or a rule.
+_THEME_HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+_THEME_FIELDS = frozenset({"label", "labels", "base", "colors"})
+_LOCALE = re.compile(r"^[a-z]{2}(?:-[A-Z]{2})?$")
 #: A plugin's screen, its desktop half (step 16m).
 SCREEN_FILE = "desktop/plugin.js"
 #: A hook's event, Claude Code's way of naming them.
@@ -240,6 +259,8 @@ class Manifest:
     #: What its screen does outside the app's window (`atlas.desktop`, version 23): `shortcut`, a
     #: key heard in every program, and `paste`, text pasted into the program in focus.
     desktop: tuple[str, ...] = ()
+    #: The themes it brings (`atlas.themes`, version 24), by name: `themes/<name>.json` each.
+    themes: tuple[str, ...] = ()
     #: The other plugins it needs on (Claude Code's `dependencies`, step 16n).
     dependencies: tuple[Dependency, ...] = ()
 
@@ -346,6 +367,11 @@ class Manifest:
                 "Its screen pastes text into the program you are in: it puts the text on the "
                 "clipboard, presses Ctrl+V for you, and puts back what the clipboard held."
             )
+        if self.themes:
+            lines.append(
+                f"Adds the themes {', '.join(self.themes)}: colors for the app, and nothing "
+                "that runs."
+            )
         if self.dependencies:
             lines.append(
                 f"Needs the plugins {', '.join(map(str, self.dependencies))}, turned on first."
@@ -407,11 +433,76 @@ class Manifest:
             declared["readers"] = sorted(self.readers)
         if self.desktop:
             declared["desktop"] = sorted(self.desktop)
+        if self.themes:
+            declared["themes"] = sorted(self.themes)
         text = json.dumps(declared, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def setting(self, name: str) -> SettingDeclaration | None:
         return next((s for s in self.settings if s.name == name), None)
+
+
+@dataclass(frozen=True, slots=True)
+class Theme:
+    """A theme a plugin brings (version 24): its colors for the app, as `themes/<name>.json` holds
+    them. `base` is the look it sits on (the app's light or dark), `colors` the named colors of
+    the app it repaints (`background`, `soft`), each a hex color."""
+
+    name: str
+    label: str
+    base: str
+    colors: Mapping[str, str]
+    #: The label in a language, by locale (`pt-BR`), for the ones that have it.
+    labels: Mapping[str, str] = field(default_factory=dict[str, str])
+
+
+def parse_theme(name: str, text: str) -> Theme:
+    """A theme from the text of its file; raises `ManifestError` with what to fix."""
+    where = f"themes/{name}.json"
+    if len(text.encode("utf-8")) > THEME_BYTES:
+        raise ManifestError(f"{where} is over {THEME_BYTES // 1024} KB.")
+    try:
+        raw: object = json.loads(text)
+    except ValueError as error:
+        raise ManifestError(f"{where} is not JSON: {error}") from error
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{where} is not a JSON object.")
+    data: dict[str, Any] = raw  # pyright: ignore[reportUnknownVariableType]
+    extra = sorted(set(data) - _THEME_FIELDS)
+    if extra:
+        raise ManifestError(
+            f"{where} holds {', '.join(extra)}; a theme has {', '.join(sorted(_THEME_FIELDS))}."
+        )
+    label = data.get("label", name)
+    if not isinstance(label, str) or not 1 <= len(label.strip()) <= 40:
+        raise ManifestError(f"{where}: label is a text of 1 to 40 characters.")
+    labels_raw: object = data.get("labels", {})
+    if not isinstance(labels_raw, dict):
+        raise ManifestError(f"{where}: labels is an object of text by locale.")
+    labels: dict[str, str] = {}
+    for locale, value in cast("dict[object, object]", labels_raw).items():
+        if not isinstance(locale, str) or not _LOCALE.fullmatch(locale):
+            raise ManifestError(f"{where}: labels has a bad locale {locale!r}.")
+        if not isinstance(value, str) or not 1 <= len(value.strip()) <= 40:
+            raise ManifestError(f"{where}: the label for {locale} is a text of 1 to 40 characters.")
+        labels[locale] = value.strip()
+    base = data.get("base")
+    if base not in THEME_BASES:
+        raise ManifestError(f"{where}: base is {' or '.join(THEME_BASES)}.")
+    colors_raw: object = data.get("colors")
+    if not isinstance(colors_raw, dict) or not colors_raw:
+        raise ManifestError(f"{where}: colors is an object of the app's colors and hex colors.")
+    pairs = cast("dict[object, object]", colors_raw)
+    colors: dict[str, str] = {}
+    for key, value in pairs.items():
+        if not isinstance(key, str) or key not in THEME_TOKENS:
+            raise ManifestError(
+                f"{where}: {key!r} is not a color of the app; it has {', '.join(THEME_TOKENS)}."
+            )
+        if not isinstance(value, str) or not _THEME_HEX.fullmatch(value):
+            raise ManifestError(f"{where}: {key} is not a hex color (such as #e2dbc9).")
+        colors[key] = value.lower()
+    return Theme(name, label.strip(), str(base), colors, labels)
 
 
 def parse_manifest(
@@ -427,6 +518,7 @@ def parse_manifest(
     agents: Sequence[str] = (),
     monitors_text: str | None = None,
     screen: bool = False,
+    themes: Mapping[str, str] | None = None,
 ) -> Manifest:
     """A plugin's manifest from `plugin.json`'s text; `present` names what sits at the plugin's
     root (`__init__.py`, `skills`), `folder_name` the folder it is in, `skills` the folders of its
@@ -434,7 +526,8 @@ def parse_manifest(
     command hooks, one line each, as `atlas.hooks` read them, and `commands` the names of the
     Markdown files of its `commands/`, `programs` the files of its `bin/`, `agents` the
     Markdown files of its `agents/`, `monitors_text` its `monitors/monitors.json`, and
-    `screen` whether it has a `desktop/plugin.js`."""
+    `screen` whether it has a `desktop/plugin.js`, and `themes` the text of the files of its
+    `themes/`, by name."""
     try:
         raw: object = json.loads(text)
     except ValueError as error:
@@ -516,6 +609,16 @@ def parse_manifest(
             f"{name} declares the desktop powers {', '.join(unknown)}; a screen may declare "
             f"{', '.join(DESKTOP_POWERS)}."
         )
+    theme_names = _names(own, "themes", _NAME)
+    if theme_names and api < THEMES_API:
+        raise ManifestError(f"{name} declares themes, which need atlas.api {THEMES_API}.")
+    for theme in theme_names:
+        found = (themes or {}).get(theme)
+        if found is None:
+            raise ManifestError(
+                f"{name} declares the theme {theme} but brings no {THEMES_FOLDER}/{theme}.json."
+            )
+        parse_theme(theme, found)
     secrets = tuple(
         SecretDeclaration(entry["name"], entry.get("description", ""), entry.get("url", ""))
         for entry in _entries(own, "secrets", _SECRET)
@@ -581,6 +684,7 @@ def parse_manifest(
         calls=calls,
         readers=readers,
         desktop=desktop,
+        themes=theme_names,
         dependencies=_dependencies(name, data.get("dependencies")),
     )
 

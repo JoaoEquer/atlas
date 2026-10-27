@@ -2535,7 +2535,8 @@ not load, from Claude Code's plugin and hooks references of 20/10/2026, so a plu
   hook and the events the Python hooks into, the commands, the programs, the subagents and each
   monitor with its command.
 - **Still left out:** LSP servers (code intelligence for an editor, which Atlas is not), output
-  styles (Atlas has `SOUL.md`), themes and workflows; and, from the user's list of 20/10, a
+  styles (Atlas has `SOUL.md`) and workflows (themes came in SDK version 24: colors as
+  data in `themes/<name>.json`, offered in the settings beside light and dark while the plugin is on); and, from the user's list of 20/10, a
   plugin's own screen (16m) and, for whoever writes and installs (16n), reloading as files change,
   installing from a URL and dependencies.
 
@@ -2589,8 +2590,8 @@ store opens to other people's plugins.
   blob `import()` with a deadline of 10 seconds; a default export whose `id` is the plugin's name
   and whose `register(ctx)` adds the contributions. The page's policy takes `blob:` scripts for it.
 - **What a screen adds, of the areas the app has:** a tab of the side panel (`panel`) and a page
-  of the main area with its entry in the sidebar (`page`). A status bar, a palette, keybinds and
-  themes are surfaces the
+  of the main area with its entry in the sidebar (`page`). A status bar, a palette and keybinds are
+  surfaces the
   app does not have, and are left out until it has them.
 - **The context, cut to what the app has:** `register`, `onEvent` (the home's events),
   `onDispose`, `setTimeout`/`setInterval` and `storage`, each taken away with the plugin, and

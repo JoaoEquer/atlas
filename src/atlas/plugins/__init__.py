@@ -15,6 +15,7 @@ from atlas.plugins.model import (
     Manifest,
     ManifestError,
     Pairing,
+    Theme,
 )
 from atlas.plugins.sdk import (
     API_VERSION,
@@ -78,6 +79,7 @@ from atlas.plugins.service import (
     PluginParts,
     Plugins,
     PluginScreen,
+    PluginTheme,
     PluginView,
 )
 from atlas.plugins.store import BUNDLED_FOLDER, SCHEMA, Found, read_plugin
@@ -136,6 +138,7 @@ __all__ = [
     "PluginHost",
     "PluginParts",
     "PluginScreen",
+    "PluginTheme",
     "PluginView",
     "Plugins",
     "Prompt",
@@ -146,6 +149,7 @@ __all__ = [
     "SessionInfo",
     "SlashCommand",
     "Started",
+    "Theme",
     "Thought",
     "ToolHost",
     "ToolRun",

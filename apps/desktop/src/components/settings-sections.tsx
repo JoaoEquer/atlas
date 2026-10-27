@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { type ReactNode, useEffect, useState } from 'react'
 
-import { chosenLocale, type LocaleChoice, setLocale, systemLocale, t } from '@/i18n'
+import { chosenLocale, locale, type LocaleChoice, setLocale, systemLocale, t } from '@/i18n'
 import type { ConversationModel, ProviderOption, SettingChange, SettingRow } from '@/protocol/protocol.generated'
 import {
   $home,
@@ -15,7 +15,7 @@ import {
   writeSettings
 } from '@/store/app'
 import { closeSettings } from '@/store/settings'
-import { $themeChoice, setTheme, type ThemeChoice } from '@/store/theme'
+import { $pluginThemes, $themeChoice, setTheme, type ThemeChoice, themeKey } from '@/store/theme'
 import { $update, $updateOpen } from '@/store/updates'
 
 import { Providers } from './key-screen'
@@ -213,6 +213,7 @@ function TextSetting({
 
 export function GeneralSection() {
   const theme = useStore($themeChoice)
+  const pluginThemes = useStore($pluginThemes)
   const update = useStore($update)
   const language = chosenLocale()
   const [looking, setLooking] = useState(false)
@@ -263,7 +264,8 @@ export function GeneralSection() {
         options={[
           ['system', t.settings.themeSystem],
           ['light', t.settings.themeLight],
-          ['dark', t.settings.themeDark]
+          ['dark', t.settings.themeDark],
+          ...pluginThemes.map((row): [string, string] => [themeKey(row), row.labels[locale] ?? row.label])
         ]}
         testId="setting-theme"
       />
