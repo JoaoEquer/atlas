@@ -481,7 +481,7 @@ def parse_theme(name: str, text: str) -> Theme:
         raise ManifestError(f"{where}: labels is an object of text by locale.")
     labels: dict[str, str] = {}
     for locale, value in cast("dict[object, object]", labels_raw).items():
-        if not isinstance(locale, str) or not _LOCALE.match(locale):
+        if not isinstance(locale, str) or not _LOCALE.fullmatch(locale):
             raise ManifestError(f"{where}: labels has a bad locale {locale!r}.")
         if not isinstance(value, str) or not 1 <= len(value.strip()) <= 40:
             raise ManifestError(f"{where}: the label for {locale} is a text of 1 to 40 characters.")
@@ -499,7 +499,7 @@ def parse_theme(name: str, text: str) -> Theme:
             raise ManifestError(
                 f"{where}: {key!r} is not a color of the app; it has {', '.join(THEME_TOKENS)}."
             )
-        if not isinstance(value, str) or not _THEME_HEX.match(value):
+        if not isinstance(value, str) or not _THEME_HEX.fullmatch(value):
             raise ManifestError(f"{where}: {key} is not a hex color (such as #e2dbc9).")
         colors[key] = value.lower()
     return Theme(name, label.strip(), str(base), colors, labels)
