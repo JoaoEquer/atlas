@@ -83,6 +83,7 @@ from atlas.conversations import (
     Attachments,
     ConversationInfo,
     ConversationNotFoundError,
+    Cursor,
     StoredAttachment,
     StoredMessage,
 )
@@ -421,8 +422,9 @@ DETECT_SECONDS = 60.0
 _WORKBENCH = ""
 #: How long the start waits for the executors before going on without them.
 EXECUTORS_WAIT_SECONDS = 5.0
-#: The most conversations a list returns.
-LIST_MOST = 200
+#: The most conversations a list returns: a client reads again every row its list holds in one
+#: call, pages it read as it scrolled included (step 9e).
+LIST_MOST = 1000
 #: How much of a bot's last message its row shows.
 PREVIEW_CHARS = 120
 #: The conversations' table, as a backup's manifest counts it for the import dialog.
@@ -999,9 +1001,14 @@ class Gateway:
         return Empty()
 
     async def _list(self, connection: Connection, params: ListParams) -> ConversationList:
-        found = self.assistant.conversations.recent(max(1, min(params.limit, LIST_MOST)))
+        after = Cursor.read(params.cursor) if params.cursor else None
+        if params.cursor and after is None:
+            raise ProtocolError(INVALID_PARAMS, "params.cursor is not a cursor this server gave.")
+        limit = max(1, min(params.limit, LIST_MOST))
+        found, more = self.assistant.conversations.page(limit, after)
         running = self.assistant.running
-        return ConversationList([_row(info, running(info.id)) for info in found])
+        rows = [_row(info, running(info.id)) for info in found]
+        return ConversationList(rows, "" if more is None else more.text)
 
     async def _create(self, connection: Connection, params: Empty) -> Created:
         created = self.assistant.conversations.create()

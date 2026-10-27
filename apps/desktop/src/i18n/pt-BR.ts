@@ -213,6 +213,7 @@ export const ptBR: Override<Messages> = {
   conversations: {
     empty: 'Nenhuma conversa ainda.',
     reading: 'Lendo as conversas…',
+    readingMore: 'Lendo mais conversas…',
     new: 'Nova conversa',
     tab: 'Conversas',
     untitled: 'Nova conversa',

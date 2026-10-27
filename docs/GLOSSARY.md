@@ -72,6 +72,7 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `skill review` | revisão de skills | The background review's skill half: due every 10 model calls without a skill change; it patches, extends or creates skills |
 | `conversation` | conversa | One thread of messages with the agent, stored raw in the database for good; a compaction archives its older messages, which stay searchable |
 | `stored message` | mensagem guardada | One message of a conversation in the database, with its number, which the conversation search uses to scroll; active while it is in the history the model gets |
+| `list page` | página da lista | Up to 50 rows of the list of conversations, the latest activity first, read as the sidebar scrolls near its end. The next page starts at the `cursor` the one before gave (its last row's activity and id), so a conversation whose activity moves it up meanwhile is neither read twice nor skipped; a refresh reads again as many rows as the list holds |
 | `conversation search` | busca nas conversas | Finding past conversations by their words, and reading inside one, with no model in between |
 | `instant title` | título instantâneo | A conversation's first title: the first line the user wrote, cut, with no model; it never fails |
 | `title model` | modelo de título | The small model that names a conversation as its first turn starts (Claude Haiku 5.5, else GPT-6 Luna), replacing the instant title |

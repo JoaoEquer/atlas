@@ -645,6 +645,8 @@ an id, and may withdraw them.
 - **Homes** (step 10b): `home.list` gives the homes of the machine and the one the server serves;
   since step 10c, `home.create`, `home.backup`, `home.inspect` and
   `home.import` (Homes in the app).
+- **The list of conversations** (step 9e): `conversation.list` gives a page and the cursor of the
+  next (The list of conversations, below).
 - **A message sent while a turn runs steers it**: it enters the history after the round of tools in
   course (`AgentLoop.run(steering=...)`), or starts the next turn when the turn ends first. Stopping
   a turn hands the messages not yet taken back to the client, which puts them back in the input
@@ -1393,6 +1395,28 @@ full weight; a click on a tool opens what went in and what came out. Roadmap ste
   the thinking in the text, closed by a `</think>` whose opening its template wrote, and the
   scrubber takes out only the tag (left as it is, decided with the user). DeepSeek
   waits for an OpenRouter key, which the user's vault does not hold (decided with the user).
+
+### The list of conversations — decided 2026-10-27
+
+Step 9e: the sidebar's list holds every conversation of the home, not only the latest 50.
+
+- **A page at a time** (`conversation.list`, `ConversationStore.page`): the latest activity first,
+  the id breaking a tie, 50 rows a page. A page ends at a cursor, its last row's activity and id
+  as text (`Cursor`), and the next starts strictly after it, so a conversation whose activity moves
+  it to the top meanwhile is neither read twice nor skipped: it leaves the part not read yet for
+  the part already read. Each change to the list (`conversations.changed`) reads it again, as many
+  rows as the app holds (1,000 at most, `LIST_MOST`; past them, the rest is read again as the list
+  scrolls), and that read gives the cursor the next page starts from. The app reads the next page
+  as the list scrolls to 240 px of its end, or at once while the list is shorter than its height.
+  A page and a read of the whole list never cross (`HomeSession.listRead`): a page read from the
+  old end would skip the row the other read just pushed past it. A page that fails says so at the
+  list's end, with "Read again", and nothing reads it again by itself. A cursor the server never
+  gave is refused; an app that sends none gets the first page, as before this step, and a server
+  that sends none ends the list at its one page.
+- **Proved** by the store's and the server's tests (each conversation once, in order, with
+  activity in the middle and a tie in time), the app's (the page waiting for the read of the whole
+  list, the read of as many rows as it holds, the failed page) and the end-to-end test: 60
+  conversations and a new one begun before the rest was read, all 61 listed once, in order.
 
 ## Attachments — decided 2026-10-16
 

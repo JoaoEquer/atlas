@@ -14,6 +14,7 @@ from atlas.conversations import (
     SCHEMA,
     ConversationNotFoundError,
     ConversationStore,
+    Cursor,
     Kind,
     Role,
     StoredCall,
@@ -369,6 +370,119 @@ def test_recent_lists_the_users_conversations_latest_first(store: ConversationSt
 
     assert [info.id for info in recent] == [ids[2], ids[1]]
     assert recent[0].messages == 1
+
+
+# -- the list's pages (step 9e) -------------------------------------------------------------------
+
+
+def _at(minute: int) -> str:
+    return f"2026-10-27T10:{minute:02d}:00.000Z"
+
+
+def _stamp(home: Home, conversation_id: str, at: str) -> None:
+    """Give a conversation its last activity, as a save at `at` would."""
+    connection = Database(home.database_file).connect()
+    try:
+        with connection:
+            connection.execute(
+                "UPDATE conversations_threads SET updated_at = ? WHERE id = ?",
+                (at, conversation_id),
+            )
+    finally:
+        connection.close()
+
+
+def _said(store: ConversationStore, home: Home, minutes: range) -> list[str]:
+    """A titled conversation per minute, the oldest first; their ids."""
+    ids: list[str] = []
+    for minute in minutes:
+        conversation = store.create()
+        conversation.history.append(UserMessage(f"topic {minute}"))
+        conversation.save()
+        _stamp(home, conversation.id, _at(minute))
+        ids.append(conversation.id)
+    return ids
+
+
+def test_the_list_reads_page_after_page_each_conversation_once_and_in_order(
+    store: ConversationStore, home: Home
+) -> None:
+    ids = _said(store, home, range(7))
+    store.create()  # nothing said yet: no title, not listed
+    hidden = store.create(source="subagent")
+    hidden.history.append(UserMessage("work"))
+    hidden.save()
+    store.create(source=BOT, bot="finance", title="Finance")
+
+    first, after = store.page(3)
+    assert after is not None
+    second, after = store.page(3, after)
+    assert after is not None
+    last, after = store.page(3, after)
+
+    assert after is None
+    assert [info.id for info in first + second + last] == ids[::-1]
+    assert store.page(7)[1] is None
+
+
+def test_activity_in_the_middle_neither_repeats_nor_skips_a_conversation(
+    store: ConversationStore, home: Home
+) -> None:
+    ids = _said(store, home, range(6))
+    first, cursor = store.page(3)
+    assert cursor is not None
+    # While the sidebar holds the first page, a conversation of the second gets a message and a
+    # new one begins: both go up, above the cursor.
+    _stamp(home, ids[1], _at(30))
+    [new] = _said(store, home, range(31, 32))
+
+    second, _ = store.page(3, cursor)
+    assert [info.id for info in second] == [ids[2], ids[0]]
+    # The refresh reads again as many rows as the list holds, and the next page goes on from it.
+    held, cursor = store.page(len(first) + len(second))
+    assert cursor is not None
+    rest, cursor = store.page(3, cursor)
+
+    assert cursor is None
+    assert [info.id for info in held + rest] == [
+        new,
+        ids[1],
+        ids[5],
+        ids[4],
+        ids[3],
+        ids[2],
+        ids[0],
+    ]
+
+
+def test_a_tie_in_activity_is_broken_by_the_id(store: ConversationStore, home: Home) -> None:
+    ids = sorted(_said(store, home, range(3)))
+    for conversation_id in ids:
+        _stamp(home, conversation_id, _at(5))
+
+    first, cursor = store.page(1)
+    assert cursor is not None
+    second, cursor = store.page(1, cursor)
+    assert cursor is not None
+    third, cursor = store.page(1, cursor)
+
+    assert cursor is None
+    assert [info.id for info in first + second + third] == ids[::-1]
+
+
+def test_a_cursor_reads_back_only_what_a_page_gave() -> None:
+    cursor = Cursor("2026-10-27T10:00:00.000Z", "20261027-100000-abcdef")
+
+    assert Cursor.read(cursor.text) == cursor
+    for text in (
+        "",
+        "20261027-100000-abcdef",
+        "2026-10-27T10:00:00.000Z",
+        "2026-10-27T10:00:00.000Z ",
+        "2026-10-27 20261027-100000-abcdef",
+        "2026-10-27T10:00:00.000Z two words",
+    ):
+        assert Cursor.read(text) is None, text
 
 
 def test_an_unknown_conversation_says_so(store: ConversationStore) -> None:

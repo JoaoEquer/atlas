@@ -3,8 +3,9 @@ import { type Readable, readAgain } from '@/store/app'
 
 import { InlineError } from './ui/inline-error'
 
-/** A list or a page whose read failed, in its own place: why, and reading it again. */
-export function ReadFailed({ error, what }: { error: string; what: Readable }) {
+/** A list or a page whose read failed, in its own place: why, and reading it again; `onAgain`
+ * reads a part of it again, such as the list's next page. */
+export function ReadFailed({ error, onAgain, what }: { error: string; onAgain?: () => void; what: Readable }) {
   return (
     <InlineError
       action={
@@ -12,7 +13,11 @@ export function ReadFailed({ error, what }: { error: string; what: Readable }) {
           className="shrink-0 font-medium underline-offset-2 hover:underline"
           data-testid="read-again"
           onClick={() => {
-            readAgain(what)
+            if (onAgain) {
+              onAgain()
+            } else {
+              readAgain(what)
+            }
           }}
           type="button"
         >

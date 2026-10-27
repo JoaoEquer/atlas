@@ -132,7 +132,11 @@ describe('a title a model wrote', () => {
     expect(calls).not.toContain('conversation.list')
 
     hear({ conversation_id: 'c3', payload: { title: 'New one' }, type: 'title.changed' })
-    expect(calls).toContain('conversation.list')
+    // The list is read in its turn, after the reads of it asked before (step 9e); only the row not
+    // listed reads it.
+    await vi.waitFor(() => {
+      expect(calls.filter(method => method === 'conversation.list')).toHaveLength(1)
+    })
   })
 })
 

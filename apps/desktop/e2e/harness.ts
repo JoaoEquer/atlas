@@ -357,6 +357,22 @@ export function atlas(home: string, ...args: string[]): string {
   return done.stdout
 }
 
+/** Conversations put into the home before the app opens (`tests/seed_conversations.py`): what was
+ * said in each and its answer, oldest first, a minute apart. */
+export function seedConversations(home: string, conversations: { answer: string; said: string }[]): void {
+  const file = path.join(path.dirname(home), 'conversations.json')
+  writeFileSync(file, JSON.stringify(conversations))
+  const done = spawnSync(
+    'uv',
+    ['run', '--project', ROOT, 'python', path.join('tests', 'seed_conversations.py'), home, file],
+    { cwd: ROOT, encoding: 'utf8', env: cleanEnvironment({}), windowsHide: true }
+  )
+
+  if (done.status !== 0) {
+    throw new Error(`The conversations were not seeded (${String(done.status)}):\n${done.stdout}${done.stderr}`)
+  }
+}
+
 /** The home's settings: the conversation's model, and the folder the file tools start from. */
 export function writeConfig(home: string, chosen: { model: string; provider: string }, folder: string): void {
   writeFileSync(

@@ -126,6 +126,17 @@ export interface Approved {
   result: ProposalApproved
 }
 
+/** How many conversations a page of the list brings (step 9e). */
+export const LIST_PAGE = 50
+
+/** The list of conversations past the pages read (step 9e): where the next page starts, empty
+ * once the list is whole; whether it is being read; why its last read failed. */
+export interface ListMore {
+  cursor: string
+  error: null | string
+  reading: boolean
+}
+
 /** As a session's turn ends, how often and how many times it is read until its harness kept the
  * answer on screen: three seconds in all. */
 const CATCH_UP_MS = 300
@@ -286,7 +297,9 @@ export class HomeSession {
    * its place, with a way to read it again, never looking empty or old (the UI review,
    * 25/10/2026, which found these reads failing in silence). */
   readonly $readError = map<Partial<Record<Readable, string>>>({})
+  /** The list of conversations as far as its pages were read, the latest activity first. */
   readonly $conversations = atom<ConversationRow[]>([])
+  readonly $listMore = atom<ListMore>({ cursor: '', error: null, reading: false })
   readonly $selected = atom<null | string>(null)
   readonly $threads = map<Record<string, Thread>>({})
   readonly $autoMode = map<Record<string, boolean>>({})
@@ -438,6 +451,11 @@ export class HomeSession {
   /** The reads asked for again while one ran: it is taken once that one ends, as what it read may
    * be older than what changed. */
   private readonly readsAgain = new Map<string, Promise<void>>()
+  /** The list of conversations' reads, one at a time (step 9e), so a page never crosses a refresh:
+   * a page goes on from where the list ends, and a refresh reads again as many rows as it holds.
+   * One asked for while another of its kind waits its turn joins that one. */
+  private listing: Promise<void> = Promise.resolve()
+  private readonly listWaiting = new Map<'more' | 'refresh', Promise<void>>()
 
   constructor(
     readonly client: AtlasClient,
@@ -532,15 +550,77 @@ export class HomeSession {
     }
   }
 
+  /** Read the list of conversations again, as far as its pages were read: what changed anywhere in
+   * it shows, and the next page goes on from its new end, so none is read twice or skipped. */
   async refreshList(): Promise<void> {
-    await this.reading('conversations', async () => {
-      const { conversations } = await this.client.call('conversation.list', {})
-      this.$conversations.set(conversations)
-      this.$read.setKey('conversations', true)
-      this.readLive(conversations.map(row => [row.id, row.running] as const))
-    })
+    await this.reading('conversations', () =>
+      this.listRead('refresh', async () => {
+        const held = this.$conversations.get().length
+        const { conversations, next_cursor } = await this.client.call('conversation.list', {
+          limit: Math.max(LIST_PAGE, held)
+        })
+        this.$conversations.set(conversations)
+        // A server older than the pages sends no cursor: its one page is the whole list.
+        this.$listMore.set({ cursor: next_cursor || '', error: null, reading: false })
+        this.$read.setKey('conversations', true)
+        this.readLive(conversations.map(row => [row.id, row.running] as const))
+      })
+    )
     // A home made in the terminal meanwhile shows up too.
     void readHomes(this).catch(() => undefined)
+  }
+
+  /** The next page of the list of conversations, as the sidebar nears its end; nothing once the
+   * list is whole. A failure says so at the list's end, and only `again`, its button, reads it
+   * again: scrolling does not. */
+  moreConversations(again = false): Promise<void> {
+    const { cursor, error, reading } = this.$listMore.get()
+
+    // A page being read already is the one the scroll asks for.
+    if (!cursor || reading || (error !== null && !again)) {
+      return Promise.resolve()
+    }
+
+    return this.listRead('more', async () => {
+      const { cursor } = this.$listMore.get()
+
+      if (!cursor) {
+        return
+      }
+
+      this.$listMore.set({ cursor, error: null, reading: true })
+
+      try {
+        const page = await this.client.call('conversation.list', { cursor, limit: LIST_PAGE })
+        const held = this.$conversations.get()
+        const known = new Set(held.map(row => row.id))
+        this.$conversations.set([...held, ...page.conversations.filter(row => !known.has(row.id))])
+        this.$listMore.set({ cursor: page.next_cursor || '', error: null, reading: false })
+        this.readLive(page.conversations.map(row => [row.id, row.running] as const))
+      } catch (error) {
+        this.$listMore.set({ cursor, error: error instanceof Error ? error.message : String(error), reading: false })
+      }
+    })
+  }
+
+  /** One read of the list at a time, in the order asked; one asked for while another of its kind
+   * waits joins it. */
+  private listRead(kind: 'more' | 'refresh', read: () => Promise<void>): Promise<void> {
+    const waiting = this.listWaiting.get(kind)
+
+    if (waiting) {
+      return waiting
+    }
+
+    const turn = this.listing.then(() => {
+      this.listWaiting.delete(kind)
+
+      return read()
+    })
+    this.listWaiting.set(kind, turn)
+    this.listing = turn.catch(() => undefined)
+
+    return turn
   }
 
   /** Show a conversation, in its tab or the passing one: its stored messages, then its events from
@@ -2479,6 +2559,7 @@ export const $connection = atom<Connection>({ error: null, state: 'idle' })
 export const $read = map<Record<Listed, boolean>>({ bots: false, conversations: false, workbench: false })
 export const $readError = map<Partial<Record<Readable, string>>>({})
 export const $conversations = atom<ConversationRow[]>([])
+export const $listMore = atom<ListMore>({ cursor: '', error: null, reading: false })
 export const $selected = atom<null | string>(null)
 export const $threads = map<Record<string, Thread>>({})
 export const $autoMode = map<Record<string, boolean>>({})
@@ -2567,6 +2648,7 @@ const MIRRORS: Mirror[] = [
   mirror($read, s => s.$read),
   mirror($readError, s => s.$readError),
   mirror($conversations, s => s.$conversations),
+  mirror($listMore, s => s.$listMore),
   mirror($selected, s => s.$selected),
   mirror($threads, s => s.$threads),
   mirror($autoMode, s => s.$autoMode),
@@ -2854,6 +2936,12 @@ function notifyFor(session: HomeSession, conversationId: string, title: string):
 
 export function refreshList(): Promise<void> {
   return current().refreshList()
+}
+
+/** The next page of the list of conversations, as the sidebar nears its end (step 9e); `again`,
+ * after a read of it failed. */
+export function moreConversations(again = false): Promise<void> {
+  return current().moreConversations(again)
 }
 
 /** Read again a list or a page whose last read failed; a failure again says so in its place. */

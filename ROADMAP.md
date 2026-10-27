@@ -3818,6 +3818,25 @@ confiança. **Sem redesenho:** polimento, fluidez, percepção de velocidade e i
   e o botão volta. Provado no pytest: a busca rodada num pipe em cp1252, com um título com ⌘ e um em
   português, lida inteira como UTF-8; o teste falha sem a correção. Fiscais: 2.701 testes do Python
   com 91,44% de cobertura, o `npm run check` (450 do Vitest), o do site e os 76 do e2e.
+- **Entrega 1 do 9e, mais de 50 conversas (27/10):** a lista mostrava só as 50 conversas de
+  atividade mais recente, e as outras não tinham como aparecer. Agora o `conversation.list` vem em
+  páginas de 50, cada uma terminando num cursor (a hora da atividade e o id da última linha), e a
+  seguinte começa logo depois dele; a barra lateral lê a próxima página quando a rolagem chega
+  perto do fim, ou na hora, se a lista não enche a altura. Uma conversa que ganha atividade no meio
+  sai da parte ainda não lida e entra na já lida, então nenhuma se repete nem fica de fora: a
+  releitura da lista, a cada mudança, pede tantas linhas quantas o app já tem (até 1.000), e uma
+  página nunca cruza uma releitura, uma espera a outra. A página que falha diz por quê no fim da
+  lista, com "Ler de novo", e não tenta sozinha. O app de antes, que não manda cursor, recebe a
+  primeira página, como sempre; um servidor de antes, que não manda cursor, encerra a lista nessa
+  página. Provado no pytest (cada conversa uma vez e em ordem, com atividade no meio e empate de
+  hora; o cursor que o servidor não deu é recusado), no Vitest (a página que espera a releitura, a
+  releitura do tamanho da lista, a falha e o botão, a rolagem perto do fim) e no e2e (60 conversas
+  e uma nova começada antes de ler o resto: as 61 na lista, uma vez cada, em ordem). Prints de
+  antes e depois no claro e no escuro, em inglês e em português. Na primeira rodada do e2e, com o
+  pytest rodando junto, três testes de outros assuntos (duas sessões de executor e o movimento ao
+  abrir uma conversa) falharam pela carga; passaram sozinhos duas vezes, e a rodada inteira refeita
+  passou. Fiscais: 2.707 testes do Python com 91,48% de cobertura, o `npm run check` (456 do
+  Vitest) e os 77 do e2e.
 
 ## Assuntos de desenho ainda abertos
 

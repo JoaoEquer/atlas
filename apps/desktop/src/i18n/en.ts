@@ -227,6 +227,8 @@ export const en = {
   conversations: {
     empty: 'No conversations yet.',
     reading: 'Reading the conversations…',
+    /** The list's next page, read as it scrolls near its end (step 9e). */
+    readingMore: 'Reading more conversations…',
     new: 'New conversation',
     tab: 'Conversations',
     untitled: 'New conversation',

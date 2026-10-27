@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import type { Icon } from '@tabler/icons-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 
 import { t } from '@/i18n'
 import { $contributions, $pluginPage, inArea } from '@/plugins/registry'
@@ -11,6 +11,7 @@ import {
   $bots,
   $cards,
   $conversations,
+  $listMore,
   $pairings,
   $proposals,
   $read,
@@ -21,6 +22,7 @@ import {
   $view,
   $workbench,
   keepConversation,
+  moreConversations,
   newConversation,
   selectConversation,
   showMarketplace,
@@ -286,8 +288,19 @@ function Tab({
   )
 }
 
+/** How near its end the list reads its next page, in pixels: before the user gets there. */
+const NEAR_END = 240
+
+/** The next page of the list, once it is scrolled near its end or does not fill its height. */
+function nearEnd(list: HTMLElement | null): void {
+  if (list && list.scrollHeight - list.scrollTop - list.clientHeight <= NEAR_END) {
+    void moreConversations()
+  }
+}
+
 /** The conversations, the last used first: one whose turn began here goes up at once, before its
- * row is read again. */
+ * row is read again. A page at a time (step 9e): the next one is read as the list scrolls near its
+ * end. */
 function Conversations() {
   const used = useStore($used)
   const conversations = byLastUse(useStore($conversations), row => lastUse(row.updated_at, used[row.id]))
@@ -295,6 +308,16 @@ function Conversations() {
   const view = useStore($view)
   const read = useStore($read).conversations
   const failed = useStore($readError).conversations
+  const more = useStore($listMore)
+  const list = useRef<HTMLUListElement>(null)
+  const rows = conversations.length
+
+  // A page that leaves the list short of its height reads the next one at once.
+  useEffect(() => {
+    if (rows > 0 && more.cursor) {
+      nearEnd(list.current)
+    }
+  }, [rows, more.cursor])
 
   return (
     <>
@@ -308,7 +331,14 @@ function Conversations() {
           {t.conversations.new}
         </button>
       </div>
-      <ul className="flex-1 overflow-y-auto px-2 pb-3">
+      <ul
+        className="flex-1 overflow-y-auto px-2 pb-3"
+        data-testid="conversation-list"
+        onScroll={() => {
+          nearEnd(list.current)
+        }}
+        ref={list}
+      >
         {!read && conversations.length === 0 && (
           <li className={failed ? 'px-1' : ''}>
             {failed ? (
@@ -326,6 +356,22 @@ function Conversations() {
             <Conversation current={conversation.id === selected && view === 'conversation'} row={conversation} />
           </li>
         ))}
+        {more.reading && (
+          <li>
+            <SkeletonRows count={2} label={t.conversations.readingMore} />
+          </li>
+        )}
+        {more.error && (
+          <li className="px-1">
+            <ReadFailed
+              error={more.error}
+              onAgain={() => {
+                void moreConversations(true)
+              }}
+              what="conversations"
+            />
+          </li>
+        )}
       </ul>
     </>
   )

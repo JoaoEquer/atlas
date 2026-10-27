@@ -167,11 +167,17 @@ class OpenRequest:
 @dataclass(frozen=True, slots=True)
 class ListParams:
     limit: int = 50
+    #: The `next_cursor` of the page before, for the page that follows it; empty, the first page
+    #: (step 9e).
+    cursor: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class ConversationList:
     conversations: list[ConversationRow]
+    #: Where the page after this one starts, handed back as `cursor`; empty when this page is the
+    #: last.
+    next_cursor: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1939,7 +1945,9 @@ METHODS: Mapping[str, Method] = {
             "conversation.list",
             ListParams,
             ConversationList,
-            "The user's conversations, the latest activity first.",
+            "The user's conversations, the latest activity first, a page at a time: "
+            "`next_cursor` reads the page that follows, and a `limit` of as many rows as a client "
+            "holds reads them again (step 9e).",
         ),
         Method(
             "conversation.create",

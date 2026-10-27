@@ -29,6 +29,7 @@ from atlas.conversations.model import (
     DEMOTED_SOURCES,
     HIDDEN_SOURCES,
     ConversationInfo,
+    Cursor,
     Hit,
     Kind,
     Role,
@@ -421,12 +422,35 @@ class ConversationStore:
             rows = connection.execute(
                 f"SELECT {_INFO_COLUMNS} FROM conversations_threads t "  # noqa: S608
                 f"WHERE t.source NOT IN ({_marks(unlisted)}) AND t.id != ? AND t.title != '' "
-                f"{owned}ORDER BY t.updated_at DESC LIMIT ?",
+                f"{owned}ORDER BY t.updated_at DESC, t.id DESC LIMIT ?",
                 (*unlisted, exclude or "", *(() if bot is None else (bot,)), limit),
             ).fetchall()
         finally:
             connection.close()
         return [ConversationInfo(*row) for row in rows]
+
+    def page(
+        self, limit: int, after: Cursor | None = None
+    ) -> tuple[list[ConversationInfo], Cursor | None]:
+        """A page of the list of conversations, as the app's sidebar shows it (step 9e): the
+        user's own with the main agent, the latest activity first and the id breaking a tie, from
+        the top or right after `after`. With it, where the page that follows starts; `None` when
+        this one is the last."""
+        bound = "" if after is None else "AND (t.updated_at, t.id) < (?, ?) "
+        connection = self._database.connect()
+        try:
+            rows = connection.execute(
+                f"SELECT {_INFO_COLUMNS} FROM conversations_threads t "  # noqa: S608
+                f"WHERE t.source NOT IN ({_marks(_UNLISTED)}) AND t.title != '' {bound}"
+                "ORDER BY t.updated_at DESC, t.id DESC LIMIT ?",
+                (*_UNLISTED, *(() if after is None else (after.at, after.id)), limit + 1),
+            ).fetchall()
+        finally:
+            connection.close()
+        found = [ConversationInfo(*row) for row in rows[:limit]]
+        if len(rows) <= limit or not found:
+            return found, None
+        return found, Cursor(found[-1].updated_at, found[-1].id)
 
     def search(
         self,

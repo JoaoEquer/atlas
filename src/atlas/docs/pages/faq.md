@@ -102,6 +102,11 @@ it stays once you send a message there or double-click it. **Ctrl+1** to **Ctrl+
 tabs say how many, and a click takes you there. The app reopens on the tabs you left, and a closed
 tab stays closed.
 
+## How do I find an older conversation?
+
+Scroll down the list of conversations. It shows the fifty with the latest activity first, and reads
+the next ones as you near its end, all the way back to your first conversation.
+
 ## Can I add my own tools?
 
 Yes: an MCP server in `mcp.json`, a skill in your home, or a plugin, which can add skills, commands,

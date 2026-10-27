@@ -22,9 +22,13 @@ export const ERROR_CODES = {
 export type Empty = Record<string, never>
 export interface ListParams {
   limit?: number
+  /** The `next_cursor` of the page before, for the page that follows it; empty, the first page (step 9e). */
+  cursor?: string
 }
 export interface ConversationList {
   conversations: ConversationRow[]
+  /** Where the page after this one starts, handed back as `cursor`; empty when this page is the last. */
+  next_cursor: string
 }
 /** A conversation as lists show it. */
 export interface ConversationRow {
@@ -1603,7 +1607,7 @@ export interface RpcMethods {
   'conversation.interrupt': { params: ConversationRef; result: Interrupted }
   /** Stop getting a conversation's events and server requests. */
   'conversation.leave': { params: ConversationRef; result: Empty }
-  /** The user's conversations, the latest activity first. */
+  /** The user's conversations, the latest activity first, a page at a time: `next_cursor` reads the page that follows, and a `limit` of as many rows as a client holds reads them again (step 9e). */
   'conversation.list': { params: ListParams; result: ConversationList }
   /** Read or pick the conversation's model and effort. A pick is for this conversation only and applies from its next turn; a new conversation starts from config.toml. */
   'conversation.model': { params: ConversationModelParams; result: ConversationModel }

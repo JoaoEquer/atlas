@@ -18,6 +18,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Self
 
 #: Where a conversation came from. The user's own are searched; a review's or a subagent's are not
 #: the user's history.
@@ -50,6 +51,8 @@ TITLE_CHARS = 80
 OPERATORS = frozenset({"AND", "OR", "NOT"})
 _JOINED_WORD = re.compile(r"\b\w+(?:[._-]\w+)+\b")
 _NOT_A_WORD = re.compile(r"[^\w\s*]")
+#: A stored time as Atlas writes it (`atlas.home.format_utc`).
+_STORED_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z")
 
 
 class TitleSource(StrEnum):
@@ -109,6 +112,35 @@ class ConversationInfo:
     messages: int
     #: The bot whose conversation it is; `None` for the main agent's.
     bot: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Cursor:
+    """Where a page of the list of conversations starts: right after the row with this time and
+    id, the list running from the latest time down and the id breaking a tie (step 9e). A
+    conversation whose activity moves it up meanwhile lands above the cursor, so the next page
+    neither repeats it nor skips one."""
+
+    #: The time the list is sorted by, as stored.
+    at: str
+    id: str
+
+    @property
+    def text(self) -> str:
+        """The cursor as a client hands it back."""
+        return f"{self.at} {self.id}"
+
+    @classmethod
+    def read(cls, text: str) -> Self | None:
+        """The cursor `text` holds, or `None` when it holds none."""
+        at, _, conversation_id = text.partition(" ")
+        if (
+            not _STORED_TIME.fullmatch(at)
+            or not conversation_id
+            or conversation_id.split() != [conversation_id]
+        ):
+            return None
+        return cls(at, conversation_id)
 
 
 @dataclass(frozen=True, slots=True)
