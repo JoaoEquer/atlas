@@ -253,8 +253,8 @@ In `atlas.assistant.titles`.
   named when made (`user`), and only the user's own conversations are titled.
 - **Left out:** a response format forced by the provider (each wire spells it its own
   way, and the guards catch what it prevents), and the wait for a model on the user's machine,
-  which shares its slot with the turn (both title models are hosted). Renaming a conversation in
-  the app is still to come; `user` is ready for it.
+  which shares its slot with the turn (both title models are hosted). A conversation the user
+  renames in the list takes `user` (step 9e, The list of conversations).
 - **The quarantine** (asked for by the user on 15/10, when each title paid a refused Haiku call
   first, the Anthropic account having no credit): a title provider that says the account cannot
   pay, or refuses its key, is skipped by every title for 10 minutes, and asked again after.
@@ -1428,6 +1428,17 @@ finds one by its words.
   no character of a message can pass for one. The app searches 250 ms after the typing pauses and
   shows only the answer to the latest words; the results take the list's place, which stays where
   it was, hidden, until Esc ends the search; Enter opens the first conversation found.
+- **Renaming in place** (`conversation.rename`, `ConversationStore.rename`): F2 on a row, or
+  Rename in its menu (the dots over its time on hover, or a right click), puts the title in a field
+  in the row's place; Enter, or leaving the field, keeps the new name, Esc the old one, and a name
+  that did not change, or holds no words, changes nothing. The server keeps its words on one line,
+  cut to a title's length (`given_title`), as `user`, through the same check and write as every
+  title, so a title model's answer arriving after it replaces nothing. A name is not a title
+  event (`title.changed` goes to the clients on the conversation): every client hears it in
+  `conversations.changed`, which carries it, so each one's list and tabs take it, a tab whose
+  conversation its list does not hold as well; a conversation read again (`conversation.open`)
+  gives its tab the title the server holds, for a tab kept from before the name. A refusal keeps
+  the field open, saying why. A double click on a row still keeps its tab (decided with the user).
 - **Proved** by the store's and the server's tests (each conversation once, in order, with
   activity in the middle and a tie in time; a title found without its case or accents, a message
   by a word begun, the titles first, only the list's conversations, a mark a message held), the
@@ -1435,7 +1446,11 @@ finds one by its words.
   the failed page; the search after the pause, an older answer never shown over a newer one) and
   the end-to-end tests: 60 conversations and a new one begun before the rest was read, all 61
   listed once, in order; and the search finding a word begun in a message past the first page and
-  a title no message holds, opening what it found, and Esc bringing the list back.
+  a title no message holds, opening what it found, and Esc bringing the list back. The name given:
+  the server's tests (its words on one line, cut, never empty; every client told; a title model
+  answering after the name replaces nothing), the app's (the list and the tab, one the list lacks,
+  a refusal leaving both; F2, the menu and a right click, Enter and Esc, the focus back on the row)
+  and the end-to-end test: F2 and the menu, the row and its tab, Esc, and the names read again.
 
 ## Attachments — decided 2026-10-16
 

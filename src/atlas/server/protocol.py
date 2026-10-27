@@ -209,6 +209,19 @@ class SearchResults:
 
 
 @dataclass(frozen=True, slots=True)
+class RenameParams:
+    conversation_id: str
+    #: The name the user gave: its words are kept on one line, cut to a title's length.
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
+class Renamed:
+    #: The name kept, as the lists show it.
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
 class Created:
     conversation_id: str
     #: The folder its file tools start from, where its terminal opens (step 16f).
@@ -984,6 +997,9 @@ class ConversationsChanged:
     #: made or moved it. Every client hears it, attached to the conversation or not, so a list
     #: shows which conversation works and which ended unseen.
     status: str = ""
+    #: The name the user gave it, when it was renamed (step 9e): every client's tabs take it, the
+    #: lists holding the conversation or not.
+    title: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1985,6 +2001,14 @@ METHODS: Mapping[str, Method] = {
             "of `query`, each word also matching the words it begins, through the conversations' "
             "search index (step 9e): those found by their title first, the latest activity first, "
             "then those found by a message, the best match first; each says where it matched.",
+        ),
+        Method(
+            "conversation.rename",
+            RenameParams,
+            Renamed,
+            "Name a conversation as the user chose (step 9e): its title from now on, of source "
+            "`user`, which no title model replaces; every client hears it "
+            "(`conversations.changed`, with the name), and its lists and tabs take it.",
         ),
         Method(
             "conversation.create",

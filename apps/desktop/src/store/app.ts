@@ -722,12 +722,39 @@ export class HomeSession {
   async readConversation(conversationId: string): Promise<void> {
     const opened = await this.client.call('conversation.open', { conversation_id: conversationId })
     this.workspace = opened.folder || this.workspace
+    // A tab kept from last time takes a name given since, which the list may not hold (step 9e).
+    if (opened.conversation.title) {
+      this.retitled(conversationId, opened.conversation.title)
+    }
     this.client.watch(conversationId, opened.seq)
     this.$threads.setKey(conversationId, fromHistory(opened.messages, opened.running))
     this.$autoMode.setKey(conversationId, opened.auto_mode)
     void this.readModel(conversationId).catch(() => undefined)
     void this.readSubagents(conversationId).catch(() => undefined)
     void this.readCommands(conversationId).catch(() => undefined)
+  }
+
+  /** Name a conversation as the user chose (step 9e): the list and its tab take the name the server
+   * kept, its words on one line. A refusal throws, for the field to say why. */
+  async renameConversation(conversationId: string, title: string): Promise<void> {
+    const renamed = await this.client.call('conversation.rename', { conversation_id: conversationId, title })
+    this.retitled(conversationId, renamed.title)
+  }
+
+  /** A conversation's title now, in its row and in its tab, which the list may not hold: one the
+   * user scrolled to, or kept from last time. A bot's tab keeps the bot's name. */
+  private retitled(conversationId: string, title: string): void {
+    const rows = this.$conversations.get()
+
+    if (rows.some(row => row.id === conversationId && row.title !== title)) {
+      this.$conversations.set(rows.map(row => (row.id === conversationId ? { ...row, title } : row)))
+    }
+
+    this.tabs.retitle(place =>
+      place.kind === 'conversation' && place.conversationId === conversationId
+        ? (this.botOf(conversationId)?.title ?? title)
+        : undefined
+    )
   }
 
   // -- tabs ---------------------------------------------------------------------------------------
@@ -2414,6 +2441,11 @@ export class HomeSession {
         this.turnChanged(changed.conversation_id, changed.status)
       }
 
+      // A name given, here or in another app (step 9e).
+      if (changed.title) {
+        this.retitled(changed.conversation_id, changed.title)
+      }
+
       void this.refreshList().catch(() => undefined)
 
       return
@@ -3042,6 +3074,11 @@ export function searchAgain(): void {
 /** End the list's search, at once. */
 export function clearSearch(): void {
   current().clearSearch()
+}
+
+/** Name a conversation as the user chose (step 9e); a refusal throws, for its field to say why. */
+export function renameConversation(conversationId: string, title: string): Promise<void> {
+  return current().renameConversation(conversationId, title)
 }
 
 /** Read again a list or a page whose last read failed; a failure again says so in its place. */

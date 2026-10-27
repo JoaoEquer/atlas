@@ -79,6 +79,7 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `title model` | modelo de título | The small model that names a conversation as its first turn starts (Claude Haiku 5.5, else GPT-6 Luna), replacing the instant title |
 | `title quarantine` | quarentena do título | A title model whose provider answered that the account has no credit, or refused its key, skipped by every title for 10 minutes, in this process only |
 | `title source` | origem do título | Who wrote a conversation's title: `derived` (the instant title), `llm` (a title model) or `user` (a name given); a title replaces only one of lower authority |
+| `given name` | nome dado | A conversation's title as the user wrote it, renaming it in place in the list (F2, or its row's menu; `conversation.rename`): its words on one line, cut to a title's length, of source `user`, so no title model replaces it. Every client's list and tabs take it (`conversations.changed` carries it) |
 | `document text` | texto do documento | What a PDF or Office file says, converted once and kept in the home's `documents/` so ripgrep can search it |
 | `attachment` | anexo | A file the user dropped or pasted into a message, kept in the home's `attachments/` and stored with the message apart from its text |
 | `attachment note` | nota do anexo | The text a model reads for an attachment it does not get as itself: its name, type and path, and what to do with it |

@@ -37,6 +37,7 @@ from atlas.conversations.model import (
     Role,
     StoredMessage,
     TitleSource,
+    given_title,
     query_terms,
     snippet_pieces,
     title_from,
@@ -345,6 +346,15 @@ class ConversationStore:
         finally:
             connection.close()
         return True
+
+    def rename(self, conversation_id: str, title: str) -> str:
+        """Name a conversation as the user chose (step 9e): `title`'s words on one line, cut to a
+        title's length, as `user`, which no title model replaces. The name kept; empty, and
+        nothing changed, when `title` holds no words."""
+        name = given_title(title)
+        if name:
+            self.retitle(conversation_id, name, TitleSource.USER)
+        return name
 
     def name_untitled(self, conversation_id: str, said: UserMessage) -> bool:
         """Give a conversation with no title yet the one its first message makes, as that

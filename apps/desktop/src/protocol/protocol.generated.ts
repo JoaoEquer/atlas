@@ -61,6 +61,15 @@ export interface SearchHit {
   /** Who said that message: `user` or `assistant`. */
   said_by: string
 }
+export interface RenameParams {
+  conversation_id: string
+  /** The name the user gave: its words are kept on one line, cut to a title's length. */
+  title: string
+}
+export interface Renamed {
+  /** The name kept, as the lists show it. */
+  title: string
+}
 export interface Created {
   conversation_id: string
   /** The folder its file tools start from, where its terminal opens (step 16f). */
@@ -1559,6 +1568,8 @@ export interface ConversationsChanged {
   conversation_id: string
   /** `started` as a turn began, or how it ended (`message.complete`'s status); empty, a channel made or moved it. Every client hears it, attached to the conversation or not, so a list shows which conversation works and which ended unseen. */
   status: string
+  /** The name the user gave it, when it was renamed (step 9e): every client's tabs take it, the lists holding the conversation or not. */
+  title: string
 }
 export interface PluginsChanged {
   /** How many people wait with a code. */
@@ -1633,6 +1644,8 @@ export interface RpcMethods {
   'conversation.model': { params: ConversationModelParams; result: ConversationModel }
   /** A conversation's stored messages and state; the client is attached to it and gets its events and server requests from now on. */
   'conversation.open': { params: ConversationRef; result: Opened }
+  /** Name a conversation as the user chose (step 9e): its title from now on, of source `user`, which no title model replaces; every client hears it (`conversations.changed`, with the name), and its lists and tabs take it. */
+  'conversation.rename': { params: RenameParams; result: Renamed }
   /** The conversations of the list whose title, or one of whose messages, holds every word of `query`, each word also matching the words it begins, through the conversations' search index (step 9e): those found by their title first, the latest activity first, then those found by a message, the best match first; each says where it matched. */
   'conversation.search': { params: SearchParams; result: SearchResults }
   /** Start a turn, or steer the one running: the message enters after the round of tools in course. */
@@ -1845,6 +1858,7 @@ export const RPC_METHODS = [
   'conversation.list',
   'conversation.model',
   'conversation.open',
+  'conversation.rename',
   'conversation.search',
   'conversation.send',
   'conversation.terminal',

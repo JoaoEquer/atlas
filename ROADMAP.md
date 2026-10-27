@@ -3861,6 +3861,31 @@ confiança. **Sem redesenho:** polimento, fluidez, percepção de velocidade e i
   tem; o "nenhuma conversa"; o Esc devolvendo a lista). Prints de antes (a lista da entrega 1) e
   depois no claro e no escuro, em inglês e em português. Fiscais: 2.718 testes do Python com
   91,46% de cobertura, o `npm run check` (464 do Vitest) e os 78 do e2e.
+- **Entrega 3 do 9e, renomear (27/10):** o título de uma conversa era o que a primeira mensagem ou
+  o modelo de título dava, e o usuário não tinha como trocar. Agora F2 na linha, ou "Renomear" no
+  menu dela (os três pontos que aparecem sobre a hora quando o ponteiro ou o teclado está na
+  linha, ou o clique direito), põe o título num campo no lugar da linha; Enter, ou sair do campo,
+  guarda o nome novo, e Esc mantém o antigo; um nome igual, ou sem palavras, não muda nada. O
+  servidor (`conversation.rename`) guarda as palavras numa linha só, cortadas no tamanho de um
+  título, com a origem `user`, pela mesma checagem e escrita de todo título, então o modelo de
+  título que responde depois não desfaz o nome. Todo app conectado fica sabendo pelo
+  `conversations.changed`, que agora leva o nome: a lista e as abas trocam o título, também a aba
+  de uma conversa que a lista daquele app não tem; e a conversa aberta de novo dá à aba o título
+  que o servidor tem. Uma recusa deixa o campo aberto, dizendo por quê; ao fechar o campo pelo
+  teclado, o foco volta para a linha. O clique duplo continua fixando a aba (decidido com o
+  usuário). Provado no pytest (as palavras numa linha, o corte, o nome vazio e a conversa que não
+  existe recusados; o outro cliente avisado; o modelo de título que responde depois do nome não
+  troca nada), no Vitest (a lista e a aba, a aba de uma conversa fora da lista, a recusa que não
+  muda nada, a aba da conversa lida de novo; o F2, o menu e o clique direito, Enter e Esc, a recusa
+  no campo, o foco de volta na linha, o clique duplo que não renomeia) e no e2e (F2 e o menu, a
+  linha e a aba, o Esc, os nomes lidos de novo depois de recarregar). Prints de antes (a linha sob
+  o ponteiro, só com a hora) e depois (os três pontos, o menu, o campo, o nome na lista e na aba)
+  no claro e no escuro, em inglês e em português. Um teste antigo do gateway comparava o
+  `conversations.changed` inteiro e passou a esperar o `title` vazio. Na rodada do pytest, com o
+  pytest de outra sessão rodando junto, o teste do Codex contra o Codex falso
+  (`test_prove_codex`) falhou uma vez pela carga e passou sozinho três vezes. Fiscais: 2.721
+  testes do Python com 91,48% de cobertura (2.720 na rodada e o do Codex sozinho), o
+  `npm run check` (473 do Vitest) e os 79 do e2e.
 
 ## Assuntos de desenho ainda abertos
 

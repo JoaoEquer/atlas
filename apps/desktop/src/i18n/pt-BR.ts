@@ -215,6 +215,10 @@ export const ptBR: Override<Messages> = {
     reading: 'Lendo as conversas…',
     readingMore: 'Lendo mais conversas…',
     new: 'Nova conversa',
+    menu: (title: string) => `${title}: renomear`,
+    nameField: (title: string) => `Novo nome para ${title}`,
+    notRenamed: (reason: string) => `Não renomeada: ${reason}`,
+    rename: 'Renomear',
     search: {
       atlas: 'Atlas',
       clear: 'Limpar a busca',

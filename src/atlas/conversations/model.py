@@ -366,3 +366,9 @@ def title_from(text: str) -> str:
     if len(line) <= TITLE_CHARS:
         return line
     return line[: TITLE_CHARS - 1].rstrip() + "…"
+
+
+def given_title(text: str) -> str:
+    """A name the user gave a conversation (step 9e): its words on one line, cut to a title's
+    length; empty when it has none."""
+    return " ".join(text.split())[:TITLE_CHARS].rstrip()

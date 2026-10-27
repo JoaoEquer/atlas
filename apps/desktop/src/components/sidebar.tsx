@@ -5,7 +5,6 @@ import { type ReactNode, useEffect, useRef } from 'react'
 import { t } from '@/i18n'
 import { $contributions, $pluginPage, inArea } from '@/plugins/registry'
 import { host } from '@/plugins/sdk'
-import type { ConversationRow } from '@/protocol/protocol.generated'
 import { shortcut } from '@/shortcuts'
 import {
   $bots,
@@ -22,10 +21,8 @@ import {
   $used,
   $view,
   $workbench,
-  keepConversation,
   moreConversations,
   newConversation,
-  selectConversation,
   showMarketplace,
   showProposals,
   showRoutines,
@@ -37,17 +34,17 @@ import { openSettings } from '@/store/settings'
 import { byLastUse, type Dot, lastUse, worst } from '@/store/status'
 
 import { BotsList } from './bots-list'
+import { Conversation } from './conversation-row'
 import { ExecutorsList } from './executors-list'
 import { HomeBar } from './home-bar'
 import { SearchField, SearchResults } from './list-search'
 import { RailEdge } from './rail-edge'
 import { ReadFailed } from './read-failed'
-import { rowDot, StatusDot, useConversationDot, useConversationsDot, useInstancesDot } from './status-dot'
+import { StatusDot, useConversationsDot, useInstancesDot } from './status-dot'
 import { Bulb, CalendarTime, LayoutSidebar, MessagePlus, Messages, Plug, Robot, Store, Terminal } from './ui/icons'
 import { SkeletonRows } from './ui/skeleton'
 import { IconButton, Tip } from './ui/tip'
 import { UpdateBar, UpdateStrip } from './update-bar'
-import { when } from './when'
 
 /**
  * The conversations, the latest activity first;
@@ -381,44 +378,5 @@ function Conversations() {
         )}
       </ul>
     </>
-  )
-}
-
-/** A conversation's row: its dot, and its title in bold while what its turn ended with is unseen. */
-function Conversation({ current, row }: { current: boolean; row: ConversationRow }) {
-  const dot = useConversationDot(row.id)
-
-  return (
-    <button
-      aria-current={current ? 'page' : undefined}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-        current ? 'bg-selected font-medium' : 'hover:bg-hover'
-      }`}
-      data-testid="conversation-row"
-      data-unread={dot === 'unread' || undefined}
-      onClick={() => void selectConversation(row.id)}
-      // A click opens it in the passing tab; a double click keeps that tab.
-      onDoubleClick={() => {
-        keepConversation(row.id)
-      }}
-      title={row.title}
-      type="button"
-    >
-      <StatusDot dot={rowDot(dot)} slot />
-      <span
-        className={`min-w-0 flex-1 truncate ${dot === 'unread' ? 'font-semibold' : ''}`}
-        data-testid="conversation-title"
-      >
-        {row.title || t.conversations.untitled}
-        {row.source !== 'app' && (
-          <span className="ml-1 text-xs font-normal text-muted-foreground" data-testid="conversation-via">
-            {t.conversations.via(row.source)}
-          </span>
-        )}
-      </span>
-      <span className="shrink-0 text-xs font-normal text-muted-foreground" data-testid="conversation-when">
-        {when(row.updated_at)}
-      </span>
-    </button>
   )
 }

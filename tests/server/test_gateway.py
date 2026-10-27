@@ -919,14 +919,14 @@ def test_every_client_hears_a_turn_begin_and_end_and_the_list_says_which_runs(
         client.result("conversation.send", {"conversation_id": conversation, "text": "Plan a trip"})
 
         started = sidebar.event("conversations.changed")["payload"]
-        assert started == {"conversation_id": conversation, "status": "started"}
+        assert started == {"conversation_id": conversation, "status": "started", "title": ""}
         asked = client.request("ask_user")
         listed = sidebar.result("conversation.list")["conversations"]
         assert [(row["id"], row["running"]) for row in listed] == [(conversation, True)]
 
         client.answer(asked["id"], {"answers": {"q0": "Lisbon"}})
         ended = sidebar.event("conversations.changed")["payload"]
-        assert ended == {"conversation_id": conversation, "status": "answered"}
+        assert ended == {"conversation_id": conversation, "status": "answered", "title": ""}
         client.event("message.complete")
         deadline = time.monotonic() + 10
         while server.gateway.assistant.running(conversation):

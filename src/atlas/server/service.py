@@ -310,6 +310,8 @@ from atlas.server.protocol import (
     ProviderOption,
     QuestionRow,
     Ready,
+    Renamed,
+    RenameParams,
     RequestCancel,
     ReviewSummary,
     RouteStopRow,
@@ -593,6 +595,7 @@ class Gateway:
             "pairing.forget": self._pairing_forget,
             "conversation.list": self._list,
             "conversation.search": self._search,
+            "conversation.rename": self._rename,
             "conversation.create": self._create,
             "conversation.open": self._open,
             "conversation.events": self._events,
@@ -1030,6 +1033,13 @@ class Gateway:
             for hit in found
         ]
         return SearchResults(hits, more)
+
+    async def _rename(self, connection: Connection, params: RenameParams) -> Renamed:
+        title = self.assistant.conversations.rename(params.conversation_id, params.title)
+        if not title:
+            raise ProtocolError(INVALID_PARAMS, "params.title holds no words.")
+        self.conversations_changed(params.conversation_id, title=title)
+        return Renamed(title)
 
     async def _create(self, connection: Connection, params: Empty) -> Created:
         created = self.assistant.conversations.create()
@@ -2049,11 +2059,14 @@ class Gateway:
             if p.conversation_id in wanted and not p.answer.done()
         ]
 
-    def conversations_changed(self, conversation_id: str, status: str = "") -> None:
+    def conversations_changed(
+        self, conversation_id: str, status: str = "", *, title: str = ""
+    ) -> None:
         """Tell every client a channel's conversation was made or moved, or a turn of any began or
-        ended (`status`), so the lists show it and which works."""
+        ended (`status`), so the lists show it and which works; or the name the user gave it
+        (`title`, step 9e), which their tabs take."""
         frame = self._event_frame(
-            "conversations.changed", ConversationsChanged(conversation_id, status)
+            "conversations.changed", ConversationsChanged(conversation_id, status, title)
         )
         for connection in self._connections:
             connection.put(frame)

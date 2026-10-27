@@ -113,6 +113,13 @@ capitals aside. Each result shows where it matched, the words in bold: in its ti
 with who said it. A click opens the conversation, **Enter** opens the first, and **Esc** clears the
 search.
 
+## How do I rename a conversation?
+
+Select it in the list and press **F2**, or choose **Rename** in its menu: the dots that show over its
+time as you point at it, or a right click. Type the name and press **Enter**; **Esc** keeps the one
+it had. The name is kept in your home, shows in every app connected to it, and Atlas never replaces
+it with a title of its own.
+
 ## Can I add my own tools?
 
 Yes: an MCP server in `mcp.json`, a skill in your home, or a plugin, which can add skills, commands,

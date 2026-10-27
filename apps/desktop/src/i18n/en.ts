@@ -230,6 +230,11 @@ export const en = {
     /** The list's next page, read as it scrolls near its end (step 9e). */
     readingMore: 'Reading more conversations…',
     new: 'New conversation',
+    /** A row's menu, and its name given in place (step 9e). */
+    menu: (title: string) => `${title}: rename`,
+    nameField: (title: string) => `New name for ${title}`,
+    notRenamed: (reason: string) => `Not renamed: ${reason}`,
+    rename: 'Rename',
     /** The field above the list, and what it found (step 9e). */
     search: {
       atlas: 'Atlas',

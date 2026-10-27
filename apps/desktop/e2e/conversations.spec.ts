@@ -4,8 +4,8 @@ import { launch, say, seedConversations } from './harness'
 
 /**
  * The list of conversations (step 9e, decided with the user on 27/10/2026): past its first page,
- * read as the sidebar scrolls near its end, each conversation once and in order; and its search,
- * by title and by message, which says where it matched.
+ * read as the sidebar scrolls near its end, each conversation once and in order; its search, by
+ * title and by message, which says where it matched; and a conversation renamed in place.
  */
 
 const rows = (page: Page) => page.getByTestId('conversation-row')
@@ -94,6 +94,54 @@ test('the search finds a conversation past the first page by a word begun in a m
     await expect(search).toHaveValue('')
     await expect(page.getByTestId('conversation-list')).toBeVisible()
     await expect(rows(page)).toHaveCount(50)
+  } finally {
+    await desktop.close()
+  }
+})
+
+test('a conversation renamed in place, by F2 or its menu, takes the name in the list and in its tab, and Esc keeps the old one', async () => {
+  const desktop = await launch({
+    setup: home => {
+      seedConversations(home, topics(3))
+    }
+  })
+
+  try {
+    const { page } = desktop
+    const field = page.getByTestId('conversation-name-field')
+    const tabTitles = page.getByTestId('tab-title')
+    await expect(titles(page)).toHaveText(['Topic 03', 'Topic 02', 'Topic 01'])
+    // Kept in a tab of its own.
+    await rows(page).nth(1).dblclick()
+    await expect(tabTitles).toHaveText(['Topic 02'])
+
+    await rows(page).nth(1).press('F2')
+    await expect(field).toHaveValue('Topic 02')
+    await field.fill('Trip to Lisbon')
+    await field.press('Enter')
+    await expect(field).toHaveCount(0)
+    await expect(titles(page)).toHaveText(['Topic 03', 'Trip to Lisbon', 'Topic 01'])
+    await expect(tabTitles).toHaveText(['Trip to Lisbon'])
+    // The row has the focus back, for the keyboard to go on.
+    await expect(rows(page).nth(1)).toBeFocused()
+
+    await rows(page).nth(1).press('F2')
+    await field.fill('Not this one')
+    await field.press('Escape')
+    await expect(field).toHaveCount(0)
+    await expect(titles(page)).toHaveText(['Topic 03', 'Trip to Lisbon', 'Topic 01'])
+
+    // A right click opens the row's menu, whose Rename does the same.
+    await rows(page).last().click({ button: 'right' })
+    await page.getByTestId('conversation-rename').click()
+    await field.fill('Bike repairs')
+    await field.press('Enter')
+    await expect(titles(page)).toHaveText(['Topic 03', 'Trip to Lisbon', 'Bike repairs'])
+
+    // The server keeps the names: the list read again has them.
+    await page.reload()
+    await expect(titles(page)).toHaveText(['Topic 03', 'Trip to Lisbon', 'Bike repairs'])
+    await expect(tabTitles).toHaveText(['Trip to Lisbon'])
   } finally {
     await desktop.close()
   }
