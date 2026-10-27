@@ -41,6 +41,26 @@ export interface ConversationRow {
   /** A turn of it runs now. */
   running: boolean
 }
+export interface SearchParams {
+  /** The words typed: each must be in the title or in one message, also as the start of a word. */
+  query: string
+  limit?: number
+}
+export interface SearchResults {
+  hits: SearchHit[]
+  /** More conversations matched than `limit`: another word narrows them. */
+  more: boolean
+}
+/** A conversation the list's search found, and where it matched (step 9e). */
+export interface SearchHit {
+  conversation: ConversationRow
+  /** Its title in pieces, the odd ones the words that matched; one piece when it did not match. */
+  title: string[]
+  /** When a message matched rather than the title, the words around the match, in pieces as the title; empty otherwise. */
+  snippet: string[]
+  /** Who said that message: `user` or `assistant`. */
+  said_by: string
+}
 export interface Created {
   conversation_id: string
   /** The folder its file tools start from, where its terminal opens (step 16f). */
@@ -1613,6 +1633,8 @@ export interface RpcMethods {
   'conversation.model': { params: ConversationModelParams; result: ConversationModel }
   /** A conversation's stored messages and state; the client is attached to it and gets its events and server requests from now on. */
   'conversation.open': { params: ConversationRef; result: Opened }
+  /** The conversations of the list whose title, or one of whose messages, holds every word of `query`, each word also matching the words it begins, through the conversations' search index (step 9e): those found by their title first, the latest activity first, then those found by a message, the best match first; each says where it matched. */
+  'conversation.search': { params: SearchParams; result: SearchResults }
   /** Start a turn, or steer the one running: the message enters after the round of tools in course. */
   'conversation.send': { params: SendParams; result: SendResult }
   /** A command the user ran from the conversation (the ▶ on a shell block, or `!`) and its output: a terminal row, which the agent answers in a turn of its own or entering the one running (step 16f). */
@@ -1823,6 +1845,7 @@ export const RPC_METHODS = [
   'conversation.list',
   'conversation.model',
   'conversation.open',
+  'conversation.search',
   'conversation.send',
   'conversation.terminal',
   'executor.account',

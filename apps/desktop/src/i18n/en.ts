@@ -230,6 +230,22 @@ export const en = {
     /** The list's next page, read as it scrolls near its end (step 9e). */
     readingMore: 'Reading more conversations…',
     new: 'New conversation',
+    /** The field above the list, and what it found (step 9e). */
+    search: {
+      atlas: 'Atlas',
+      clear: 'Clear the search',
+      field: 'Search conversations',
+      found: (count: number, more: boolean) =>
+        more
+          ? `Showing the first ${count}. Add a word to narrow them.`
+          : count === 1
+            ? '1 conversation'
+            : `${count} conversations`,
+      none: (query: string) => `No conversation holds “${query}”.`,
+      results: 'Conversations found',
+      searching: 'Searching the conversations…',
+      you: 'You'
+    },
     tab: 'Conversations',
     untitled: 'New conversation',
     via: (source: string) => `via ${source}`

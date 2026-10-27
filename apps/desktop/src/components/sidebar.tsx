@@ -16,6 +16,7 @@ import {
   $proposals,
   $read,
   $readError,
+  $search,
   $selected,
   $sidebarTab,
   $used,
@@ -38,6 +39,7 @@ import { byLastUse, type Dot, lastUse, worst } from '@/store/status'
 import { BotsList } from './bots-list'
 import { ExecutorsList } from './executors-list'
 import { HomeBar } from './home-bar'
+import { SearchField, SearchResults } from './list-search'
 import { RailEdge } from './rail-edge'
 import { ReadFailed } from './read-failed'
 import { rowDot, StatusDot, useConversationDot, useConversationsDot, useInstancesDot } from './status-dot'
@@ -300,7 +302,7 @@ function nearEnd(list: HTMLElement | null): void {
 
 /** The conversations, the last used first: one whose turn began here goes up at once, before its
  * row is read again. A page at a time (step 9e): the next one is read as the list scrolls near its
- * end. */
+ * end. Above it, the search, whose results take its place while its field holds words. */
 function Conversations() {
   const used = useStore($used)
   const conversations = byLastUse(useStore($conversations), row => lastUse(row.updated_at, used[row.id]))
@@ -309,15 +311,16 @@ function Conversations() {
   const read = useStore($read).conversations
   const failed = useStore($readError).conversations
   const more = useStore($listMore)
+  const searching = useStore($search).text.trim() !== ''
   const list = useRef<HTMLUListElement>(null)
   const rows = conversations.length
 
   // A page that leaves the list short of its height reads the next one at once.
   useEffect(() => {
-    if (rows > 0 && more.cursor) {
+    if (rows > 0 && more.cursor && !searching) {
       nearEnd(list.current)
     }
-  }, [rows, more.cursor])
+  }, [rows, more.cursor, searching])
 
   return (
     <>
@@ -331,9 +334,13 @@ function Conversations() {
           {t.conversations.new}
         </button>
       </div>
+      <SearchField />
+      {searching && <SearchResults />}
+      {/* Hidden, not gone, while the search shows: it comes back where it was. */}
       <ul
         className="flex-1 overflow-y-auto px-2 pb-3"
         data-testid="conversation-list"
+        hidden={searching}
         onScroll={() => {
           nearEnd(list.current)
         }}

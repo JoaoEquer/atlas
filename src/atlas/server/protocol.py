@@ -181,6 +181,34 @@ class ConversationList:
 
 
 @dataclass(frozen=True, slots=True)
+class SearchParams:
+    #: The words typed: each must be in the title or in one message, also as the start of a word.
+    query: str
+    limit: int = 50
+
+
+@dataclass(frozen=True, slots=True)
+class SearchHit:
+    """A conversation the list's search found, and where it matched (step 9e)."""
+
+    conversation: ConversationRow
+    #: Its title in pieces, the odd ones the words that matched; one piece when it did not match.
+    title: list[str]
+    #: When a message matched rather than the title, the words around the match, in pieces as
+    #: the title; empty otherwise.
+    snippet: list[str]
+    #: Who said that message: `user` or `assistant`.
+    said_by: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SearchResults:
+    hits: list[SearchHit]
+    #: More conversations matched than `limit`: another word narrows them.
+    more: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Created:
     conversation_id: str
     #: The folder its file tools start from, where its terminal opens (step 16f).
@@ -1948,6 +1976,15 @@ METHODS: Mapping[str, Method] = {
             "The user's conversations, the latest activity first, a page at a time: "
             "`next_cursor` reads the page that follows, and a `limit` of as many rows as a client "
             "holds reads them again (step 9e).",
+        ),
+        Method(
+            "conversation.search",
+            SearchParams,
+            SearchResults,
+            "The conversations of the list whose title, or one of whose messages, holds every word "
+            "of `query`, each word also matching the words it begins, through the conversations' "
+            "search index (step 9e): those found by their title first, the latest activity first, "
+            "then those found by a message, the best match first; each says where it matched.",
         ),
         Method(
             "conversation.create",

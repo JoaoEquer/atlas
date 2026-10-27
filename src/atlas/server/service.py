@@ -322,6 +322,9 @@ from atlas.server.protocol import (
     RunList,
     RunRow,
     Said,
+    SearchHit,
+    SearchParams,
+    SearchResults,
     SecretParams,
     SecretResult,
     SendParams,
@@ -425,6 +428,8 @@ EXECUTORS_WAIT_SECONDS = 5.0
 #: The most conversations a list returns: a client reads again every row its list holds in one
 #: call, pages it read as it scrolled included (step 9e).
 LIST_MOST = 1000
+#: The most conversations the list's search returns (step 9e).
+SEARCH_MOST = 100
 #: How much of a bot's last message its row shows.
 PREVIEW_CHARS = 120
 #: The conversations' table, as a backup's manifest counts it for the import dialog.
@@ -587,6 +592,7 @@ class Gateway:
             "pairing.approve": self._pairing_approve,
             "pairing.forget": self._pairing_forget,
             "conversation.list": self._list,
+            "conversation.search": self._search,
             "conversation.create": self._create,
             "conversation.open": self._open,
             "conversation.events": self._events,
@@ -1009,6 +1015,21 @@ class Gateway:
         running = self.assistant.running
         rows = [_row(info, running(info.id)) for info in found]
         return ConversationList(rows, "" if more is None else more.text)
+
+    async def _search(self, connection: Connection, params: SearchParams) -> SearchResults:
+        limit = max(1, min(params.limit, SEARCH_MOST))
+        found, more = self.assistant.conversations.find(params.query, limit)
+        running = self.assistant.running
+        hits = [
+            SearchHit(
+                _row(hit.conversation, running(hit.conversation.id)),
+                list(hit.title),
+                list(hit.snippet),
+                hit.said_by,
+            )
+            for hit in found
+        ]
+        return SearchResults(hits, more)
 
     async def _create(self, connection: Connection, params: Empty) -> Created:
         created = self.assistant.conversations.create()

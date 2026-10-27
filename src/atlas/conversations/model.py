@@ -15,6 +15,8 @@ a leading `-`) reach FTS5 raw and raise, which a search turns into zero results.
 """
 
 import re
+import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -53,6 +55,13 @@ _JOINED_WORD = re.compile(r"\b\w+(?:[._-]\w+)+\b")
 _NOT_A_WORD = re.compile(r"[^\w\s*]")
 #: A stored time as Atlas writes it (`atlas.home.format_utc`).
 _STORED_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z")
+#: How the list's search marks a match in a snippet (step 9e): characters nobody types, so the
+#: words of a message never pass for a mark.
+MATCH_MARKS = ("\x02", "\x03")
+_MARKED = re.compile("\x02([^\x02\x03]*)\x03")
+#: A word of a title, as the search index's tokenizer cuts words: letters and digits.
+_TITLE_WORD = re.compile(r"[^\W_]+")
+_TERM = re.compile(r'"[^"]*"|\S+')
 
 
 class TitleSource(StrEnum):
@@ -198,8 +207,21 @@ class Hit:
 
     conversation: ConversationInfo
     match: StoredMessage
-    #: The match's words in their surroundings, marked with » and «.
+    #: The match's words in their surroundings, marked with » and « (or the marks asked for).
     snippet: str
+
+
+@dataclass(frozen=True, slots=True)
+class Found:
+    """A conversation the list's search found, and where it matched (step 9e): its title in pieces,
+    the odd ones the words that matched; and, when its title did not match, the words around the
+    match in its best message, in pieces as well, with who said them."""
+
+    conversation: ConversationInfo
+    title: tuple[str, ...]
+    snippet: tuple[str, ...] = ()
+    #: The role of the message the snippet comes from.
+    said_by: str = ""
 
 
 def fts_query(text: str) -> str | None:
@@ -254,11 +276,71 @@ def _joined(text: str) -> list[tuple[str, bool]]:
 def query_terms(query: str) -> list[str]:
     """The words and phrases of a cleaned query, operators left out."""
     terms: list[str] = []
-    for match in re.finditer(r'"[^"]*"|\S+', query):
+    for match in _TERM.finditer(query):
         term = match.group(0)
         if term not in OPERATORS:
             terms.append(term)
     return terms
+
+
+def typed_query(text: str) -> str | None:
+    """What a search field finds as the user types (step 9e): `fts_query`'s query, each of its
+    words, and a phrase's last word, also matching the longer words it begins; `None` when nothing
+    searchable is left."""
+    query = fts_query(text)
+    if query is None:
+        return None
+    return " ".join(
+        term if term in OPERATORS or term.endswith("*") else f"{term}*"
+        for term in _TERM.findall(query)
+    )
+
+
+def folded(text: str) -> str:
+    """`text` as a search compares words: in lower case and without accents, as the search index's
+    tokenizer reads them (`remove_diacritics 2`)."""
+    return "".join(
+        char
+        for char in unicodedata.normalize("NFKD", text.casefold())
+        if not unicodedata.combining(char)
+    )
+
+
+def title_words(query: str) -> list[str]:
+    """The words a title is compared with, folded, from a cleaned query: none when the query holds
+    an operator, which only the search index reads."""
+    terms = _TERM.findall(query)
+    if any(term in OPERATORS for term in terms):
+        return []
+    return [folded(word) for term in terms for word in _TITLE_WORD.findall(term)]
+
+
+def title_pieces(title: str, words: Sequence[str]) -> list[str] | None:
+    """`title` cut where its words begin with one of `words`: the odd pieces are those words,
+    whole. `None` when one of `words` begins none of its words, or there are none (step 9e)."""
+    if not words:
+        return None
+    pieces: list[str] = []
+    start = 0
+    begun: set[str] = set()
+    for match in _TITLE_WORD.finditer(title):
+        word = folded(match.group(0))
+        begins = {typed for typed in words if word.startswith(typed)}
+        if begins:
+            begun |= begins
+            pieces += [title[start : match.start()], match.group(0)]
+            start = match.end()
+    if begun != set(words):
+        return None
+    pieces.append(title[start:])
+    return pieces
+
+
+def snippet_pieces(snippet: str) -> list[str]:
+    """A snippet marked with `MATCH_MARKS`, cut into pieces: the odd ones are what matched. A mark
+    a message held itself is dropped, and never shifts a piece (step 9e)."""
+    start, end = MATCH_MARKS
+    return [piece.replace(start, "").replace(end, "") for piece in _MARKED.split(snippet)]
 
 
 def time_bound(text: str, now: datetime) -> datetime | None:

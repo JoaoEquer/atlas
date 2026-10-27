@@ -28,15 +28,21 @@ from atlas.conversations.model import (
     BOT,
     DEMOTED_SOURCES,
     HIDDEN_SOURCES,
+    MATCH_MARKS,
     ConversationInfo,
     Cursor,
+    Found,
     Hit,
     Kind,
     Role,
     StoredMessage,
     TitleSource,
     query_terms,
+    snippet_pieces,
     title_from,
+    title_pieces,
+    title_words,
+    typed_query,
 )
 from atlas.home import Database, Migration, Schema, format_utc, transaction, utc_now
 from atlas.models import AssistantMessage, Message, ModelChoice, ToolResult, UserMessage
@@ -464,6 +470,8 @@ class ConversationStore:
         before: str | None = None,
         newest_first: bool | None = None,
         bot: str | None = None,
+        listed: bool = False,
+        marks: tuple[str, str] = ("»", "«"),
     ) -> list[Hit]:
         """The conversations whose messages match `query` (cleaned with `fts_query`), each through
         its best match: by relevance, or by the match's time when `newest_first` is set.
@@ -472,20 +480,22 @@ class ConversationStore:
         because the rest is in the model's context already. `after` and `before` bound when a
         conversation started, in Atlas's UTC text. A scheduled job's conversations come after the
         user's own. `bot` keeps the search inside that bot's conversations; unset, every agent's
-        are searched, as the main agent searches (docs/ARCHITECTURE.md, Bots)."""
-        where, values = _filters(roles, current, excluded, after, before, bot)
+        are searched, as the main agent searches (docs/ARCHITECTURE.md, Bots). `listed` keeps it
+        inside the list of conversations, as the app's sidebar shows it (step 9e); `marks` open
+        and close a match in the snippet."""
+        where, values = _filters(roles, current, excluded, after, before, bot, listed=listed)
         connection = self._database.connect()
         try:
             rows = connection.execute(
                 f"SELECT m.number, m.conversation_id, m.role, m.kind, m.text, m.tool_name, "  # noqa: S608
                 f"m.created_at, m.active, t.source, "
-                f"snippet(conversations_search, 0, '»', '«', ' … ', {SNIPPET_TOKENS}) "
+                f"snippet(conversations_search, 0, ?, ?, ' … ', {SNIPPET_TOKENS}) "
                 "FROM conversations_search "
                 "JOIN conversations_messages m ON m.number = conversations_search.rowid "
                 "JOIN conversations_threads t ON t.id = m.conversation_id "
                 f"WHERE conversations_search MATCH ? AND {where} "
                 "ORDER BY bm25(conversations_search) LIMIT ?",
-                (query, *values, SCAN_ROWS),
+                (*marks, query, *values, SCAN_ROWS),
             ).fetchall()
             rows.sort(key=lambda row: str(row[8]) in DEMOTED_SOURCES)  # stable: keeps the ranking
             best: dict[str, tuple[StoredMessage, str]] = {}
@@ -501,6 +511,55 @@ class ConversationStore:
             ]
         finally:
             connection.close()
+
+    def find(self, text: str, limit: int) -> tuple[list[Found], bool]:
+        """The list's search (step 9e): the conversations of the list whose title or messages hold
+        every word of `text`, each word also matching the words it begins (`typed_query`). Those
+        found by their title come first, the latest activity first, then those found by a message,
+        the best match first; with them, whether more than `limit` matched.
+
+        No index of its own: the messages are read through the search index, and the titles as
+        they are, compared word by word as the index compares words (`title_words`)."""
+        query = typed_query(text)
+        if query is None:
+            return [], False
+        words = title_words(query)
+        titled: list[tuple[str, list[str]]] = []
+        connection = self._database.connect()
+        try:
+            if words:
+                rows: list[tuple[str, str]] = connection.execute(
+                    "SELECT t.id, t.title FROM conversations_threads t "  # noqa: S608
+                    f"WHERE t.source NOT IN ({_marks(_UNLISTED)}) AND t.title != '' "
+                    "ORDER BY t.updated_at DESC, t.id DESC",
+                    _UNLISTED,
+                ).fetchall()
+                for conversation_id, title in rows:
+                    pieces = title_pieces(title, words)
+                    if pieces is not None:
+                        titled.append((conversation_id, pieces))
+            found = [
+                Found(self._info(connection, conversation_id), tuple(pieces))
+                for conversation_id, pieces in titled[:limit]
+            ]
+        finally:
+            connection.close()
+        named = {conversation_id for conversation_id, _ in titled}
+        hits = [
+            hit
+            for hit in self.search(query, limit=SCAN_ROWS, listed=True, marks=MATCH_MARKS)
+            if hit.conversation.id not in named
+        ]
+        found += [
+            Found(
+                hit.conversation,
+                (hit.conversation.title,),
+                tuple(snippet_pieces(hit.snippet)),
+                hit.match.role.value,
+            )
+            for hit in hits[: max(0, limit - len(found))]
+        ]
+        return found, len(titled) + len(hits) > limit
 
     def missing_terms(
         self,
@@ -737,8 +796,11 @@ def _filters(
     after: str | None,
     before: str | None,
     bot: str | None = None,
+    *,
+    listed: bool = False,
 ) -> tuple[str, list[object]]:
-    """The WHERE clauses a search and its missing words share, and their values."""
+    """The WHERE clauses a search and its missing words share, and their values; `listed`, only
+    the conversations of the list (step 9e)."""
     clauses = [
         "m.kind = 'message'",
         f"m.role IN ({_marks(roles)})",
@@ -758,6 +820,10 @@ def _filters(
     if bot is not None:
         clauses.append("t.bot = ?")
         values.append(bot)
+    if listed:
+        # A bot's conversation lives in the bots' list, and one with no title yet in none.
+        clauses += ["t.source != ?", "t.title != ''"]
+        values.append(BOT)
     return " AND ".join(clauses), values
 
 

@@ -646,7 +646,7 @@ an id, and may withdraw them.
   since step 10c, `home.create`, `home.backup`, `home.inspect` and
   `home.import` (Homes in the app).
 - **The list of conversations** (step 9e): `conversation.list` gives a page and the cursor of the
-  next (The list of conversations, below).
+  next, and `conversation.search` finds one by its words (The list of conversations, below).
 - **A message sent while a turn runs steers it**: it enters the history after the round of tools in
   course (`AgentLoop.run(steering=...)`), or starts the next turn when the turn ends first. Stopping
   a turn hands the messages not yet taken back to the client, which puts them back in the input
@@ -1398,7 +1398,8 @@ full weight; a click on a tool opens what went in and what came out. Roadmap ste
 
 ### The list of conversations — decided 2026-10-27
 
-Step 9e: the sidebar's list holds every conversation of the home, not only the latest 50.
+Step 9e: the sidebar's list holds every conversation of the home, not only the latest 50, and
+finds one by its words.
 
 - **A page at a time** (`conversation.list`, `ConversationStore.page`): the latest activity first,
   the id breaking a tie, 50 rows a page. A page ends at a cursor, its last row's activity and id
@@ -1413,10 +1414,28 @@ Step 9e: the sidebar's list holds every conversation of the home, not only the l
   list's end, with "Read again", and nothing reads it again by itself. A cursor the server never
   gave is refused; an app that sends none gets the first page, as before this step, and a server
   that sends none ends the list at its one page.
+- **The search** (`conversation.search`, `ConversationStore.find`): the field above the list finds
+  the list's conversations whose title, or one of whose messages, holds every word typed, each word
+  also matching the words it begins (`typed_query`). It has no index of its own: the messages are
+  read through the conversations' search index (`conversations_search`), as `conversation_search`
+  reads them, and the titles as they are, compared word by word without case or accents, as the
+  index's tokenizer compares (`remove_diacritics 2`); a title model's title is in no message, and
+  is found all the same. A query with an operator (`AND`, `OR`, `NOT`) is left to the index alone.
+  Those found by their title come first, the latest activity first, then those found by a message,
+  the best match first, 50 at most, with whether more matched. A result says where it matched:
+  its title, or the words around the match in its best message and who said them, each cut into
+  pieces by the server, the odd ones what matched, between marks no one types (`MATCH_MARKS`), so
+  no character of a message can pass for one. The app searches 250 ms after the typing pauses and
+  shows only the answer to the latest words; the results take the list's place, which stays where
+  it was, hidden, until Esc ends the search; Enter opens the first conversation found.
 - **Proved** by the store's and the server's tests (each conversation once, in order, with
-  activity in the middle and a tie in time), the app's (the page waiting for the read of the whole
-  list, the read of as many rows as it holds, the failed page) and the end-to-end test: 60
-  conversations and a new one begun before the rest was read, all 61 listed once, in order.
+  activity in the middle and a tie in time; a title found without its case or accents, a message
+  by a word begun, the titles first, only the list's conversations, a mark a message held), the
+  app's (the page waiting for the read of the whole list, the read of as many rows as it holds,
+  the failed page; the search after the pause, an older answer never shown over a newer one) and
+  the end-to-end tests: 60 conversations and a new one begun before the rest was read, all 61
+  listed once, in order; and the search finding a word begun in a message past the first page and
+  a title no message holds, opening what it found, and Esc bringing the list back.
 
 ## Attachments — decided 2026-10-16
 

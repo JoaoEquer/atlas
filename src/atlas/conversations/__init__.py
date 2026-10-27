@@ -30,6 +30,7 @@ from atlas.conversations.model import (
     WORKBENCH,
     ConversationInfo,
     Cursor,
+    Found,
     Hit,
     Kind,
     Role,
@@ -41,6 +42,7 @@ from atlas.conversations.model import (
     query_terms,
     time_bound,
     title_from,
+    typed_query,
 )
 from atlas.conversations.store import SCHEMA, Conversation, ConversationStore
 
@@ -67,6 +69,7 @@ __all__ = [
     "ConversationStore",
     "ConversationsError",
     "Cursor",
+    "Found",
     "Hit",
     "Kind",
     "Role",
@@ -84,4 +87,5 @@ __all__ = [
     "safe_name",
     "time_bound",
     "title_from",
+    "typed_query",
 ]

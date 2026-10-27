@@ -61,6 +61,7 @@ import type {
   RoutineFinished,
   RoutineRow,
   RunRow,
+  SearchHit,
   SecretParams,
   SecretResult,
   SessionFolderRow,
@@ -136,6 +137,26 @@ export interface ListMore {
   error: null | string
   reading: boolean
 }
+
+/** How long the list's search waits after a key before it searches (step 9e). */
+export const SEARCH_PAUSE_MS = 250
+/** The most conversations the list's search shows. */
+const SEARCH_LIMIT = 50
+
+/** The list's search (step 9e): what its field holds, the words of the answer shown and what they
+ * found; whether a search is under way, and why the last one failed. */
+export interface ListSearch {
+  error: null | string
+  hits: SearchHit[]
+  more: boolean
+  /** The words `hits` answers. */
+  query: string
+  reading: boolean
+  /** What the field holds, as typed. */
+  text: string
+}
+
+export const NO_SEARCH: ListSearch = { error: null, hits: [], more: false, query: '', reading: false, text: '' }
 
 /** As a session's turn ends, how often and how many times it is read until its harness kept the
  * answer on screen: three seconds in all. */
@@ -300,6 +321,7 @@ export class HomeSession {
   /** The list of conversations as far as its pages were read, the latest activity first. */
   readonly $conversations = atom<ConversationRow[]>([])
   readonly $listMore = atom<ListMore>({ cursor: '', error: null, reading: false })
+  readonly $search = atom<ListSearch>(NO_SEARCH)
   readonly $selected = atom<null | string>(null)
   readonly $threads = map<Record<string, Thread>>({})
   readonly $autoMode = map<Record<string, boolean>>({})
@@ -456,6 +478,9 @@ export class HomeSession {
    * One asked for while another of its kind waits its turn joins that one. */
   private listing: Promise<void> = Promise.resolve()
   private readonly listWaiting = new Map<'more' | 'refresh', Promise<void>>()
+  /** The list's searches asked so far: only the latest one's answer shows (step 9e). */
+  private searches = 0
+  private searchTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(
     readonly client: AtlasClient,
@@ -530,6 +555,7 @@ export class HomeSession {
       stop()
     }
 
+    clearTimeout(this.searchTimer)
     this.client.stop()
   }
 
@@ -621,6 +647,63 @@ export class HomeSession {
     this.listing = turn.catch(() => undefined)
 
     return turn
+  }
+
+  /** What the list's search field holds (step 9e), searched once the typing pauses; blank words
+   * search nothing. */
+  typeSearch(text: string): void {
+    clearTimeout(this.searchTimer)
+    const words = text.trim()
+
+    if (!words) {
+      // An answer still on its way is for words no longer there.
+      this.searches++
+      this.$search.set({ ...NO_SEARCH, text })
+
+      return
+    }
+
+    this.$search.set({ ...this.$search.get(), text })
+    this.searchTimer = setTimeout(() => {
+      void this.search(words)
+    }, SEARCH_PAUSE_MS)
+  }
+
+  /** The same search again, after it failed. */
+  searchAgain(): void {
+    const words = this.$search.get().text.trim()
+
+    if (words) {
+      void this.search(words)
+    }
+  }
+
+  /** End the search: the field empties at once, and an answer on its way is dropped. */
+  clearSearch(): void {
+    clearTimeout(this.searchTimer)
+    this.searches++
+    this.$search.set(NO_SEARCH)
+  }
+
+  private async search(words: string): Promise<void> {
+    const asked = ++this.searches
+    this.$search.set({ ...this.$search.get(), error: null, reading: true })
+
+    try {
+      const found = await this.client.call('conversation.search', { limit: SEARCH_LIMIT, query: words })
+
+      if (asked === this.searches) {
+        this.$search.set({ ...this.$search.get(), hits: found.hits, more: found.more, query: words, reading: false })
+      }
+    } catch (error) {
+      if (asked === this.searches) {
+        this.$search.set({
+          ...this.$search.get(),
+          error: error instanceof Error ? error.message : String(error),
+          reading: false
+        })
+      }
+    }
   }
 
   /** Show a conversation, in its tab or the passing one: its stored messages, then its events from
@@ -2560,6 +2643,7 @@ export const $read = map<Record<Listed, boolean>>({ bots: false, conversations: 
 export const $readError = map<Partial<Record<Readable, string>>>({})
 export const $conversations = atom<ConversationRow[]>([])
 export const $listMore = atom<ListMore>({ cursor: '', error: null, reading: false })
+export const $search = atom<ListSearch>(NO_SEARCH)
 export const $selected = atom<null | string>(null)
 export const $threads = map<Record<string, Thread>>({})
 export const $autoMode = map<Record<string, boolean>>({})
@@ -2649,6 +2733,7 @@ const MIRRORS: Mirror[] = [
   mirror($readError, s => s.$readError),
   mirror($conversations, s => s.$conversations),
   mirror($listMore, s => s.$listMore),
+  mirror($search, s => s.$search),
   mirror($selected, s => s.$selected),
   mirror($threads, s => s.$threads),
   mirror($autoMode, s => s.$autoMode),
@@ -2942,6 +3027,21 @@ export function refreshList(): Promise<void> {
  * after a read of it failed. */
 export function moreConversations(again = false): Promise<void> {
   return current().moreConversations(again)
+}
+
+/** What the list's search field holds, searched once the typing pauses (step 9e). */
+export function typeSearch(text: string): void {
+  current().typeSearch(text)
+}
+
+/** The list's search again, after it failed. */
+export function searchAgain(): void {
+  current().searchAgain()
+}
+
+/** End the list's search, at once. */
+export function clearSearch(): void {
+  current().clearSearch()
 }
 
 /** Read again a list or a page whose last read failed; a failure again says so in its place. */

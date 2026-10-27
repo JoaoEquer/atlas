@@ -48,6 +48,7 @@ export {
   IconPrompt as Codex,
   IconRefresh as Refresh,
   IconRobot as Robot,
+  IconSearch as Search,
   IconServer as Machine,
   IconServerBolt as McpServer,
   IconSettings as Settings,

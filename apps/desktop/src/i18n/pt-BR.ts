@@ -215,6 +215,21 @@ export const ptBR: Override<Messages> = {
     reading: 'Lendo as conversas…',
     readingMore: 'Lendo mais conversas…',
     new: 'Nova conversa',
+    search: {
+      atlas: 'Atlas',
+      clear: 'Limpar a busca',
+      field: 'Buscar nas conversas',
+      found: (count: number, more: boolean) =>
+        more
+          ? `Mostrando as ${count} primeiras. Mais uma palavra estreita a busca.`
+          : count === 1
+            ? '1 conversa'
+            : `${count} conversas`,
+      none: (query: string) => `Nenhuma conversa tem “${query}”.`,
+      results: 'Conversas encontradas',
+      searching: 'Buscando nas conversas…',
+      you: 'Você'
+    },
     tab: 'Conversas',
     untitled: 'Nova conversa',
     via: (source: string) => `pelo ${source}`

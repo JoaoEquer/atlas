@@ -358,8 +358,11 @@ export function atlas(home: string, ...args: string[]): string {
 }
 
 /** Conversations put into the home before the app opens (`tests/seed_conversations.py`): what was
- * said in each and its answer, oldest first, a minute apart. */
-export function seedConversations(home: string, conversations: { answer: string; said: string }[]): void {
+ * said in each and its answer, oldest first, a minute apart; `title`, a title model's. */
+export function seedConversations(
+  home: string,
+  conversations: { answer: string; said: string; title?: string }[]
+): void {
   const file = path.join(path.dirname(home), 'conversations.json')
   writeFileSync(file, JSON.stringify(conversations))
   const done = spawnSync(

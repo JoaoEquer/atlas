@@ -107,6 +107,12 @@ tab stays closed.
 Scroll down the list of conversations. It shows the fifty with the latest activity first, and reads
 the next ones as you near its end, all the way back to your first conversation.
 
+Or type in **Search conversations**, above the list. It finds the conversations whose title, or one
+of whose messages, holds every word you typed, also as the start of a longer word, accents and
+capitals aside. Each result shows where it matched, the words in bold: in its title, or in a message,
+with who said it. A click opens the conversation, **Enter** opens the first, and **Esc** clears the
+search.
+
 ## Can I add my own tools?
 
 Yes: an MCP server in `mcp.json`, a skill in your home, or a plugin, which can add skills, commands,

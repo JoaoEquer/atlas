@@ -3837,6 +3837,30 @@ confiança. **Sem redesenho:** polimento, fluidez, percepção de velocidade e i
   abrir uma conversa) falharam pela carga; passaram sozinhos duas vezes, e a rodada inteira refeita
   passou. Fiscais: 2.707 testes do Python com 91,48% de cobertura, o `npm run check` (456 do
   Vitest) e os 77 do e2e.
+- **Entrega 2 do 9e, a busca (27/10):** acima da lista, um campo "Buscar nas conversas" acha as
+  conversas da lista cujo título, ou uma das mensagens, tem todas as palavras digitadas, também
+  como começo de uma palavra maior ("quok" acha "quokka"), sem diferença de maiúsculas nem de
+  acentos (`conversation.search`). Não há índice novo: as mensagens vêm pelo FTS5 que a busca do
+  agente já usa, e os títulos são comparados como estão, palavra por palavra, do jeito que o
+  tokenizador do índice compara; assim acha também o título que o modelo de título escreveu e que
+  nenhuma mensagem tem. Uma busca com operador (`AND`, `OR`, `NOT`) fica só com o índice. Os achados
+  pelo título vêm primeiro, da atividade mais recente para trás, depois os achados por uma mensagem,
+  a melhor primeiro, até 50, e a linha de cima diz quantos são, ou que há mais e que outra palavra
+  estreita a busca. Cada resultado mostra onde bateu, as palavras em negrito: no título, ou no
+  trecho da mensagem, com quem disse ("Atlas:", "Você:"); o servidor já manda o texto em pedaços,
+  com marcas que ninguém digita, para nenhum caractere de uma mensagem passar por marca. O app busca
+  250 ms depois da última tecla e só mostra a resposta das palavras mais recentes; os resultados
+  ocupam o lugar da lista, que fica escondida onde estava; o clique abre a conversa, Enter abre a
+  primeira, e Esc limpa a busca e devolve a lista. Provado no pytest (o título sem maiúsculas nem
+  acentos, a mensagem por uma palavra começada, todas as palavras no título ou numa mensagem, os
+  títulos primeiro, só as conversas da lista, o "há mais", a marca que uma mensagem tinha), no
+  Vitest (a busca depois da pausa, a resposta velha que chega depois da nova e é descartada, o Esc
+  que larga a resposta a caminho, a falha com "Ler de novo"; o campo, os resultados no lugar da
+  lista, o negrito, o clique e o Enter) e no e2e (uma palavra começada achada na resposta da
+  conversa mais antiga, além da primeira página, aberta pelo clique; um título que nenhuma mensagem
+  tem; o "nenhuma conversa"; o Esc devolvendo a lista). Prints de antes (a lista da entrega 1) e
+  depois no claro e no escuro, em inglês e em português. Fiscais: 2.718 testes do Python com
+  91,46% de cobertura, o `npm run check` (464 do Vitest) e os 78 do e2e.
 
 ## Assuntos de desenho ainda abertos
 
