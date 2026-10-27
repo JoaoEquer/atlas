@@ -4,6 +4,7 @@
   "name": "atlas-site",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-25",
+  "routes": [{ "pattern": "atlasv4.com", "custom_domain": true }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

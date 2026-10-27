@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
  * The site's address. The domain is still open (ROADMAP, step 19): until it is chosen, the build
  * takes it from SITE_URL and falls back to a placeholder that no deploy should keep.
  */
-export const SITE_URL = process.env.SITE_URL ?? 'https://atlas.example.com'
+export const SITE_URL = process.env.SITE_URL ?? 'https://atlasv4.com'
 
 /** The public repository the site, the app and the installers come from. */
 export const REPOSITORY = 'https://github.com/marqueskaio/atlas'
