@@ -4,8 +4,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
 /**
- * The site's address. The domain is still open (ROADMAP, step 19): until it is chosen, the build
- * takes it from SITE_URL and falls back to a placeholder that no deploy should keep.
+ * The site's address, atlasv4.com. SITE_URL overrides it only for a build meant elsewhere; the
+ * deploy sets none, since the pages, the sitemap and the install line all take it from here.
  */
 export const SITE_URL = process.env.SITE_URL ?? 'https://atlasv4.com'
 

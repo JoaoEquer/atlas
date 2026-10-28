@@ -3593,7 +3593,9 @@ Atlas precisa de outra: "como faço X".
     cards e numeração que não seja sequência de verdade.
 - **Como vai ao ar:** a Cloudflare constrói o site a cada push na `main` (Workers Builds, ligado ao
   repositório pelo painel), na pasta `site`, com `npm ci && npm run build` e `npx wrangler deploy`.
-  O `site/wrangler.jsonc` já diz o resto. `SITE_URL` recebe o domínio quando ele existir.
+  O `site/wrangler.jsonc` já diz o resto. O domínio é o `atlasv4.com` (27/10), escrito no
+  `site/site.config.mjs`; o build da Cloudflare não define mais o `SITE_URL`, que em 28/10 ainda
+  trazia o endereço antigo do workers.dev e punha na home uma linha de instalação que dava 404.
 - **Quantas instalações começaram** (pedido do usuário em 28/10: "como eu faço pra saber quantas
   pessoas já instalaram o atlas?"). Até então só havia o tráfego do GitHub, em que cada execução do
   CI e cada atualização do app contam como clone, e que some depois de 14 dias. Decidido com ele em
@@ -3603,7 +3605,9 @@ Atlas precisa de outra: "como faço X".
   nunca o endereço. O `npm run installs` na pasta `site` mostra os números (os últimos 30 dias, até
   90). Conta instalações começadas: rodar a linha de novo para reparar conta outra vez, e a
   atualização pelo app, que vem do GitHub, não conta. Ficam de fora, por ora, o aviso do instalador
-  ao terminar e qualquer aviso do app. A página de Privacidade diz isso.
+  ao terminar e qualquer aviso do app. A página de Privacidade diz isso. No ar em 28/10, depois de
+  o usuário ligar o Analytics Engine na conta (o deploy recusava sem ele): os dois scripts servidos
+  iguais aos da `main`, lidos pelo `irm` de verdade; o gist virou duas linhas que rodam os do site.
 - **O Atlas lendo a própria documentação** (pedido do usuário em 25/10, depois da parte 1: "a doc
   já está acessível para o Atlas da melhor forma?"; não estava: o Atlas não sabia que ela existia,
   o container nem a tinha, e eram 4 páginas). Decidido e feito em 25/10, na escada de integração

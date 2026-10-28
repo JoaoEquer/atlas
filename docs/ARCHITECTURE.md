@@ -1745,7 +1745,8 @@ packaged, signed app is step 18b.
 
 - **Two scripts, `scripts/install.ps1` and `scripts/install.sh`**, run as `irm <url> | iex` and
   `curl -fsSL <url> | bash`. The site serves them, `atlasv4.com/install.ps1` and
-  `atlasv4.com/install.sh` (decided with the user on 28/10/2026; a gist served them before): its
+  `atlasv4.com/install.sh` (decided with the user on 28/10/2026; a gist served them before, and now holds two lines that
+  run the site's, so an old link still installs the latest and is counted): its
   build copies them byte for byte (`site/scripts/check-dist.mjs` compares), so each deploy of
   `main` serves `main`'s, and its Worker answers them as UTF-8 text, never cached. A file handed
   over instead would
