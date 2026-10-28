@@ -526,6 +526,7 @@ def parse_manifest(
     folder_name: str,
     skills: Sequence[str] = (),
     mcp_text: str | None = None,
+    mcp_files: Mapping[str, str] | None = None,
     hooks: Sequence[str] = (),
     commands: Sequence[str] = (),
     programs: Sequence[str] = (),
@@ -536,7 +537,8 @@ def parse_manifest(
 ) -> Manifest:
     """A plugin's manifest from `plugin.json`'s text; `present` names what sits at the plugin's
     root (`__init__.py`, `skills`), `folder_name` the folder it is in, `skills` the folders of its
-    `skills/` that hold a `SKILL.md`, `mcp_text` its `.mcp.json`, when it has one, `hooks` its
+    `skills/` that hold a `SKILL.md`, `mcp_text` its `.mcp.json`, when it has one, `mcp_files` the
+    text of each file its `mcpServers` names by path, `hooks` its
     command hooks, one line each, as `atlas.hooks` read them, and `commands` the names of the
     Markdown files of its `commands/`, `programs` the files of its `bin/`, `agents` the
     Markdown files of its `agents/`, `monitors_text` its `monitors/monitors.json`, and
@@ -646,7 +648,10 @@ def parse_manifest(
     secrets += option_secrets
     settings += option_settings
     servers, implied = _servers(
-        data, mcp_text, {secret.name for secret in secrets} | {USER_CONFIG + key for key in options}
+        data,
+        mcp_text,
+        mcp_files or {},
+        {secret.name for secret in secrets} | {USER_CONFIG + key for key in options},
     )
     secrets += implied
     providers = _providers(own.get("providers"))
@@ -898,25 +903,29 @@ def _option_text(value: object) -> str:
 
 
 def _servers(
-    data: dict[str, Any], mcp_text: str | None, secrets: set[str]
+    data: dict[str, Any], mcp_text: str | None, mcp_files: Mapping[str, str], secrets: set[str]
 ) -> tuple[dict[str, Mapping[str, Any]], tuple[SecretDeclaration, ...]]:
     """The MCP servers of `.mcp.json` and of the manifest's `mcpServers`, the manifest's winning a
     name both declare (Claude Code loads `.mcp.json` first), and the secrets they read that the
-    plugin does not declare under `atlas.secrets`: named, they are declared."""
+    plugin does not declare under `atlas.secrets`: named, they are declared. The manifest's
+    `mcpServers` is an object of servers, a `./` file that holds them, or a list of both."""
     found: dict[str, Mapping[str, Any]] = {}
     if mcp_text is not None:
-        try:
-            document: object = json.loads(mcp_text) if mcp_text.strip() else {}
-        except ValueError as error:
-            raise ManifestError(f"{MCP_FILE} is not JSON: {error}") from error
-        if not isinstance(document, dict):
-            raise ManifestError(f"{MCP_FILE} is not a JSON object.")
-        # With `mcpServers`, or the servers alone, as Claude Code reads it (GitHub's plugin).
-        servers = cast("dict[str, Any]", document)
-        listed = servers.get("mcpServers", servers)
-        found.update(_server_map(listed, MCP_FILE))
-    if "mcpServers" in data:
-        found.update(_server_map(data["mcpServers"], f"{MANIFEST}: mcpServers"))
+        found.update(_server_file(mcp_text, MCP_FILE))
+    declared: object = data.get("mcpServers")
+    entries: list[object] = (
+        [] if declared is None
+        else cast("list[object]", declared) if isinstance(declared, list)
+        else [declared]
+    )  # fmt: skip
+    for entry in entries:
+        if isinstance(entry, str):
+            text = mcp_files.get(entry)
+            if text is None:
+                raise ManifestError(f"{MANIFEST}: mcpServers names {entry!r}, which is not read.")
+            found.update(_server_file(text, entry))
+        else:
+            found.update(_server_map(entry, f"{MANIFEST}: mcpServers"))
     allowed = {PLUGIN_ROOT, PLUGIN_DATA, *secrets}
     implied: dict[str, SecretDeclaration] = {}
     for server, entry in found.items():
@@ -928,6 +937,19 @@ def _servers(
                 )
             implied.setdefault(name, SecretDeclaration(name, f"Read by its MCP server {server}."))
     return found, tuple(implied.values())
+
+
+def _server_file(text: str, where: str) -> dict[str, Mapping[str, Any]]:
+    """The servers of an MCP file: with `mcpServers`, or the servers alone, as Claude Code reads
+    it (GitHub's plugin)."""
+    try:
+        document: object = json.loads(text) if text.strip() else {}
+    except ValueError as error:
+        raise ManifestError(f"{where} is not JSON: {error}") from error
+    if not isinstance(document, dict):
+        raise ManifestError(f"{where} is not a JSON object.")
+    servers = cast("dict[str, Any]", document)
+    return _server_map(servers.get("mcpServers", servers), where)
 
 
 def _server_map(value: object, where: str) -> dict[str, Mapping[str, Any]]:
@@ -982,7 +1004,9 @@ def plugin_servers(
     stays `${NAME}`, for the MCP client to fill from the vault; so does a sensitive option
     (Claude Code's `${user_config.KEY}`), under its vault name. Another option is its value in
     `settings`, with any `${` taken out, so a value never names a secret for the client to
-    fill."""
+    fill. A server whose entry does not say its `trust` is `untrusted`: every call to a tool that
+    does not declare itself read-only asks first, as Claude Code asks before a plugin's MCP tool
+    (decided with the user on 28/10/2026: Cloudflare's server can change a whole account)."""
     places = {PLUGIN_ROOT: root, PLUGIN_DATA: data}
     for key, secret in manifest.options.items():
         value = (settings or {}).get(key, "")
@@ -999,7 +1023,7 @@ def plugin_servers(
 
     return {
         "mcpServers": {
-            server_name(manifest.name, name): fill(dict(entry))
+            server_name(manifest.name, name): fill({"trust": "untrusted", **entry})
             for name, entry in manifest.mcp_servers.items()
         }
     }

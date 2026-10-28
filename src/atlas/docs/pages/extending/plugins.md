@@ -196,16 +196,22 @@ conversations, each line they print reaching the model as a notice, which it ans
 
 ## MCP servers
 
-`.mcp.json` holds Claude Code's `mcpServers`. Atlas names each server after the plugin
-(`plugin_<plugin>_<server>`, its tools `mcp__plugin_<plugin>_<server>__<tool>`). Each server
-connects when the plugin is turned on, and stops when it is turned off.
+`.mcp.json` holds Claude Code's `mcpServers`. The manifest may also hold them under
+`mcpServers`, or name a file that does (`"mcpServers": "./.mcp.json"`), or a list of both. Atlas
+names each server after the plugin (`plugin_<plugin>_<server>`, its tools
+`mcp__plugin_<plugin>_<server>__<tool>`). Each server connects when the plugin is turned on, and
+stops when it is turned off.
 
 - `${CLAUDE_PLUGIN_ROOT}` is the plugin's folder, and `${CLAUDE_PLUGIN_DATA}` its data folder.
 - `${NAME}` is a secret from the vault. Naming it declares it, as `atlas.secrets` does: Atlas
   shows it when you turn the plugin on, so a plugin never reads a key you were not shown. Declare
   it under `atlas.secrets` anyway, to say where to get it.
-- `"trust": "untrusted"` makes every call that may write wait for your approval, as in your own
-  `mcp.json`.
+- A plugin's server asks for your approval before every call to a tool that does not declare
+  itself read-only (`readOnlyHint`), as Claude Code asks before a plugin's MCP tools. A plugin
+  whose server only reads may say `"trust": "full"` in its entry.
+- A remote server that signs in with OAuth needs nothing more than its address: Atlas finds out
+  when the server asks, leaves it out until you sign in, and connects it once you run
+  `atlas mcp login plugin_<plugin>_<server>`.
 
 An MCP server's tools reach the model behind the tool search, like every MCP tool.
 
@@ -665,7 +671,8 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 - **An MCP server** is its `mcp.json` entry under `server`, with each `${NAME}` it reads under
   `secrets` (a name, what it is, the page that makes one). What it runs is pinned: `npx` with
   `name@1.2.3`, `uvx` with `name==1.2.3`, `docker run` with an image by its digest, or a remote
-  `https` address. Servers that sign in with OAuth wait until Atlas does.
+  `https` address. A server that signs in with OAuth comes in a plugin instead, whose servers
+  you sign in to with `atlas mcp login`.
 - **A new version is a new pull request** that moves `sha`; the reviewer reads what changed
   between the two commits. Your code must not fetch and replace itself, nor carry compiled files.
   What it does on the network, in the background or outside its own folder goes in its README.

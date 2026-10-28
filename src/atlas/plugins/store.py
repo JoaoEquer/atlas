@@ -168,6 +168,7 @@ def read_plugin(folder: Path, bundled: bool) -> Found:
     monitors_file = folder / MONITORS_FILE
     try:
         mcp_text = mcp_file.read_text(encoding="utf-8") if mcp_file.is_file() else None
+        mcp_files = _manifest_mcp_files(folder, text)
         monitors_text = (
             monitors_file.read_text(encoding="utf-8") if monitors_file.is_file() else None
         )
@@ -178,6 +179,7 @@ def read_plugin(folder: Path, bundled: bool) -> Found:
             folder_name=folder.name,
             skills=_skills(folder / SKILLS_FOLDER),
             mcp_text=mcp_text,
+            mcp_files=mcp_files,
             hooks=[hook.summary() for hook in hooks],
             commands=[file.stem for file in command_files(folder / COMMANDS_FOLDER)],
             programs=_programs(folder / BIN_FOLDER),
@@ -236,15 +238,36 @@ def _hooks_file(folder: Path, file: Path) -> list[CommandHook]:
     return parse_hooks(cast("dict[str, Any]", document)["hooks"], where)
 
 
-def _inside(folder: Path, path: str) -> Path:
+def _manifest_mcp_files(folder: Path, manifest_text: str) -> dict[str, str]:
+    """The text of each file the manifest's `mcpServers` names (a `./` path, or a list that holds
+    some), by the path as written, as Claude Code reads them: Cloudflare's plugin points at its
+    `.mcp.json` this way. Raises `ManifestError`, and `OSError` for a file that cannot be read."""
+    try:
+        data: object = json.loads(manifest_text)
+    except ValueError:
+        return {}  # the manifest's own reading says what is wrong with it
+    declared: object = (
+        cast("dict[str, Any]", data).get("mcpServers") if isinstance(data, dict) else None
+    )
+    entries: list[object] = (
+        cast("list[object]", declared) if isinstance(declared, list) else [declared]
+    )
+    return {
+        entry: _inside(folder, entry, ManifestError).read_text(encoding="utf-8")
+        for entry in entries
+        if isinstance(entry, str)
+    }
+
+
+def _inside(folder: Path, path: str, error: type[Exception] = HookConfigError) -> Path:
     """A path a manifest names: `./`-relative, inside the plugin, and there (Claude Code's)."""
     if not path.startswith("./"):
-        raise HookConfigError(f"{MANIFEST}: the path {path!r} must start with ./")
+        raise error(f"{MANIFEST}: the path {path!r} must start with ./")
     found = (folder / path).resolve()
     if not found.is_relative_to(folder.resolve()):
-        raise HookConfigError(f"{MANIFEST}: the path {path!r} leads outside the plugin.")
+        raise error(f"{MANIFEST}: the path {path!r} leads outside the plugin.")
     if not found.is_file():
-        raise HookConfigError(f"{MANIFEST}: the path {path!r} is not there.")
+        raise error(f"{MANIFEST}: the path {path!r} is not there.")
     return found
 
 

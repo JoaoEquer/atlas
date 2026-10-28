@@ -3389,6 +3389,19 @@ uma página para cada item. Hoje só se instala por endereço (16n), sabendo o e
   cliente MCP do Atlas ainda não faz OAuth); repositório fora do GitHub; lojas de outras pessoas;
   atualização automática; e o isolamento da tela de plugin num quadro próprio (16m), estudado de
   novo se a revisão humana não bastar.
+- **O plugin oficial da Cloudflare** (pedido do usuário em 28/10: um plugin com os MCPs oficiais
+  da Cloudflare e skills genéricas; a skill de ver as instalações do site fica privada, na casa
+  dele). A pesquisa achou que a Cloudflare já publica o plugin, `cloudflare/skills` (Apache-2.0):
+  o servidor MCP da API inteira (`mcp.cloudflare.com/mcp`, OAuth 2.1 com registro dinâmico e
+  PKCE) e 19 skills. Decidido com ele: a loja aponta para o plugin deles, em vez de um nosso. O
+  Atlas recusava esse plugin por três motivos, corrigidos em 28/10: o manifesto que nomeia o
+  arquivo dos servidores (`"mcpServers": "./.mcp.json"`); o servidor que pede login só pelo 401,
+  sem `oauth` na entrada, como o Claude Code descobre; e o `atlas mcp login`, que não achava o
+  servidor de um plugin. O MCP que entra com OAuth, acima, passa a vir num item `plugin`; o item
+  `mcp` continua recusando `oauth`. E o servidor de um plugin passa a perguntar antes de cada
+  chamada que pode mudar algo, a menos que diga `"trust": "full"`: o da Cloudflare não diz nada e
+  muda a conta inteira, e até então rodaria sem perguntar. Provado só por testes, a pedido do usuário (sem e2e nem prova
+  real).
 - **A prova:**
   - testes com uma loja servida por um GitHub falso em HTTP de verdade, os itens tirados de
     repositórios git feitos no teste: a loja lida e guardada, cada tipo instalado no seu lugar, o

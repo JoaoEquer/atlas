@@ -359,7 +359,11 @@ Decided 2026-10-09, in step 5 (`atlas.tools`):
   secrets the user stored. Every request carries the bearer token, renewed a minute before it
   ends and once on a 401, the request then sent again once. A server without a sign-in, or whose
   renewal is refused, is left out naming the command, and the server, which watches the file,
-  connects it once the user signs in. An entry without `oauth` uses a sign-in when one is kept.
+  connects it once the user signs in. An entry without `oauth` uses a sign-in when one is kept,
+  and one that fails to connect is asked once more without a token: a 401 leaves it out the same
+  way (28/10/2026), since Claude Code finds a server's sign-in by its 401 and a plugin written for
+  it names only the address (Cloudflare's). `atlas mcp login` finds a plugin's server too, by its
+  `plugin_<plugin>_<server>` name, among the plugins that are on.
   Left out: Claude Code's `oauth` fields (a fixed client id, a callback port) and a sign-in from
   the app.
 - **The toolset changes while Atlas runs**: a source's tools are replaced together, or not at all
@@ -2548,7 +2552,12 @@ Studied on 20/10/2026 with Claude Code's manifest reference of that day. The gui
   the curator never archives them (their use makes no row). A bot that lists its skills sees a
   plugin's only when it lists it by that name.
 - **MCP servers, Claude Code's:** a plugin's `.mcp.json`, and its manifest's `mcpServers`, the
-  manifest's winning a name both hold. Each is named `plugin_<plugin>_<server>` (Claude Code's
+  manifest's winning a name both hold. The manifest's is an object of servers, a `./` file inside
+  the plugin that holds them, or a list of both, as Claude Code reads it (Cloudflare's plugin
+  names `"./.mcp.json"`; Atlas refused the plugin whole until 28/10/2026). A plugin's server is
+  `"trust": "untrusted"` unless its entry says otherwise (decided with the user on 28/10/2026):
+  a call to a tool that does not declare `readOnlyHint` asks first, as Claude Code asks before a
+  plugin's MCP tool, since Cloudflare's server, which says nothing, can change a whole account. Each is named `plugin_<plugin>_<server>` (Claude Code's
   `plugin:<plugin>:<server>`, `_` for the `:` a server's name cannot hold; its tools
   `mcp__plugin_<plugin>_<server>__<tool>`, as in Claude Code), connected when the plugin is turned
   on and stopped when it is turned off, the user's own `mcp.json` untouched (`McpClient.
@@ -2833,8 +2842,9 @@ people made for Atlas, a tab per kind, the Atlas team's items marked, a page per
   `https`; what the item needs here; and its secrets, stored from the page and never shown again.
   "Turn on" opens the Plugins screen over it, and a plugin turned on or off there reads the list
   again, so its card follows.
-- **Left for later:** download counts and ratings, on a service of the user's own; MCP servers that
-  sign in with OAuth; repositories outside GitHub; other people's marketplaces; updating on its
+- **Left for later:** download counts and ratings, on a service of the user's own; an `mcp` item
+  whose server signs in with OAuth (such a server comes in a `plugin` item, whose servers the user
+  signs in to with `atlas mcp login`); repositories outside GitHub; other people's marketplaces; updating on its
   own; and isolating a plugin's screen, studied again if review alone is not enough.
 - **Proved** by tests against a fake GitHub over real HTTP serving real git repositories made in
   the test (each kind installed, a skill bringing its server, updates kept and forced, removal,

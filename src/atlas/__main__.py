@@ -314,21 +314,26 @@ def build_parser() -> argparse.ArgumentParser:
     remove.add_argument("name")
     actions.add_parser("check", help="Decrypt every secret and report the ones that fail.")
 
-    mcp = commands.add_parser("mcp", help="Sign in to the MCP servers of mcp.json that use OAuth.")
+    mcp = commands.add_parser(
+        "mcp",
+        help="Sign in to the MCP servers that use OAuth, of mcp.json or of a plugin.",
+    )
     mcp_actions = mcp.add_subparsers(dest="action", required=True)
     login = mcp_actions.add_parser(
         "login",
         help="Sign in to a server: its page opens in the browser, where you authorize Atlas, and "
         "the sign-in is kept and renewed.",
     )
-    login.add_argument("name", help="The server's name in mcp.json.")
+    login.add_argument(
+        "name", help="The server's name in mcp.json, or a plugin's: plugin_PLUGIN_SERVER."
+    )
     login.add_argument(
         "--no-browser",
         action="store_true",
         help="Print the page's address without opening it, for a browser on another machine.",
     )
     logout = mcp_actions.add_parser("logout", help="Forget a server's sign-in.")
-    logout.add_argument("name", help="The server's name in mcp.json.")
+    logout.add_argument("name", help="The server's name, as atlas mcp login took it.")
 
     models = commands.add_parser("models", help="The model providers and their keys.")
     model_actions = models.add_subparsers(dest="action", required=True)
@@ -2073,7 +2078,8 @@ def _secrets(args: argparse.Namespace, vault: Vault, stdin: TextIO) -> int:
 
 def _mcp(args: argparse.Namespace, home: Home, vault: Vault, stdin: TextIO) -> int:
     """`atlas mcp login` and `logout`: the sign-in is the user's, in the browser
-    (`atlas.mcp.oauth`); a server serving the home connects the server within a few seconds."""
+    (`atlas.mcp.oauth`); a server serving the home connects the server within a few seconds. The
+    server is the home's `mcp.json`'s, or a plugin's that is on (`plugin_<plugin>_<server>`)."""
     name: str = args.name
     sign_ins = vault.beside(MCP_SIGN_IN_FILE)
     if args.action == "logout":
@@ -2089,10 +2095,17 @@ def _mcp(args: argparse.Namespace, home: Home, vault: Vault, stdin: TextIO) -> i
     try:
         text = home.mcp_file.read_text(encoding="utf-8") if home.mcp_file.exists() else ""
         servers = {server.name: server for server in mcp.parse_config(text, str(home.mcp_file))}
+        if name not in servers:
+            plugins = Plugins(home, _migrate(home), vault).mcp_config()
+            for server in mcp.parse_config(json.dumps(plugins), "a plugin's MCP servers"):
+                servers.setdefault(server.name, server)
         declared = servers.get(name)
         if declared is None:
             known = ", ".join(sorted(servers)) or "none"
-            sys.stderr.write(f"atlas: mcp.json has no server named {name} (it has: {known}).\n")
+            sys.stderr.write(
+                f"atlas: neither mcp.json nor a plugin that is on has a server named {name} "
+                f"(there are: {known}).\n"
+            )
             return 1
         if declared.transport is mcp.Transport.STDIO:
             sys.stderr.write(f"atlas: {name} runs on this machine and does not sign in.\n")

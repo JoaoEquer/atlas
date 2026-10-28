@@ -15,6 +15,9 @@
 - **Renewal**: the access token is renewed with the refresh token a minute before it ends, and
   once more when the server answers 401, the request then sent again once.
 
+**A server that asks** without its entry saying `oauth` (Claude Code reads only the address) is
+found by its 401 when it fails to connect: it is left out saying the same command.
+
 **Who signs in** is the user, from a terminal: `atlas mcp login <server>`. The server's page says
 who is signing in and asks to authorize Atlas, which nothing but a person can do, so a server
 process never starts a sign-in: a server without one is left out, saying the command. The browser
@@ -34,7 +37,7 @@ import json
 import logging
 import secrets
 import time
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Protocol, cast
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -499,6 +502,35 @@ async def sign_in(
 
 def login_hint(name: str) -> str:
     return f"Run `atlas mcp login {name}` in a terminal to sign in."
+
+
+#: What Atlas sends to learn whether a server asks for a sign-in: the first message of a session.
+_PROBE = {
+    "jsonrpc": "2.0",
+    "id": 0,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": _CLIENT_NAME, "version": "0"},
+    },
+}
+
+
+async def asks_sign_in(url: str, headers: Mapping[str, str]) -> bool:
+    """Whether a network server whose entry does not say `oauth` asks for a sign-in: it answers
+    401 to a request without one, as the MCP authorization spec has it. Claude Code finds out the
+    same way, so a plugin written for it (Cloudflare's) declares nothing more than the address."""
+    try:
+        async with httpx2.AsyncClient(headers=dict(headers), timeout=HTTP_SECONDS) as http:
+            answer = await http.post(
+                url,
+                json=_PROBE,
+                headers={"Accept": "application/json, text/event-stream"},
+            )
+    except httpx2.HTTPError:
+        return False
+    return answer.status_code == 401
 
 
 class SignedIn(httpx2.Auth):

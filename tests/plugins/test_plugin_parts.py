@@ -20,7 +20,7 @@ from atlas.agent import Toolset
 from atlas.assistant import Assistant
 from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
 from atlas.jobs import DelegationError, parse_agent
-from atlas.mcp import McpClient
+from atlas.mcp import McpClient, parse_config
 from atlas.models import TOOL_SEARCH, CallLedger
 from atlas.plugins import ManifestError, Plugins, new_plugin, validate
 from atlas.plugins.model import parse_manifest, plugin_servers
@@ -154,6 +154,55 @@ def test_skills_mcp_servers_and_tools_are_declared_and_consented_to(tmp_path: Pa
     assert _manifest(folder).skills == ("shout", "third", "whisper")
 
 
+def test_the_manifest_may_name_its_servers_file_by_path_as_claude_code_reads_it(
+    tmp_path: Path,
+) -> None:
+    # Cloudflare's plugin: `"mcpServers": "./.mcp.json"`, the file holding the address only.
+    single = _plugin(
+        tmp_path,
+        "single",
+        mcp={"cloud": {"type": "http", "url": "https://mcp.example.com/mcp"}},
+        extra={"mcpServers": "./.mcp.json"},
+    )
+    assert set(_manifest(single).mcp_servers) == {"cloud"}
+
+    # A list of a file elsewhere, holding the servers alone, and servers written in place.
+    both = _plugin(
+        tmp_path,
+        "both",
+        extra={
+            "mcpServers": [
+                "./servers/more.json",
+                {"api": {"type": "http", "url": "https://api.example.com/mcp"}},
+            ]
+        },
+    )
+    (both / "servers").mkdir()
+    (both / "servers" / "more.json").write_text(
+        json.dumps({"docs": {"type": "http", "url": "https://docs.example.com/mcp"}}), "utf-8"
+    )
+    assert set(_manifest(both).mcp_servers) == {"docs", "api"}
+
+
+@pytest.mark.parametrize(
+    ("path", "problem"),
+    [
+        (".mcp.json", "must start with ./"),
+        ("./../outside.json", "leads outside the plugin"),
+        ("./missing.json", "is not there"),
+    ],
+)
+def test_a_servers_file_the_manifest_names_is_inside_the_plugin_and_there(
+    tmp_path: Path, path: str, problem: str
+) -> None:
+    (tmp_path / "outside.json").write_text("{}", encoding="utf-8")
+    folder = _plugin(tmp_path / "plugins", extra={"mcpServers": path})
+    found = read_plugin(folder, bundled=False)
+    assert found.manifest is None
+    assert found.problem is not None
+    assert problem in found.problem
+
+
 @pytest.mark.parametrize(
     ("atlas", "mcp", "problem"),
     [
@@ -260,8 +309,34 @@ def test_a_plugin_s_servers_are_named_for_it_with_its_folders_in_place() -> None
                 "args": ["C:/p/video/s.js", "--cache=C:/h/plugin-data/video"],
                 # The secret stays for the MCP client to fill from the vault.
                 "env": {"TOKEN": "${TOKEN}"},
+                "trust": "untrusted",
             }
         }
+    }
+
+
+def test_a_plugin_s_server_asks_before_a_call_that_may_write_unless_it_says_full_trust() -> None:
+    manifest = parse_manifest(
+        json.dumps({"name": "cloud"}),
+        {".mcp.json"},
+        folder_name="cloud",
+        mcp_text=json.dumps(
+            {
+                "mcpServers": {
+                    "api": {"type": "http", "url": "https://mcp.example.com/mcp"},
+                    "docs": {
+                        "type": "http",
+                        "url": "https://docs.example.com/mcp",
+                        "trust": "full",
+                    },
+                }
+            }
+        ),
+    )
+    servers = parse_config(json.dumps(plugin_servers(manifest, "/p", "/d")), "a plugin's")
+    assert {server.name: server.trusted for server in servers} == {
+        "plugin_cloud_api": False,
+        "plugin_cloud_docs": True,
     }
 
 

@@ -362,8 +362,9 @@ connected. Each tool is named `mcp__<server>__<tool>` and is deferred unless the
 `alwaysLoad`. A server marked `"trust": "untrusted"` asks before every call to a tool that does not
 declare itself read-only. Their results reach the model as untrusted data. ARCHITECTURE, Tools.
 
-A remote server that signs in with OAuth (`"oauth": {}` in its entry) waits for you to sign in
-from a terminal, once:
+A remote server that signs in with OAuth (`"oauth": {}` in its entry, or one that asks when Atlas
+connects) waits for you to sign in from a terminal, once. A plugin's server is named
+`plugin_<plugin>_<server>`:
 
 ```bash
 atlas mcp login erp        # opens the server's page; authorize Atlas there

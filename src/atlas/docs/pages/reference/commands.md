@@ -178,7 +178,7 @@ atlas secrets check
 
 ## `atlas mcp`
 
-Sign in to the MCP servers of mcp.json that use OAuth.
+Sign in to the MCP servers that use OAuth, of mcp.json or of a plugin.
 
 ### `atlas mcp login`
 
@@ -190,7 +190,7 @@ atlas mcp login name [--no-browser]
 
 | Argument | What it does |
 |---|---|
-| `name` | The server's name in mcp.json. |
+| `name` | The server's name in mcp.json, or a plugin's: plugin_PLUGIN_SERVER. |
 | `--no-browser` | Print the page's address without opening it, for a browser on another machine. |
 
 ### `atlas mcp logout`
@@ -203,7 +203,7 @@ atlas mcp logout name
 
 | Argument | What it does |
 |---|---|
-| `name` | The server's name in mcp.json. |
+| `name` | The server's name, as atlas mcp login took it. |
 
 ## `atlas models`
 

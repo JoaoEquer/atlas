@@ -17,6 +17,8 @@ fix and left out; the others still connect, and Atlas runs without it.
 
 **A server that signs in with OAuth** (`"oauth"` in its entry, or one the user signed in to) gets
 its bearer token on every request, renewed before it ends and once on a 401 (`atlas.mcp.oauth`).
+One whose entry does not say so is found by its 401 when it fails to connect, as Claude Code finds
+it, and is left out the same way.
 The sign-in itself is the user's, in a terminal (`atlas mcp login`): without one the server is left
 out saying so, and `signed_in` tries it again once the user signed in.
 
@@ -48,7 +50,7 @@ from atlas.mcp.model import (
     secrets_needed,
     tool_name,
 )
-from atlas.mcp.oauth import SignedIn, SignIns, read_sign_in
+from atlas.mcp.oauth import SignedIn, SignIns, asks_sign_in, login_hint, read_sign_in
 from atlas.mcp.store import McpConnection
 from atlas.trust import untrusted
 
@@ -196,6 +198,17 @@ class McpClient:
             tools = await connection.tools()
         except Exception as error:  # the MCP edge: a server is foreign code, logged
             await connection.close()
+            if (
+                auth is None
+                and server.transport is not Transport.STDIO
+                and await asks_sign_in(server.url, server.headers)
+            ):
+                self._left_out(
+                    server.name,
+                    f"The MCP server {server.name} signs in with OAuth and Atlas is not signed in "
+                    f"to it. {login_hint(server.name)}",
+                )
+                return
             self.problems[server.name] = str(error)
             _logger.warning("The MCP server %s was left out: %s", server.name, error, exc_info=True)
             return

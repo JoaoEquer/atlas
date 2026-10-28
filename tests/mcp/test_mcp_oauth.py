@@ -391,6 +391,49 @@ def test_a_server_without_a_sign_in_is_left_out_saying_how_then_connects(tmp_pat
     assert erp.mcp_headers == [] or all(h.startswith("Bearer ") for h in erp.mcp_headers)
 
 
+def test_a_server_that_asks_without_its_entry_saying_oauth_is_found_by_its_401(
+    tmp_path: Path,
+) -> None:
+    # As Claude Code reads a plugin's server (Cloudflare's): the address only.
+    erp = FakeErp()
+    store = Store()
+    with serving(erp) as base:
+        url = f"{base}/mcp"
+        file = _write(tmp_path, {"erp": {"type": "http", "url": url}})
+
+        async def scenario() -> tuple[str, bool, str | None]:
+            toolset = Toolset()
+            client = McpClient(file, {}.get, toolset, sign_ins=store)
+            await client.start()
+            before = client.problems.get("erp", "")
+            await sign_in("erp", url, store, browse)
+            await client.signed_in()
+            connected = toolset.get("mcp__erp__add_note") is not None
+            await client.close()
+            return before, connected, client.problems.get("erp")
+
+        before, connected, after = asyncio.run(scenario())
+
+    assert "signs in with OAuth" in before
+    assert "atlas mcp login erp" in before
+    assert connected is True
+    assert after is None
+
+
+def test_a_server_that_fails_without_a_401_says_its_own_error(tmp_path: Path) -> None:
+    file = _write(tmp_path, {"gone": {"type": "http", "url": "http://127.0.0.1:9/mcp"}})
+
+    async def scenario() -> str:
+        client = McpClient(file, {}.get, Toolset(), sign_ins=Store())
+        await client.start()
+        await client.close()
+        return client.problems.get("gone", "")
+
+    problem = asyncio.run(scenario())
+    assert problem
+    assert "atlas mcp login" not in problem
+
+
 def test_a_renewal_refused_leaves_the_server_out_saying_to_sign_in_again(tmp_path: Path) -> None:
     erp = FakeErp(expires_in=5)
     store = Store()
@@ -461,9 +504,36 @@ def test_atlas_mcp_login_and_logout(
     again = main(["mcp", "logout", "erp"], dict(environ), io.StringIO(""))
 
     assert unknown == 1
-    assert "no server named crm (it has: erp)" in out.err
+    assert "has a server named crm (there are: erp)" in out.err
     assert logged == 0
     assert "Signed in to erp." in out.out
     assert "/oauth/authorize?" in out.out
     assert gone == 0
     assert again == 1
+
+
+def test_atlas_mcp_login_finds_the_server_of_a_plugin_that_is_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import webbrowser  # noqa: PLC0415 - the browser the command opens, made the test's
+
+    monkeypatch.setattr(webbrowser, "open", lambda page: browse(page) or True)  # pyright: ignore[reportUnknownLambdaType]
+    home = tmp_path / "home"
+    erp = FakeErp()
+    with serving(erp) as base:
+        folder = home / "plugins" / "cloud"
+        (folder / ".claude-plugin").mkdir(parents=True)
+        manifest = {"name": "cloud", "version": "1.0.0", "mcpServers": "./.mcp.json"}
+        (folder / ".claude-plugin" / "plugin.json").write_text(json.dumps(manifest), "utf-8")
+        servers = {"mcpServers": {"api": {"type": "http", "url": f"{base}/mcp"}}}
+        (folder / ".mcp.json").write_text(json.dumps(servers), encoding="utf-8")
+        environ = {"ATLAS_HOME": str(home)}
+
+        off = main(["mcp", "login", "plugin_cloud_api"], dict(environ), io.StringIO(""))
+        assert main(["plugins", "enable", "cloud", "--yes"], dict(environ)) == 0
+        logged = main(["mcp", "login", "plugin_cloud_api"], dict(environ), io.StringIO(""))
+    out = capsys.readouterr()
+
+    assert off == 1  # a plugin that is off declares nothing yet
+    assert logged == 0
+    assert "Signed in to plugin_cloud_api." in out.out
