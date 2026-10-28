@@ -1063,11 +1063,15 @@ export const en = {
   },
   /** A tool's time: 12ms, 4.2s, 25s, 1m 5s. */
   duration: (seconds: number) =>
-    seconds < 1
+    // Each step is chosen by the value as it is shown once rounded, so 0.9996 is never `1000ms`,
+    // 9.97 never `10.0s` and 59.6 never `60s`.
+    Math.round(seconds * 1000) < 1000
       ? `${String(Math.max(1, Math.round(seconds * 1000)))}ms`
-      : seconds < 60
-        ? `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`
-        : `${String(Math.floor(Math.round(seconds) / 60))}m ${String(Math.round(seconds) % 60)}s`,
+      : Math.round(seconds * 10) < 100
+        ? `${seconds.toFixed(1)}s`
+        : Math.round(seconds) < 60
+          ? `${seconds.toFixed(0)}s`
+          : `${String(Math.floor(Math.round(seconds) / 60))}m ${String(Math.round(seconds) % 60)}s`,
   /** A running timer, in whole seconds: 4s, 1:05. */
   elapsed: (seconds: number) =>
     seconds < 60

@@ -1034,11 +1034,13 @@ export const ptBR: Override<Messages> = {
     working: 'Aplicando…'
   },
   duration: (seconds: number) =>
-    seconds < 1
+    Math.round(seconds * 1000) < 1000
       ? `${String(Math.max(1, Math.round(seconds * 1000)))}ms`
-      : seconds < 60
-        ? `${seconds.toFixed(seconds >= 10 ? 0 : 1).replace('.', ',')}s`
-        : `${String(Math.floor(Math.round(seconds) / 60))}min ${String(Math.round(seconds) % 60)}s`,
+      : Math.round(seconds * 10) < 100
+        ? `${seconds.toFixed(1).replace('.', ',')}s`
+        : Math.round(seconds) < 60
+          ? `${seconds.toFixed(0)}s`
+          : `${String(Math.floor(Math.round(seconds) / 60))}min ${String(Math.round(seconds) % 60)}s`,
   elapsed: (seconds: number) =>
     seconds < 60
       ? `${String(seconds)}s`
