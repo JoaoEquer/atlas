@@ -1398,8 +1398,8 @@ full weight; a click on a tool opens what went in and what came out. Roadmap ste
 
 ### The list of conversations — decided 2026-10-27
 
-Step 9e: the sidebar's list holds every conversation of the home, not only the latest 50, and
-finds one by its words.
+Step 9e: the sidebar's list holds every conversation of the home, not only the latest 50, finds
+one by its words, renames one in place and archives one out of the way.
 
 - **A page at a time** (`conversation.list`, `ConversationStore.page`): the latest activity first,
   the id breaking a tie, 50 rows a page. A page ends at a cursor, its last row's activity and id
@@ -1439,6 +1439,18 @@ finds one by its words.
   conversation its list does not hold as well; a conversation read again (`conversation.open`)
   gives its tab the title the server holds, for a tab kept from before the name. A refusal keeps
   the field open, saying why. A double click on a row still keeps its tab (decided with the user).
+- **Archiving** (`conversation.archive`, `conversation.unarchive`, `ConversationStore.archive`):
+  Archive in a row's menu takes the conversation out of the list for the Archived section under
+  it, which says how many it holds (`ConversationList.archived`) and, opened, lists them a page at
+  a time, the latest activity first, each brought back by the button over its time. The stamp is
+  a column of the conversation (`archived_at`, migration 5), so a restart and a backup keep it;
+  nothing else of the conversation changes, and an archived conversation is not its older messages
+  a compaction archived. A tab holding it stays open. A new message brings it back to the list as
+  its turn starts, from wherever it was written (`OpenConversation` brings it back before
+  `TurnStarted`). One whose turn runs, or waits for the user, is not archived: the server refuses
+  and the menu's item is off, so an approval card never hides in the section (decided with the
+  user). The search still finds the archived ones, and says so, as the agent's recent
+  conversations still hold them. The last one brought back closes the section.
 - **Proved** by the store's and the server's tests (each conversation once, in order, with
   activity in the middle and a tie in time; a title found without its case or accents, a message
   by a word begun, the titles first, only the list's conversations, a mark a message held), the
@@ -1451,6 +1463,15 @@ finds one by its words.
   answering after the name replaces nothing), the app's (the list and the tab, one the list lacks,
   a refusal leaving both; F2, the menu and a right click, Enter and Esc, the focus back on the row)
   and the end-to-end test: F2 and the menu, the row and its tab, Esc, and the names read again.
+  The archive: the store's and the server's tests (out of every client's list, counted, a page
+  at a time, found by the search and marked; brought back where its activity puts it; a new
+  message bringing it back on top; refused while its turn runs; kept across a restart and in a
+  backup imported as a new home; the migration leaving every conversation listed), the app's
+  (out of the list at once, a refusal saying why under the row, the item off while its turn
+  runs; the section read as it opens and as the list changes, the count with it closed, its
+  pages, a failed read, the last one brought back closing it) and the end-to-end test: archived
+  from its menu with its tab open, brought back, archived again and still archived when the app
+  opens again, then opened from the section, written to, and on top of the list.
 
 ## Attachments — decided 2026-10-16
 

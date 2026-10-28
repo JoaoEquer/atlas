@@ -3,10 +3,10 @@ import { useRef, useState } from 'react'
 
 import { t } from '@/i18n'
 import type { ConversationRow } from '@/protocol/protocol.generated'
-import { keepConversation, renameConversation, selectConversation } from '@/store/app'
+import { archiveConversation, keepConversation, renameConversation, selectConversation } from '@/store/app'
 
 import { rowDot, StatusDot, useConversationDot } from './status-dot'
-import { More, Pencil } from './ui/icons'
+import { Archive, More, Pencil } from './ui/icons'
 import { InlineError } from './ui/inline-error'
 import { ICON_BUTTON } from './ui/tip'
 import { when } from './when'
@@ -17,7 +17,7 @@ const NAME_CHARS = 80
 /**
  * A conversation's row: its dot, and its title in bold while what its turn ended with is unseen.
  * Its menu, from the dots over its time or a right click, renames it in place, as F2 on the row
- * does (step 9e).
+ * does, and archives it, never while its turn runs (step 9e).
  */
 export function Conversation({ current, row }: { current: boolean; row: ConversationRow }) {
   const dot = useConversationDot(row.id)
@@ -27,7 +27,11 @@ export function Conversation({ current, row }: { current: boolean; row: Conversa
   // row as it closes, unless the user left it for somewhere else.
   const typing = useRef(false)
   const [refocus, setRefocus] = useState(false)
+  const [failed, setFailed] = useState('')
   const title = row.title || t.conversations.untitled
+  // A turn that runs, or waits for the user, keeps it in the list: a card never hides in the
+  // Archived section (decided with the user).
+  const busy = dot === 'working' || dot === 'waiting'
 
   if (naming) {
     return (
@@ -44,95 +48,117 @@ export function Conversation({ current, row }: { current: boolean; row: Conversa
 
   return (
     <div
-      className="group relative"
+      className="group"
       onContextMenu={event => {
         event.preventDefault()
         setMenu(true)
       }}
     >
-      <button
-        aria-current={current ? 'page' : undefined}
-        autoFocus={refocus}
-        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-          current ? 'bg-selected font-medium' : 'group-hover:bg-hover'
-        }`}
-        data-testid="conversation-row"
-        data-unread={dot === 'unread' || undefined}
-        onClick={() => void selectConversation(row.id)}
-        // A click opens it in the passing tab; a double click keeps that tab.
-        onDoubleClick={() => {
-          keepConversation(row.id)
-        }}
-        onKeyDown={event => {
-          if (event.key === 'F2') {
-            event.preventDefault()
-            setNaming(true)
-          }
-        }}
-        title={row.title}
-        type="button"
-      >
-        <StatusDot dot={rowDot(dot)} slot />
-        <span
-          className={`min-w-0 flex-1 truncate ${dot === 'unread' ? 'font-semibold' : ''}`}
-          data-testid="conversation-title"
+      <div className="relative">
+        <button
+          aria-current={current ? 'page' : undefined}
+          autoFocus={refocus}
+          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+            current ? 'bg-selected font-medium' : 'group-hover:bg-hover'
+          }`}
+          data-testid="conversation-row"
+          data-unread={dot === 'unread' || undefined}
+          onClick={() => void selectConversation(row.id)}
+          // A click opens it in the passing tab; a double click keeps that tab.
+          onDoubleClick={() => {
+            keepConversation(row.id)
+          }}
+          onKeyDown={event => {
+            if (event.key === 'F2') {
+              event.preventDefault()
+              setNaming(true)
+            }
+          }}
+          title={row.title}
+          type="button"
         >
-          {title}
-          {row.source !== 'app' && (
-            <span className="ml-1 text-xs font-normal text-muted-foreground" data-testid="conversation-via">
-              {t.conversations.via(row.source)}
-            </span>
-          )}
-        </span>
-        {/* Its menu's dots take its place while the pointer or the keyboard is on the row. */}
-        <span
-          className={`shrink-0 text-xs font-normal text-muted-foreground ${menu ? 'invisible' : HIDE_ON_HOVER}`}
-          data-testid="conversation-when"
-        >
-          {when(row.updated_at)}
-        </span>
-      </button>
-      <DropdownMenu.Root onOpenChange={setMenu} open={menu}>
-        <DropdownMenu.Trigger asChild>
-          <button
-            aria-label={t.conversations.menu(title)}
-            className={`${ICON_BUTTON} absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100`}
-            data-testid="conversation-menu"
-            type="button"
+          <StatusDot dot={rowDot(dot)} slot />
+          <span
+            className={`min-w-0 flex-1 truncate ${dot === 'unread' ? 'font-semibold' : ''}`}
+            data-testid="conversation-title"
           >
-            <More aria-hidden size={16} stroke={1.75} />
-          </button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            align="end"
-            className="z-50 w-48 rounded-lg border border-border bg-raised p-1 text-foreground shadow-lg"
-            data-testid="conversation-menu-content"
-            onCloseAutoFocus={event => {
-              if (typing.current) {
-                typing.current = false
-                event.preventDefault()
-              }
-            }}
-            sideOffset={4}
+            {title}
+            {row.source !== 'app' && (
+              <span className="ml-1 text-xs font-normal text-muted-foreground" data-testid="conversation-via">
+                {t.conversations.via(row.source)}
+              </span>
+            )}
+          </span>
+          {/* Its menu's dots take its place while the pointer or the keyboard is on the row. */}
+          <span
+            className={`shrink-0 text-xs font-normal text-muted-foreground ${menu ? 'invisible' : HIDE_ON_HOVER}`}
+            data-testid="conversation-when"
           >
-            <DropdownMenu.Item
-              className={MENU_ITEM}
-              data-testid="conversation-rename"
-              onSelect={() => {
-                typing.current = true
-                setNaming(true)
-              }}
+            {when(row.updated_at)}
+          </span>
+        </button>
+        <DropdownMenu.Root onOpenChange={setMenu} open={menu}>
+          <DropdownMenu.Trigger asChild>
+            <button
+              aria-label={t.conversations.menu(title)}
+              className={`${ICON_BUTTON} absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100`}
+              data-testid="conversation-menu"
+              type="button"
             >
-              <Pencil aria-hidden size={15} stroke={1.75} />
-              <span className="min-w-0 flex-1">{t.conversations.rename}</span>
-              <kbd aria-hidden className="font-sans text-xs text-muted-foreground">
-                F2
-              </kbd>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
+              <More aria-hidden size={16} stroke={1.75} />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              align="end"
+              className="z-50 w-48 rounded-lg border border-border bg-raised p-1 text-foreground shadow-lg"
+              data-testid="conversation-menu-content"
+              onCloseAutoFocus={event => {
+                if (typing.current) {
+                  typing.current = false
+                  event.preventDefault()
+                }
+              }}
+              sideOffset={4}
+            >
+              <DropdownMenu.Item
+                className={MENU_ITEM}
+                data-testid="conversation-rename"
+                onSelect={() => {
+                  typing.current = true
+                  setNaming(true)
+                }}
+              >
+                <Pencil aria-hidden size={15} stroke={1.75} />
+                <span className="min-w-0 flex-1">{t.conversations.rename}</span>
+                <kbd aria-hidden className="font-sans text-xs text-muted-foreground">
+                  F2
+                </kbd>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className={MENU_ITEM}
+                data-testid="conversation-archive"
+                disabled={busy}
+                onSelect={() => {
+                  setFailed('')
+                  archiveConversation(row.id).catch((failure: unknown) => {
+                    setFailed(failure instanceof Error ? failure.message : String(failure))
+                  })
+                }}
+                title={busy ? t.conversations.archiveLater : undefined}
+              >
+                <Archive aria-hidden size={15} stroke={1.75} />
+                <span className="min-w-0 flex-1">{t.conversations.archive}</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
+      {failed && (
+        <div className="mt-1">
+          <InlineError testId="archive-error">{t.conversations.notArchived(failed)}</InlineError>
+        </div>
+      )}
     </div>
   )
 }

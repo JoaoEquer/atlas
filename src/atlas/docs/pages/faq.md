@@ -120,6 +120,13 @@ time as you point at it, or a right click. Type the name and press **Enter**; **
 it had. The name is kept in your home, shows in every app connected to it, and Atlas never replaces
 it with a title of its own.
 
+## How do I archive a conversation?
+
+Choose **Archive** in its menu. It leaves the list for **Archived**, under it, where the button over
+its time brings it back; a tab where it is open stays open. Nothing in it is deleted, the search
+still finds it, and writing to it again brings it back to the list. A conversation whose turn is
+running, or waiting for your answer, can be archived once the turn ends.
+
 ## Can I add my own tools?
 
 Yes: an MCP server in `mcp.json`, a skill in your home, or a plugin, which can add skills, commands,

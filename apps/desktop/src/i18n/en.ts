@@ -225,15 +225,23 @@ export const en = {
     opening: 'Opening Atlas…'
   },
   conversations: {
+    /** Archiving one, and the Archived section under the list (step 9e). */
+    archive: 'Archive',
+    archived: (count: number) => `Archived (${String(count)})`,
+    archivedMark: 'archived',
+    archiveLater: 'Archive it once its turn ends',
     empty: 'No conversations yet.',
     reading: 'Reading the conversations…',
     /** The list's next page, read as it scrolls near its end (step 9e). */
     readingMore: 'Reading more conversations…',
     new: 'New conversation',
     /** A row's menu, and its name given in place (step 9e). */
-    menu: (title: string) => `${title}: rename`,
+    menu: (title: string) => `${title}: rename or archive`,
     nameField: (title: string) => `New name for ${title}`,
+    notArchived: (reason: string) => `Not archived: ${reason}`,
     notRenamed: (reason: string) => `Not renamed: ${reason}`,
+    notUnarchived: (reason: string) => `Not brought back: ${reason}`,
+    readingArchived: 'Reading the archived conversations…',
     rename: 'Rename',
     /** The field above the list, and what it found (step 9e). */
     search: {
@@ -251,7 +259,9 @@ export const en = {
       searching: 'Searching the conversations…',
       you: 'You'
     },
+    showMore: 'Show more',
     tab: 'Conversations',
+    unarchive: (title: string) => `Bring ${title} back to the list`,
     untitled: 'New conversation',
     via: (source: string) => `via ${source}`
   },

@@ -16,6 +16,7 @@ afterEach(() => {
 
 const rows = (count: number): ConversationRow[] =>
   Array.from({ length: count }, (_, index) => ({
+    archived_at: '',
     id: `c${String(index)}`,
     messages: 2,
     running: false,

@@ -16,6 +16,7 @@ function listed(...titles: string[]): void {
   app.$read.setKey('conversations', true)
   app.$conversations.set(
     titles.map((title, index) => ({
+      archived_at: '',
       id: `c${String(index)}`,
       messages: 2,
       running: false,

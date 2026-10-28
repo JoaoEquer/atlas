@@ -115,8 +115,9 @@ export function SearchResults() {
   )
 }
 
-/** A conversation the search found: its title, the words that matched in bold, and, when a message
- * matched rather than the title, who said it and the words around the match. */
+/** A conversation the search found: its title, the words that matched in bold, whether it is
+ * archived, and, when a message matched rather than the title, who said it and the words around
+ * the match. */
 function Hit({ current, hit }: { current: boolean; hit: SearchHit }) {
   const { conversation } = hit
 
@@ -139,6 +140,12 @@ function Hit({ current, hit }: { current: boolean; hit: SearchHit }) {
         <span className="min-w-0 flex-1 truncate" data-testid="search-hit-title">
           <Pieces pieces={hit.title} />
         </span>
+        {/* One the user archived is found too, and says so (step 9e). */}
+        {conversation.archived_at && (
+          <span className="shrink-0 text-xs text-muted-foreground" data-testid="search-hit-archived">
+            {t.conversations.archivedMark}
+          </span>
+        )}
         <span className="shrink-0 text-xs text-muted-foreground">{when(conversation.updated_at)}</span>
       </span>
       {hit.snippet.length > 0 && (

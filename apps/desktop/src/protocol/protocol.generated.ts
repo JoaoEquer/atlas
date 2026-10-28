@@ -24,11 +24,15 @@ export interface ListParams {
   limit?: number
   /** The `next_cursor` of the page before, for the page that follows it; empty, the first page (step 9e). */
   cursor?: string
+  /** The conversations the user archived instead, a page at a time too (step 9e). */
+  archived?: boolean
 }
 export interface ConversationList {
   conversations: ConversationRow[]
   /** Where the page after this one starts, handed back as `cursor`; empty when this page is the last. */
   next_cursor: string
+  /** How many of the list's conversations are archived (step 9e), for its Archived section. */
+  archived: number
 }
 /** A conversation as lists show it. */
 export interface ConversationRow {
@@ -40,6 +44,8 @@ export interface ConversationRow {
   messages: number
   /** A turn of it runs now. */
   running: boolean
+  /** When the user archived it (step 9e), in Atlas's UTC text; empty while it is in the list. */
+  archived_at: string
 }
 export interface SearchParams {
   /** The words typed: each must be in the title or in one message, also as the start of a word. */
@@ -70,13 +76,17 @@ export interface Renamed {
   /** The name kept, as the lists show it. */
   title: string
 }
+export interface ConversationRef {
+  conversation_id: string
+}
+export interface Archived {
+  /** When it was archived, in Atlas's UTC text: the first time, for one archived already. */
+  archived_at: string
+}
 export interface Created {
   conversation_id: string
   /** The folder its file tools start from, where its terminal opens (step 16f). */
   folder: string
-}
-export interface ConversationRef {
-  conversation_id: string
 }
 export interface Opened {
   conversation: ConversationRow
@@ -1626,6 +1636,8 @@ export interface RpcMethods {
   'command.output': { params: CommandRef; result: CommandOutput }
   /** Stop a running background command with everything it started, and hand back the end of its output. */
   'command.stop': { params: CommandRef; result: CommandStopped }
+  /** Take a conversation out of the list into the archived ones (step 9e): its messages, a tab holding it and the agent's tools are untouched, the list's search still finds it, and a new message brings it back. Refused while a turn of it runs; every client hears it (`conversations.changed`). */
+  'conversation.archive': { params: ConversationRef; result: Archived }
   /** Read or set the conversation's 'Auto': the guardian and the questions are skipped; the floors still block, and the ask rules still ask. */
   'conversation.auto_mode': { params: AutoModeParams; result: AutoMode }
   /** What the box offers as `/` is typed in a conversation of Atlas's or a bot's: Atlas's own commands, which the screen runs (`/new`, not in a bot's; `/stop`), then the skills the user invokes there; `/name words` sent loads that skill. */
@@ -1652,6 +1664,8 @@ export interface RpcMethods {
   'conversation.send': { params: SendParams; result: SendResult }
   /** A command the user ran from the conversation (the ▶ on a shell block, or `!`) and its output: a terminal row, which the agent answers in a turn of its own or entering the one running (step 16f). */
   'conversation.terminal': { params: TerminalParams; result: SendResult }
+  /** Bring an archived conversation back to the list (step 9e), where its last activity puts it; every client hears it (`conversations.changed`). */
+  'conversation.unarchive': { params: ConversationRef; result: Empty }
   /** Log an executor's harness into another account on the user's browser, from its place in the sidebar; the user's instances of it go on with their sessions on it. Refused while one of its instances works. */
   'executor.account': { params: ExecutorAccountParams; result: ExecutorRow }
   /** An executor's accounts, in the order they take over in at a plan's limit, each with who it is logged in as (step 16h). */
@@ -1849,6 +1863,7 @@ export const RPC_METHODS = [
   'command.list',
   'command.output',
   'command.stop',
+  'conversation.archive',
   'conversation.auto_mode',
   'conversation.commands',
   'conversation.create',
@@ -1862,6 +1877,7 @@ export const RPC_METHODS = [
   'conversation.search',
   'conversation.send',
   'conversation.terminal',
+  'conversation.unarchive',
   'executor.account',
   'executor.accounts',
   'executor.add_account',

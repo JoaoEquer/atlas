@@ -117,6 +117,7 @@ describe('a title a model wrote', () => {
     await openHome('work')
     const session = current()
     const row = {
+      archived_at: '',
       id: 'c1',
       messages: 2,
       running: false,

@@ -33,6 +33,7 @@ import { $sidebarOpen, toggleSidebar } from '@/store/layout'
 import { openSettings } from '@/store/settings'
 import { byLastUse, type Dot, lastUse, worst } from '@/store/status'
 
+import { ArchivedConversations } from './archived-list'
 import { BotsList } from './bots-list'
 import { Conversation } from './conversation-row'
 import { ExecutorsList } from './executors-list'
@@ -299,7 +300,8 @@ function nearEnd(list: HTMLElement | null): void {
 
 /** The conversations, the last used first: one whose turn began here goes up at once, before its
  * row is read again. A page at a time (step 9e): the next one is read as the list scrolls near its
- * end. Above it, the search, whose results take its place while its field holds words. */
+ * end. Above it, the search, whose results take its place while its field holds words; under it,
+ * the archived ones. */
 function Conversations() {
   const used = useStore($used)
   const conversations = byLastUse(useStore($conversations), row => lastUse(row.updated_at, used[row.id]))
@@ -377,6 +379,7 @@ function Conversations() {
           </li>
         )}
       </ul>
+      {!searching && <ArchivedConversations />}
     </>
   )
 }

@@ -7,7 +7,7 @@ import type { ConversationRow, Opened, Renamed, RenameParams } from '@/protocol/
 import { current, type HomeSession, openHome, startApp } from './app'
 
 function row(id: string, title: string): ConversationRow {
-  return { id, messages: 2, running: false, source: 'app', started_at: '', title, updated_at: '' }
+  return { archived_at: '', id, messages: 2, running: false, source: 'app', started_at: '', title, updated_at: '' }
 }
 
 let stop: () => void = () => undefined

@@ -1400,6 +1400,9 @@ class OpenConversation:
         # The turn runs in a task of its own, so this reaches its tool calls and no other turn's.
         _CONVERSATION.set(self.id)
         self._name_before_start(message)
+        # A new message brings an archived conversation back to the list (step 9e), before the
+        # screens read the list again as the turn starts.
+        self._shared.conversations.unarchive(self.id)
         command, arguments = self._plugin_command(message.text)
         if command is not None:
             await self._run_plugin_command(command, arguments, message)

@@ -180,6 +180,7 @@ from atlas.server.protocol import (
     AccountSwitchRow,
     ApprovalParams,
     ApprovalResult,
+    Archived,
     AskParams,
     AskResult,
     AttachmentAdded,
@@ -596,6 +597,8 @@ class Gateway:
             "conversation.list": self._list,
             "conversation.search": self._search,
             "conversation.rename": self._rename,
+            "conversation.archive": self._archive,
+            "conversation.unarchive": self._unarchive,
             "conversation.create": self._create,
             "conversation.open": self._open,
             "conversation.events": self._events,
@@ -1014,10 +1017,13 @@ class Gateway:
         if params.cursor and after is None:
             raise ProtocolError(INVALID_PARAMS, "params.cursor is not a cursor this server gave.")
         limit = max(1, min(params.limit, LIST_MOST))
-        found, more = self.assistant.conversations.page(limit, after)
+        conversations = self.assistant.conversations
+        found, more = conversations.page(limit, after, archived=params.archived)
         running = self.assistant.running
         rows = [_row(info, running(info.id)) for info in found]
-        return ConversationList(rows, "" if more is None else more.text)
+        return ConversationList(
+            rows, "" if more is None else more.text, conversations.archived_count()
+        )
 
     async def _search(self, connection: Connection, params: SearchParams) -> SearchResults:
         limit = max(1, min(params.limit, SEARCH_MOST))
@@ -1040,6 +1046,22 @@ class Gateway:
             raise ProtocolError(INVALID_PARAMS, "params.title holds no words.")
         self.conversations_changed(params.conversation_id, title=title)
         return Renamed(title)
+
+    async def _archive(self, connection: Connection, params: ConversationRef) -> Archived:
+        # A turn that runs may wait for the user, and a card waiting there never hides in the
+        # Archived section (decided with the user): it is archived once the turn ends.
+        if self.assistant.running(params.conversation_id):
+            raise ProtocolError(
+                INVALID_PARAMS, "A turn of this conversation runs: archive it once the turn ends."
+            )
+        archived_at = self.assistant.conversations.archive(params.conversation_id)
+        self.conversations_changed(params.conversation_id)
+        return Archived(archived_at)
+
+    async def _unarchive(self, connection: Connection, params: ConversationRef) -> Empty:
+        if self.assistant.conversations.unarchive(params.conversation_id):
+            self.conversations_changed(params.conversation_id)
+        return Empty()
 
     async def _create(self, connection: Connection, params: Empty) -> Created:
         created = self.assistant.conversations.create()
@@ -2935,7 +2957,14 @@ def _usd(cost: Decimal | None) -> str | None:
 
 def _row(info: ConversationInfo, running: bool) -> ConversationRow:
     return ConversationRow(
-        info.id, info.title, info.source, info.started_at, info.updated_at, info.messages, running
+        info.id,
+        info.title,
+        info.source,
+        info.started_at,
+        info.updated_at,
+        info.messages,
+        running,
+        info.archived_at or "",
     )
 
 

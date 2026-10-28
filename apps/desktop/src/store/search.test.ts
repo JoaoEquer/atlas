@@ -32,7 +32,16 @@ function found(id: string): SearchHit {
   const title = `Topic ${id}`
 
   return {
-    conversation: { id, messages: 2, running: false, source: 'app', started_at: '', title, updated_at: '' },
+    conversation: {
+      archived_at: '',
+      id,
+      messages: 2,
+      running: false,
+      source: 'app',
+      started_at: '',
+      title,
+      updated_at: ''
+    },
     said_by: '',
     snippet: [],
     title: [title]

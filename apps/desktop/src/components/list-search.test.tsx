@@ -17,6 +17,7 @@ afterEach(() => {
 function hit(id: string, title: string[], snippet: string[] = [], saidBy = ''): SearchHit {
   return {
     conversation: {
+      archived_at: '',
       id,
       messages: 2,
       running: false,

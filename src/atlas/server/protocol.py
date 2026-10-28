@@ -99,6 +99,8 @@ class ConversationRow:
     messages: int
     #: A turn of it runs now.
     running: bool = False
+    #: When the user archived it (step 9e), in Atlas's UTC text; empty while it is in the list.
+    archived_at: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +172,8 @@ class ListParams:
     #: The `next_cursor` of the page before, for the page that follows it; empty, the first page
     #: (step 9e).
     cursor: str = ""
+    #: The conversations the user archived instead, a page at a time too (step 9e).
+    archived: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +182,8 @@ class ConversationList:
     #: Where the page after this one starts, handed back as `cursor`; empty when this page is the
     #: last.
     next_cursor: str = ""
+    #: How many of the list's conversations are archived (step 9e), for its Archived section.
+    archived: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,6 +225,12 @@ class RenameParams:
 class Renamed:
     #: The name kept, as the lists show it.
     title: str
+
+
+@dataclass(frozen=True, slots=True)
+class Archived:
+    #: When it was archived, in Atlas's UTC text: the first time, for one archived already.
+    archived_at: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -2009,6 +2021,22 @@ METHODS: Mapping[str, Method] = {
             "Name a conversation as the user chose (step 9e): its title from now on, of source "
             "`user`, which no title model replaces; every client hears it "
             "(`conversations.changed`, with the name), and its lists and tabs take it.",
+        ),
+        Method(
+            "conversation.archive",
+            ConversationRef,
+            Archived,
+            "Take a conversation out of the list into the archived ones (step 9e): its messages, "
+            "a tab holding it and the agent's tools are untouched, the list's search still finds "
+            "it, and a new message brings it back. Refused while a turn of it runs; every client "
+            "hears it (`conversations.changed`).",
+        ),
+        Method(
+            "conversation.unarchive",
+            ConversationRef,
+            Empty,
+            "Bring an archived conversation back to the list (step 9e), where its last activity "
+            "puts it; every client hears it (`conversations.changed`).",
         ),
         Method(
             "conversation.create",

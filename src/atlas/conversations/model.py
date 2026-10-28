@@ -121,6 +121,9 @@ class ConversationInfo:
     messages: int
     #: The bot whose conversation it is; `None` for the main agent's.
     bot: str | None = None
+    #: When the user archived it, out of the list of conversations (step 9e); `None` while it is
+    #: in the list. Not its archived messages, which a compaction replaced.
+    archived_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

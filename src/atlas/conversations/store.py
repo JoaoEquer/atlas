@@ -118,6 +118,13 @@ ALTER TABLE conversations_threads ADD COLUMN title_source TEXT NOT NULL DEFAULT 
 UPDATE conversations_threads SET title_source = 'user' WHERE source != 'app';
 """,
         ),
+        Migration(
+            5,
+            "when the user archived a conversation",
+            """
+ALTER TABLE conversations_threads ADD COLUMN archived_at TEXT;
+""",
+        ),
     ),
 )
 
@@ -132,7 +139,7 @@ _MESSAGE_COLUMNS = (
 _INFO_COLUMNS = (
     "t.id, t.title, t.source, t.started_at, t.updated_at, "
     "(SELECT count(*) FROM conversations_messages c WHERE c.conversation_id = t.id "
-    "AND c.role != 'system'), t.bot"
+    "AND c.role != 'system'), t.bot, t.archived_at"
 )
 
 #: What the list of recent conversations leaves out.
@@ -356,6 +363,57 @@ class ConversationStore:
             self.retitle(conversation_id, name, TitleSource.USER)
         return name
 
+    def archive(self, conversation_id: str) -> str:
+        """Take a conversation out of the list of conversations into the archived ones (step 9e),
+        untouched otherwise: its messages are read and searched as before. When it was archived;
+        one archived already keeps that time."""
+        stamp = format_utc(utc_now())
+        connection = self._database.connect()
+        try:
+            with transaction(connection):
+                self._info(connection, conversation_id)
+                connection.execute(
+                    "UPDATE conversations_threads SET archived_at = ? "
+                    "WHERE id = ? AND archived_at IS NULL",
+                    (stamp, conversation_id),
+                )
+                row: tuple[str] = connection.execute(
+                    "SELECT archived_at FROM conversations_threads WHERE id = ?", (conversation_id,)
+                ).fetchone()
+        finally:
+            connection.close()
+        return row[0]
+
+    def unarchive(self, conversation_id: str) -> bool:
+        """Bring an archived conversation back to the list (step 9e), where its last activity puts
+        it: the user did, or a new message came to it. `False` when it was not archived."""
+        connection = self._database.connect()
+        try:
+            with transaction(connection):
+                self._info(connection, conversation_id)
+                brought = connection.execute(
+                    "UPDATE conversations_threads SET archived_at = NULL "
+                    "WHERE id = ? AND archived_at IS NOT NULL",
+                    (conversation_id,),
+                ).rowcount
+        finally:
+            connection.close()
+        return brought > 0
+
+    def archived_count(self) -> int:
+        """How many of the list's conversations are archived (step 9e)."""
+        connection = self._database.connect()
+        try:
+            row: tuple[int] = connection.execute(
+                "SELECT count(*) FROM conversations_threads t "  # noqa: S608
+                f"WHERE t.source NOT IN ({_marks(_UNLISTED)}) AND t.title != '' "
+                "AND t.archived_at IS NOT NULL",
+                _UNLISTED,
+            ).fetchone()
+        finally:
+            connection.close()
+        return row[0]
+
     def name_untitled(self, conversation_id: str, said: UserMessage) -> bool:
         """Give a conversation with no title yet the one its first message makes, as that
         message's turn starts: the list shows only titled conversations, and the save that wrote
@@ -428,9 +486,9 @@ class ConversationStore:
         with_bots: bool = False,
     ) -> list[ConversationInfo]:
         """The conversations with the latest activity. By default the user's own with the main
-        agent, as the list of conversations shows them: a bot's fixed conversation is in the
-        bots' list. `bot` gives that bot's alone; `with_bots`, every agent's, as the main
-        agent's search reads them."""
+        agent, as the list of conversations shows them, those the user archived included (step
+        9e): a bot's fixed conversation is in the bots' list. `bot` gives that bot's alone;
+        `with_bots`, every agent's, as the main agent's search reads them."""
         unlisted = HIDDEN_SOURCES if bot is not None or with_bots else _UNLISTED
         owned = "" if bot is None else "AND t.bot = ? "
         connection = self._database.connect()
@@ -446,18 +504,20 @@ class ConversationStore:
         return [ConversationInfo(*row) for row in rows]
 
     def page(
-        self, limit: int, after: Cursor | None = None
+        self, limit: int, after: Cursor | None = None, *, archived: bool = False
     ) -> tuple[list[ConversationInfo], Cursor | None]:
         """A page of the list of conversations, as the app's sidebar shows it (step 9e): the
         user's own with the main agent, the latest activity first and the id breaking a tie, from
-        the top or right after `after`. With it, where the page that follows starts; `None` when
-        this one is the last."""
+        the top or right after `after`; `archived`, those the user archived instead. With it,
+        where the page that follows starts; `None` when this one is the last."""
         bound = "" if after is None else "AND (t.updated_at, t.id) < (?, ?) "
+        shelf = "IS NOT NULL" if archived else "IS NULL"
         connection = self._database.connect()
         try:
             rows = connection.execute(
                 f"SELECT {_INFO_COLUMNS} FROM conversations_threads t "  # noqa: S608
-                f"WHERE t.source NOT IN ({_marks(_UNLISTED)}) AND t.title != '' {bound}"
+                f"WHERE t.source NOT IN ({_marks(_UNLISTED)}) AND t.title != '' "
+                f"AND t.archived_at {shelf} {bound}"
                 "ORDER BY t.updated_at DESC, t.id DESC LIMIT ?",
                 (*_UNLISTED, *(() if after is None else (after.at, after.id)), limit + 1),
             ).fetchall()

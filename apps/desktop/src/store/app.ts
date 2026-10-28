@@ -130,6 +130,10 @@ export interface Approved {
 /** How many conversations a page of the list brings (step 9e). */
 export const LIST_PAGE = 50
 
+/** The reads of the list that wait for one another (step 9e): its pages, the whole of it, and the
+ * archived ones. */
+type ListRead = 'archived' | 'archived-more' | 'more' | 'refresh'
+
 /** The list of conversations past the pages read (step 9e): where the next page starts, empty
  * once the list is whole; whether it is being read; why its last read failed. */
 export interface ListMore {
@@ -137,6 +141,20 @@ export interface ListMore {
   error: null | string
   reading: boolean
 }
+
+/** The conversations the user archived (step 9e): how many there are, whether their section is
+ * open, those read, where the next page starts, whether one is being read and why the last read
+ * failed. */
+export interface ArchivedList {
+  count: number
+  cursor: string
+  error: null | string
+  open: boolean
+  reading: boolean
+  rows: ConversationRow[]
+}
+
+export const NO_ARCHIVED: ArchivedList = { count: 0, cursor: '', error: null, open: false, reading: false, rows: [] }
 
 /** How long the list's search waits after a key before it searches (step 9e). */
 export const SEARCH_PAUSE_MS = 250
@@ -321,6 +339,8 @@ export class HomeSession {
   /** The list of conversations as far as its pages were read, the latest activity first. */
   readonly $conversations = atom<ConversationRow[]>([])
   readonly $listMore = atom<ListMore>({ cursor: '', error: null, reading: false })
+  /** The archived conversations, under the list (step 9e). */
+  readonly $archived = atom<ArchivedList>(NO_ARCHIVED)
   readonly $search = atom<ListSearch>(NO_SEARCH)
   readonly $selected = atom<null | string>(null)
   readonly $threads = map<Record<string, Thread>>({})
@@ -477,7 +497,7 @@ export class HomeSession {
    * a page goes on from where the list ends, and a refresh reads again as many rows as it holds.
    * One asked for while another of its kind waits its turn joins that one. */
   private listing: Promise<void> = Promise.resolve()
-  private readonly listWaiting = new Map<'more' | 'refresh', Promise<void>>()
+  private readonly listWaiting = new Map<ListRead, Promise<void>>()
   /** The list's searches asked so far: only the latest one's answer shows (step 9e). */
   private searches = 0
   private searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -582,12 +602,14 @@ export class HomeSession {
     await this.reading('conversations', () =>
       this.listRead('refresh', async () => {
         const held = this.$conversations.get().length
-        const { conversations, next_cursor } = await this.client.call('conversation.list', {
+        const { archived, conversations, next_cursor } = await this.client.call('conversation.list', {
           limit: Math.max(LIST_PAGE, held)
         })
         this.$conversations.set(conversations)
-        // A server older than the pages sends no cursor: its one page is the whole list.
+        // A server older than the pages sends no cursor: its one page is the whole list; and one
+        // older than archiving, no count.
         this.$listMore.set({ cursor: next_cursor || '', error: null, reading: false })
+        this.shelve({ ...this.$archived.get(), count: archived || 0 })
         this.$read.setKey('conversations', true)
         this.readLive(conversations.map(row => [row.id, row.running] as const))
       })
@@ -629,9 +651,76 @@ export class HomeSession {
     })
   }
 
+  /** Open or close the list's Archived section (step 9e); opening it reads the archived ones. */
+  toggleArchived(): void {
+    const archived = this.$archived.get()
+    this.$archived.set({ ...archived, open: !archived.open })
+
+    if (!archived.open) {
+      void this.readArchived().catch(() => undefined)
+    }
+  }
+
+  /** Read the archived conversations again, as many as the section holds, the latest activity
+   * first; `more`, the page after them. A failure says so in the section. */
+  readArchived(more = false): Promise<void> {
+    return this.listRead(more ? 'archived-more' : 'archived', async () => {
+      const before = this.$archived.get()
+
+      if (more && !before.cursor) {
+        return
+      }
+
+      this.$archived.set({ ...before, error: null, reading: true })
+
+      try {
+        const page = await this.client.call(
+          'conversation.list',
+          more
+            ? { archived: true, cursor: before.cursor, limit: LIST_PAGE }
+            : { archived: true, limit: Math.max(LIST_PAGE, before.rows.length) }
+        )
+        const now = this.$archived.get()
+        const known = new Set(now.rows.map(row => row.id))
+        const rows = more ? [...now.rows, ...page.conversations.filter(row => !known.has(row.id))] : page.conversations
+        this.shelve({ ...now, count: page.archived || 0, cursor: page.next_cursor || '', reading: false, rows })
+      } catch (error) {
+        this.$archived.set({
+          ...this.$archived.get(),
+          error: error instanceof Error ? error.message : String(error),
+          reading: false
+        })
+      }
+    })
+  }
+
+  /** Archive a conversation (step 9e): it leaves the list at once, and a tab holding it stays. A
+   * refusal throws, for its row to say why: the server keeps one whose turn runs. */
+  async archiveConversation(conversationId: string): Promise<void> {
+    await this.client.call('conversation.archive', { conversation_id: conversationId })
+    this.$conversations.set(this.$conversations.get().filter(row => row.id !== conversationId))
+    const archived = this.$archived.get()
+    this.$archived.set({ ...archived, count: archived.count + 1 })
+  }
+
+  /** Bring an archived conversation back to the list (step 9e): it leaves the Archived section at
+   * once, and the list read again has it. A refusal throws, for its row to say why. */
+  async unarchiveConversation(conversationId: string): Promise<void> {
+    await this.client.call('conversation.unarchive', { conversation_id: conversationId })
+    const archived = this.$archived.get()
+    const rows = archived.rows.filter(row => row.id !== conversationId)
+    this.shelve({ ...archived, count: Math.max(0, archived.count - (archived.rows.length - rows.length)), rows })
+  }
+
+  /** The Archived section as it is now; with none left it closes, for the next one archived to
+   * find it closed. */
+  private shelve(archived: ArchivedList): void {
+    this.$archived.set(archived.count > 0 ? archived : NO_ARCHIVED)
+  }
+
   /** One read of the list at a time, in the order asked; one asked for while another of its kind
    * waits joins it. */
-  private listRead(kind: 'more' | 'refresh', read: () => Promise<void>): Promise<void> {
+  private listRead(kind: ListRead, read: () => Promise<void>): Promise<void> {
     const waiting = this.listWaiting.get(kind)
 
     if (waiting) {
@@ -777,7 +866,11 @@ export class HomeSession {
 
     const { conversationId } = place
 
-    return this.botOf(conversationId)?.title ?? this.$conversations.get().find(row => row.id === conversationId)?.title
+    return (
+      this.botOf(conversationId)?.title ??
+      this.$conversations.get().find(row => row.id === conversationId)?.title ??
+      this.$archived.get().rows.find(row => row.id === conversationId)?.title
+    )
   }
 
   /** Show what a tab holds; a tab whose conversation was deleted since closes. A session's tab
@@ -2448,6 +2541,11 @@ export class HomeSession {
 
       void this.refreshList().catch(() => undefined)
 
+      // Archived, brought back, or written to and back in the list (step 9e).
+      if (this.$archived.get().open) {
+        void this.readArchived().catch(() => undefined)
+      }
+
       return
     }
 
@@ -2675,6 +2773,7 @@ export const $read = map<Record<Listed, boolean>>({ bots: false, conversations: 
 export const $readError = map<Partial<Record<Readable, string>>>({})
 export const $conversations = atom<ConversationRow[]>([])
 export const $listMore = atom<ListMore>({ cursor: '', error: null, reading: false })
+export const $archived = atom<ArchivedList>(NO_ARCHIVED)
 export const $search = atom<ListSearch>(NO_SEARCH)
 export const $selected = atom<null | string>(null)
 export const $threads = map<Record<string, Thread>>({})
@@ -2765,6 +2864,7 @@ const MIRRORS: Mirror[] = [
   mirror($readError, s => s.$readError),
   mirror($conversations, s => s.$conversations),
   mirror($listMore, s => s.$listMore),
+  mirror($archived, s => s.$archived),
   mirror($search, s => s.$search),
   mirror($selected, s => s.$selected),
   mirror($threads, s => s.$threads),
@@ -3079,6 +3179,27 @@ export function clearSearch(): void {
 /** Name a conversation as the user chose (step 9e); a refusal throws, for its field to say why. */
 export function renameConversation(conversationId: string, title: string): Promise<void> {
   return current().renameConversation(conversationId, title)
+}
+
+/** Open or close the list's Archived section (step 9e). */
+export function toggleArchived(): void {
+  current().toggleArchived()
+}
+
+/** The archived conversations read again; `more`, their next page. */
+export function readArchived(more = false): Promise<void> {
+  return current().readArchived(more)
+}
+
+/** Archive a conversation (step 9e); a refusal throws, for its row to say why. */
+export function archiveConversation(conversationId: string): Promise<void> {
+  return current().archiveConversation(conversationId)
+}
+
+/** Bring an archived conversation back to the list (step 9e); a refusal throws, for its row to say
+ * why. */
+export function unarchiveConversation(conversationId: string): Promise<void> {
+  return current().unarchiveConversation(conversationId)
 }
 
 /** Read again a list or a page whose last read failed; a failure again says so in its place. */

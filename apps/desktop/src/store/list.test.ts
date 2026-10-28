@@ -19,6 +19,7 @@ class Server {
 
   add(id: string, minute: number): void {
     this.rows.push({
+      archived_at: '',
       id,
       messages: 2,
       running: false,
@@ -42,7 +43,11 @@ class Server {
     const limit = params.limit ?? LIST_PAGE
     const page = after.slice(0, limit)
     const last = page.at(-1)
-    const answer = { conversations: page, next_cursor: after.length > limit && last ? key(last) : '' }
+    const answer = {
+      archived: 0,
+      conversations: page,
+      next_cursor: after.length > limit && last ? key(last) : ''
+    }
 
     if (this.failNext) {
       this.failNext = false

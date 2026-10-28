@@ -1,11 +1,14 @@
+import path from 'node:path'
+
 import { expect, type Page, test } from '@playwright/test'
 
-import { launch, say, seedConversations } from './harness'
+import { launch, openApp, say, seedConversations } from './harness'
 
 /**
  * The list of conversations (step 9e, decided with the user on 27/10/2026): past its first page,
  * read as the sidebar scrolls near its end, each conversation once and in order; its search, by
- * title and by message, which says where it matched; and a conversation renamed in place.
+ * title and by message, which says where it matched; a conversation renamed in place; and one
+ * archived, out of the list until brought back or written to.
  */
 
 const rows = (page: Page) => page.getByTestId('conversation-row')
@@ -143,6 +146,67 @@ test('a conversation renamed in place, by F2 or its menu, takes the name in the 
     await expect(titles(page)).toHaveText(['Topic 03', 'Trip to Lisbon', 'Bike repairs'])
     await expect(tabTitles).toHaveText(['Trip to Lisbon'])
   } finally {
+    await desktop.close()
+  }
+})
+
+test('an archived conversation leaves the list for the Archived section, stays open in its tab and archived after a restart, and comes back when brought back or written to', async () => {
+  const desktop = await launch({
+    setup: home => {
+      seedConversations(home, topics(3))
+    }
+  })
+  let again: Awaited<ReturnType<typeof openApp>> | undefined
+
+  try {
+    const { home, model, page } = desktop
+    const toggle = page.getByTestId('archived-toggle')
+    const shelf = page.getByTestId('archived-row')
+    await expect(titles(page)).toHaveText(['Topic 03', 'Topic 02', 'Topic 01'])
+    await expect(toggle).toHaveCount(0)
+
+    // Kept in a tab of its own, then archived from its row's menu.
+    await rows(page).nth(1).dblclick()
+    await rows(page).nth(1).click({ button: 'right' })
+    await page.getByTestId('conversation-archive').click()
+    await expect(titles(page)).toHaveText(['Topic 03', 'Topic 01'])
+    await expect(page.getByTestId('tab-title')).toHaveText(['Topic 02'])
+    await expect(page.getByTestId('assistant-message').last()).toContainText('Notes on topic 02.')
+    await expect(toggle).toHaveText('Archived (1)')
+
+    await toggle.click()
+    await expect(shelf).toHaveText([/Topic 02/])
+    await shelf.first().hover()
+    await page.getByRole('button', { name: 'Bring Topic 02 back to the list' }).click()
+    await expect(titles(page)).toHaveText(['Topic 03', 'Topic 02', 'Topic 01'])
+    await expect(toggle).toHaveCount(0)
+
+    // Archived again, it stays archived when the app opens again.
+    await rows(page).nth(2).click({ button: 'right' })
+    await page.getByTestId('conversation-archive').click()
+    await expect(titles(page)).toHaveText(['Topic 03', 'Topic 02'])
+    await desktop.app.close()
+    again = await openApp(path.dirname(home), home, {
+      CLAUDE_CONFIG_DIR: desktop.claude,
+      CODEX_HOME: desktop.codex,
+      DSH_HOME: desktop.dsh,
+      GEMINI_CLI_HOME: desktop.gemini
+    })
+    const reopened = again.page
+    await expect(titles(reopened)).toHaveText(['Topic 03', 'Topic 02'])
+    await expect(reopened.getByTestId('archived-toggle')).toHaveText('Archived (1)')
+
+    // Opened from the Archived section and written to, it is back on top of the list.
+    await reopened.getByTestId('archived-toggle').click()
+    await reopened.getByTestId('archived-row').first().click()
+    await expect(reopened.getByTestId('assistant-message').last()).toContainText('Notes on topic 01.')
+    await model.reply({ text: 'Back on it.' })
+    await say(reopened, 'One more thing')
+    await expect(reopened.getByTestId('assistant-message').last()).toContainText('Back on it.')
+    await expect(titles(reopened)).toHaveText(['Topic 01', 'Topic 03', 'Topic 02'])
+    await expect(reopened.getByTestId('archived-toggle')).toHaveCount(0)
+  } finally {
+    await again?.app.close().catch(() => undefined)
     await desktop.close()
   }
 })

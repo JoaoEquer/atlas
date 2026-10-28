@@ -211,13 +211,20 @@ export const ptBR: Override<Messages> = {
     opening: 'Abrindo o Atlas…'
   },
   conversations: {
+    archive: 'Arquivar',
+    archived: (count: number) => `Arquivadas (${String(count)})`,
+    archivedMark: 'arquivada',
+    archiveLater: 'Arquive quando o turno terminar',
     empty: 'Nenhuma conversa ainda.',
     reading: 'Lendo as conversas…',
     readingMore: 'Lendo mais conversas…',
     new: 'Nova conversa',
-    menu: (title: string) => `${title}: renomear`,
+    menu: (title: string) => `${title}: renomear ou arquivar`,
     nameField: (title: string) => `Novo nome para ${title}`,
+    notArchived: (reason: string) => `Não arquivada: ${reason}`,
     notRenamed: (reason: string) => `Não renomeada: ${reason}`,
+    notUnarchived: (reason: string) => `Não voltou para a lista: ${reason}`,
+    readingArchived: 'Lendo as conversas arquivadas…',
     rename: 'Renomear',
     search: {
       atlas: 'Atlas',
@@ -234,7 +241,9 @@ export const ptBR: Override<Messages> = {
       searching: 'Buscando nas conversas…',
       you: 'Você'
     },
+    showMore: 'Mostrar mais',
     tab: 'Conversas',
+    unarchive: (title: string) => `Trazer ${title} de volta à lista`,
     untitled: 'Nova conversa',
     via: (source: string) => `pelo ${source}`
   },
