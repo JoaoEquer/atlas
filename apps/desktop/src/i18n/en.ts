@@ -193,7 +193,8 @@ export const en = {
     size: (bytes: number) =>
       bytes < 1024
         ? `${String(bytes)} B`
-        : bytes < 1024 * 1024
+        : // By the kilobytes as shown: just under a megabyte reads 1.0 MB, never 1024 KB.
+          Math.round(bytes / 1024) < 1024
           ? `${(bytes / 1024).toFixed(0)} KB`
           : `${(bytes / 1024 / 1024).toFixed(1)} MB`,
     tooHeavy: (name: string, most: string) => `${name} is too heavy: this kind of file takes at most ${most}.`,

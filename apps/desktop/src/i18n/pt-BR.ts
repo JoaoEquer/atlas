@@ -180,7 +180,7 @@ export const ptBR: Override<Messages> = {
     size: (bytes: number) =>
       bytes < 1024
         ? `${String(bytes)} B`
-        : bytes < 1024 * 1024
+        : Math.round(bytes / 1024) < 1024
           ? `${(bytes / 1024).toFixed(0)} KB`
           : `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`,
     tooHeavy: (name: string, most: string) => `${name} é pesado demais: este tipo de arquivo aceita até ${most}.`,
