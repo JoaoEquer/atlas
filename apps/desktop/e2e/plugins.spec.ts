@@ -85,7 +85,7 @@ test('Telegram is turned on from the Plugins screen with consent, and a person l
   const { model, page } = desktop
   const fake = telegram
 
-  await openSettings(page, 'plugins')
+  await openSettings(page, 'extensions')
   // By its name: another plugin's description may name Telegram (voice's does).
   const row = page.locator('[data-testid="plugin-row"][data-plugin="telegram"]')
   await expect(row).toContainText('telegram')
@@ -132,7 +132,7 @@ test('Telegram is turned on from the Plugins screen with consent, and a person l
   await expect(page.getByTestId('conversation-via')).toHaveText('via telegram')
 
   // Off: it stops.
-  await openSettings(page, 'plugins')
+  await openSettings(page, 'extensions')
   await row.getByTestId('plugin-disable').click()
   await expect(row.getByTestId('plugin-state')).toHaveText('off')
 })
@@ -228,7 +228,7 @@ test("A plugin's screen adds a page and a panel, and calls its Python; a screen 
   await expect(page.getByTestId('counter-panel')).toHaveText('on nothing')
 
   // The other screen imports what a screen may not: it fails, said on the Plugins screen, alone.
-  await openSettings(page, 'plugins')
+  await openSettings(page, 'extensions')
   const row = page.getByTestId('plugin-row').filter({ hasText: 'reacher' })
   await expect(row.getByTestId('plugin-screen-problem')).toContainText('It imports node:fs')
 
@@ -267,7 +267,7 @@ test('A plugin saved while the app is open loads again in place, its screen and 
   await expect(shown.getByTestId('counter-said')).toHaveText('n=11')
 
   // And on asking, from the Plugins screen.
-  await openSettings(page, 'plugins')
+  await openSettings(page, 'extensions')
   await page.getByTestId('plugins-reload').click()
   const counter = page.getByTestId('plugin-row').filter({ hasText: 'counter' })
   await expect(counter.getByTestId('plugin-state')).toHaveText('on')

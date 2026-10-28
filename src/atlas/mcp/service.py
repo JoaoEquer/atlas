@@ -25,6 +25,10 @@ out saying so, and `signed_in` tries it again once the user signed in.
 **The plugins' servers** (step 16j) come beside the file's, as one more MCP file whose servers are
 named for their plugin (`atlas.plugins`): they connect when their plugin is turned on and leave
 when it is turned off (`reload_plugins`), the file's untouched.
+
+**What the app shows** (`status`): every declared server, connecting, connected with its tools or
+left out with why, and whether it signs in, which the app sends to the terminal, since the sign-in
+opens a browser on the machine of the home.
 """
 
 import asyncio
@@ -42,6 +46,8 @@ from atlas.agent import Tool, Toolset
 from atlas.mcp.errors import McpConfigError, McpError, McpSignInError
 from atlas.mcp.model import (
     ServerConfig,
+    ServerState,
+    ServerStatus,
     Transport,
     cut_description,
     filled,
@@ -86,6 +92,10 @@ class McpClient:
         self._file_declared: dict[str, ServerConfig] = {}
         #: Why a server, or some of its tools, were left out, by server name.
         self.problems: dict[str, str] = {}
+        #: The tools each connected server gives, by server name.
+        self._tool_counts: dict[str, int] = {}
+        #: The servers that sign in with OAuth or that the user signed in to, as last tried.
+        self._signs_in: set[str] = set()
         self._refreshes: set[asyncio.Task[None]] = set()
 
     @property
@@ -97,6 +107,41 @@ class McpClient:
             left_out = self.problems.get(connection.server.name)
             lines[connection.server.source] = f"{about} ({left_out})" if left_out else about
         return lines
+
+    @property
+    def file_problem(self) -> str | None:
+        """Why `mcp.json`, or the plugins' servers, could not be read; `None` when they were."""
+        found = [self.problems[key] for key in ("mcp.json", "plugins") if key in self.problems]
+        return " ".join(found) or None
+
+    def status(self) -> list[ServerStatus]:
+        """Every declared server, the file's then the plugins', as it stands now."""
+        declared = [
+            *((server, False) for server in self._file_declared.values()),
+            *((server, True) for server in self._plugin_servers.values()),
+        ]
+        rows: list[ServerStatus] = []
+        for server, plugin in declared:
+            problem = self.problems.get(server.name)
+            if server.name in self._connections:
+                state = ServerState.CONNECTED
+            elif problem is not None:
+                state = ServerState.LEFT_OUT
+            else:
+                state = ServerState.CONNECTING
+            rows.append(
+                ServerStatus(
+                    name=server.name,
+                    transport=server.transport,
+                    plugin=plugin,
+                    state=state,
+                    tools=self._tool_counts.get(server.name, 0),
+                    problem=problem,
+                    signs_in=server.transport is not Transport.STDIO
+                    and (server.oauth or server.name in self._signs_in),
+                )
+            )
+        return rows
 
     async def start(self) -> None:
         """Connect every declared server, the file's and the plugins', together. A server that
@@ -137,6 +182,8 @@ class McpClient:
 
     async def _disconnect(self, name: str) -> None:
         self.problems.pop(name, None)
+        self._tool_counts.pop(name, None)
+        self._signs_in.discard(name)
         connection = self._connections.pop(name, None)
         if connection is not None:
             self._toolset.replace(connection.server.source, [])
@@ -189,9 +236,15 @@ class McpClient:
         try:
             server = filled(declared, self._secret)
             auth = await self._signed_in(server)
+        except McpSignInError as error:
+            self._signs_in.add(declared.name)
+            self._left_out(declared.name, str(error))
+            return
         except McpError as error:
             self._left_out(declared.name, str(error))
             return
+        if auth is not None:
+            self._signs_in.add(server.name)
         connection = McpConnection(server, lambda: self._refresh_later(server.name), auth)
         try:
             await connection.open()
@@ -203,6 +256,7 @@ class McpClient:
                 and server.transport is not Transport.STDIO
                 and await asks_sign_in(server.url, server.headers)
             ):
+                self._signs_in.add(server.name)
                 self._left_out(
                     server.name,
                     f"The MCP server {server.name} signs in with OAuth and Atlas is not signed in "
@@ -274,6 +328,7 @@ class McpClient:
                     "The tool %s of %s was left out: %s", tool.name, connection.server.name, error
                 )
         name = connection.server.name
+        self._tool_counts[name] = len(made)
         if refused:
             self.problems[name] = "left out, schemas no provider takes: " + "; ".join(refused)
         else:
@@ -323,6 +378,7 @@ class McpClient:
             self._toolset.replace(connection.server.source, [])
             await connection.close()
         self._connections.clear()
+        self._tool_counts.clear()
         self._changed()
 
     def _changed(self) -> None:

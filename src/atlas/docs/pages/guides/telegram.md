@@ -13,13 +13,13 @@ too, and goes on in either place.
 
 1. **Make a bot.** In Telegram, talk to [@BotFather](https://t.me/BotFather), send `/newbot`,
    choose a name and a username, and copy the token it gives you.
-2. **Turn the plugin on.** In the app, open **Settings**, then **Plugins**, and choose
-   **Turn on…** beside Telegram. Atlas shows what the plugin may do (reach `api.telegram.org`,
+2. **Turn the plugin on.** In the app, open **Settings**, then **Extensions**, and on the **Plugins**
+   tab choose **Turn on…** on Telegram's card. Atlas shows what the plugin may do (reach `api.telegram.org`,
    read the secret `TELEGRAM_BOT_TOKEN`) and turns it on once you agree.
 3. **Paste the token** in the plugin's `TELEGRAM_BOT_TOKEN` field. It goes to the vault, encrypted.
    From a terminal, `atlas secrets set TELEGRAM_BOT_TOKEN` does the same.
 4. **Let yourself in.** Send your bot a message. Since you are new to it, it answers with an
-   8-character code instead. In the app, the code shows under **People** on the Plugins screen:
+   8-character code instead. In the app, the code shows under **People** on the Plugins tab:
    choose **Let in**, then send your message again. From a terminal: `atlas pairing approve CODE`.
 
 A code lasts an hour, and at most 3 wait at a time. Nobody gets an answer from your bot until you
@@ -58,7 +58,7 @@ open. The first answer, on the phone or in the app, takes it, and the others are
 ## Who you let in
 
 Everyone you let in may answer the requests above, so let in only yourself and people you trust
-with your machine. **People**, on the Plugins screen, lists them; `atlas pairing list` too, and
+with your machine. **People**, on the Plugins tab of Settings, Extensions, lists them; `atlas pairing list` too, and
 `atlas pairing forget telegram USER` removes someone.
 
 ## When something is off

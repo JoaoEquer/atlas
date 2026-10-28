@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { t } from '@/i18n'
 import type { ExecutorRow } from '@/protocol/protocol.generated'
 import { $detecting, $workbench, $workbenchError, detectExecutors, turnOnExecutor } from '@/store/app'
+import { matches } from '@/store/extensions'
 
 import { Refresh } from './ui/icons'
 import { IconButton } from './ui/tip'
@@ -14,9 +15,10 @@ import { IconButton } from './ui/tip'
  * its plugin declares; each one not found, or too old, greyed out with why, which says how to
  * install or update it. Atlas looks every time it opens, when the executors tab shows, and on
  * "Look again", so one installed while Atlas runs is found. Shown on the key screen and in
- * Settings → Executors; never in the executors sidebar, which shows only the ones turned on.
+ * Settings → Extensions → Executors, there in the marketplace's grid (`grid`) and searched
+ * (`query`); never in the executors sidebar, which shows only the ones turned on.
  */
-export function ExecutorOffers() {
+export function ExecutorOffers({ grid = false, query = '' }: { grid?: boolean; query?: string }) {
   const { executors } = useStore($workbench)
   const errors = useStore($workbenchError)
   const detecting = useStore($detecting)
@@ -43,9 +45,15 @@ export function ExecutorOffers() {
           testId="executors-look-again"
         />
       </div>
-      {executors.map(row => (
-        <Offer key={row.name} row={row} />
-      ))}
+      <div className={grid ? '@container' : ''}>
+        <div className={grid ? 'grid gap-3 @lg:grid-cols-2' : 'space-y-2'}>
+          {executors
+            .filter(row => matches(query, row.name, row.title))
+            .map(row => (
+              <Offer key={row.name} row={row} />
+            ))}
+        </div>
+      </div>
       {errors.offer && <p className="text-xs text-failed-text">{errors.offer}</p>}
     </section>
   )

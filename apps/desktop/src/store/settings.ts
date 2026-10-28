@@ -1,10 +1,12 @@
 /**
  * The settings screen on screen (step 15b, docs/ARCHITECTURE.md, The settings screen): open or not,
- * and the section on its right. It opens on a section and keeps the others a click away on its left.
+ * the section on its right, and the tab of its Extensions. It opens on a section and keeps the
+ * others a click away on its left.
  */
 import { atom } from 'nanostores'
 
-import { detectExecutors, refreshPlugins } from './app'
+import { detectExecutors, refreshExtensions, refreshPlugins } from './app'
+import type { ExtensionKind } from './extensions'
 import { $machinesNotice, refreshMachines, refreshThisMachine } from './machines'
 
 export const SECTIONS = [
@@ -13,17 +15,23 @@ export const SECTIONS = [
   'personalization',
   'safety',
   'workspace',
-  'plugins',
-  'executors',
+  'extensions',
   'machines'
 ] as const
 export type SettingsSection = (typeof SECTIONS)[number]
 
 export const $settings = atom(false)
 export const $settingsSection = atom<SettingsSection>('general')
+/** The Extensions section's tab: its plugins, skills, MCP servers or executors. */
+export const $extensionsTab = atom<ExtensionKind>('plugin')
 
-export function openSettings(section: SettingsSection = 'general'): void {
+/** Open the settings on a section; on Extensions, on `tab` when one is given. */
+export function openSettings(section: SettingsSection = 'general', tab?: ExtensionKind): void {
   $settings.set(true)
+  if (tab) {
+    $extensionsTab.set(tab)
+  }
+
   showSection(section)
 }
 
@@ -33,9 +41,19 @@ export function showSection(section: SettingsSection): void {
     $machinesNotice.set(null)
     void refreshMachines()
     void refreshThisMachine()
-  } else if (section === 'plugins') {
+  } else if (section === 'extensions') {
+    // Every tab's count shows at once, so all are read; the harnesses are looked for on their tab.
     refreshPlugins()
-  } else if (section === 'executors') {
+    refreshExtensions()
+    if ($extensionsTab.get() === 'executor') {
+      void detectExecutors()
+    }
+  }
+}
+
+export function showExtensionsTab(tab: ExtensionKind): void {
+  $extensionsTab.set(tab)
+  if (tab === 'executor') {
     void detectExecutors()
   }
 }

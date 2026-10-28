@@ -525,6 +525,40 @@ export interface PluginThemeRow {
   /** The label in a language, by locale (`pt-BR`), where it has one. */
   labels: Record<string, string>
 }
+export interface McpList {
+  servers: McpServerRow[]
+  /** Why `mcp.json` could not be read, or why no server connects here; `null` when all is well. */
+  problem: string | null
+}
+/** An MCP server the home declares, as the Extensions screen shows it. */
+export interface McpServerRow {
+  name: string
+  /** `stdio`, `http` or `sse`. */
+  transport: string
+  /** Declared by a plugin that is on, not by the home's `mcp.json`. */
+  plugin: boolean
+  state: 'connecting' | 'connected' | 'left_out'
+  /** The tools it gives the model; 0 until it connected. */
+  tools: number
+  /** Why it, or some of its tools, were left out, and what fixes it. */
+  problem: string | null
+  /** The command that signs in to it, run in a terminal on the home's machine, when it signs in with OAuth; `null` for a server that does not. */
+  login: string | null
+}
+export interface SkillList {
+  skills: SkillRow[]
+}
+/** A skill the main agent can load, as the Extensions screen shows it. */
+export interface SkillRow {
+  name: string
+  description: string
+  /** `atlas`, shipped with Atlas and unchanged since; `home`, the home's own (written by the user or the agent, installed from the marketplace, or shipped and changed since); `plugin`, from a plugin that is on. */
+  source: 'atlas' | 'home' | 'plugin'
+  /** The plugin it comes from; empty unless `source` is `plugin`. */
+  plugin: string
+  /** The user may load it with `/name`. */
+  user_invocable: boolean
+}
 /** A plugin's screen calls its Python (step 16m, SDK version 17). */
 export interface PluginCallParams {
   plugin: string
@@ -1730,6 +1764,8 @@ export interface RpcMethods {
   'marketplace.secret': { params: MarketplaceSecretParams; result: MarketplacePage }
   /** Bring an installed item to the marketplace's version; one changed here waits for force. */
   'marketplace.update': { params: MarketplaceUpdateParams; result: MarketplaceDone }
+  /** The MCP servers the home declares, its mcp.json's and its plugins', each connecting, connected or left out with why; read again on mcp.changed. */
+  'mcp.list': { params: Empty; result: McpList }
   /** Apply a memory proposal, only if the entries it changes are as they were; it stays when it cannot apply. */
   'memory.approve': { params: ProposalRef; result: ProposalApproved }
   /** Drop a memory proposal without applying it. */
@@ -1790,6 +1826,8 @@ export interface RpcMethods {
   'settings.read': { params: Empty; result: SettingsList }
   /** Write editable settings to config.toml, changing only their lines, and apply them without a restart; a refused value writes nothing. */
   'settings.write': { params: SettingsWrite; result: SettingsList }
+  /** The skills the main agent can load: the library's and those of the plugins that are on. */
+  'skill.list': { params: Empty; result: SkillList }
   /** The main agent's soul, SOUL.md, for its screen. */
   'soul.read': { params: Empty; result: Soul }
   /** Write the main agent's soul whole; it applies from the next conversation. */
@@ -1912,6 +1950,7 @@ export const RPC_METHODS = [
   'marketplace.remove',
   'marketplace.secret',
   'marketplace.update',
+  'mcp.list',
   'memory.approve',
   'memory.discard',
   'memory.edit',
@@ -1942,6 +1981,7 @@ export const RPC_METHODS = [
   'routine.runs',
   'settings.read',
   'settings.write',
+  'skill.list',
   'soul.read',
   'soul.write',
   'subagent.decides',
@@ -2011,6 +2051,8 @@ export interface EventMap {
   'executor.usage': ExecutorUsageRow
   /** An item was installed, updated, removed or retired, from any client or the terminal; read marketplace.list. */
   'marketplace.changed': MarketplaceChanged
+  /** An MCP server connected, was left out or stopped, or its tools changed; read mcp.list. */
+  'mcp.changed': Empty
   /** The turn ended: its text and outcome. */
   'message.complete': MessageComplete
   /** A piece of the reply's text. */
@@ -2074,6 +2116,7 @@ export const EVENT_NAMES = [
   'executor.accounts',
   'executor.usage',
   'marketplace.changed',
+  'mcp.changed',
   'message.complete',
   'message.delta',
   'message.file',

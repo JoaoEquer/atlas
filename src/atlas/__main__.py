@@ -1833,7 +1833,8 @@ def _plugin_new(parent: Path, name: str) -> int:
         return 1
     sys.stdout.write(
         f"{name} is in {folder}. Change its manifest, __init__.py and skill, check it with "
-        f"`atlas plugins validate {folder}`, and turn it on in the app's Plugins screen.\n"
+        f"`atlas plugins validate {folder}`, and turn it on in the app: Settings, Extensions, "
+        "Plugins.\n"
     )
     return 0
 

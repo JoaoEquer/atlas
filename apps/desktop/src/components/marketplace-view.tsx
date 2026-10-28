@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { type ReactNode, useState } from 'react'
+import { useState } from 'react'
 import { Streamdown } from 'streamdown'
 
 import { t } from '@/i18n'
@@ -17,11 +17,12 @@ import {
   storeMarketSecret,
   writePlugin
 } from '@/store/app'
-import { actionOf, counts, KINDS, type MarketKind, resolved, shown } from '@/store/marketplace'
+import { actionOf, counts, resolved, shown } from '@/store/marketplace'
 import { openSettings } from '@/store/settings'
 
+import { Badge, KindPicture, KindTabs } from './extension-card'
 import { PageHeader } from './page-header'
-import { Bulb, Cpu, McpServer, Plug, Robot } from './ui/icons'
+import { Robot } from './ui/icons'
 
 /**
  * The marketplace (step 16s): skills, MCP servers, plugins and executors made for Atlas, a tab
@@ -94,11 +95,7 @@ function Listing() {
         </p>
       </PageHeader>
       <Notice />
-      <div className="flex gap-1 border-b border-border" role="tablist">
-        {KINDS.map(kind => (
-          <KindTab count={total[kind]} current={market.kind} key={kind} kind={kind} />
-        ))}
-      </div>
+      <KindTabs counts={total} current={market.kind} onPick={setMarketKind} testId="marketplace-tab" />
       {market.failed && <Failed text={market.failed} />}
       {nothing && (
         <p className="text-sm text-muted-foreground">
@@ -134,28 +131,6 @@ function Notice() {
     >
       {text}
     </p>
-  )
-}
-
-function KindTab({ count, current, kind }: { count: number; current: MarketKind; kind: MarketKind }) {
-  const on = current === kind
-
-  return (
-    <button
-      aria-selected={on}
-      className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${
-        on ? 'border-foreground font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'
-      }`}
-      data-testid={`marketplace-tab-${kind}`}
-      onClick={() => {
-        setMarketKind(kind)
-      }}
-      role="tab"
-      type="button"
-    >
-      {t.marketplace.tabs[kind]}
-      <span className="ml-1.5 text-xs text-muted-foreground">{count}</span>
-    </button>
   )
 }
 
@@ -481,7 +456,7 @@ function Action({ row }: { row: MarketplaceRow }) {
         data-action={action}
         data-testid="marketplace-action"
         onClick={act(() => {
-          openSettings('plugins')
+          openSettings('extensions', 'plugin')
         })}
         type="button"
       >
@@ -543,24 +518,7 @@ function Picture({ row, size }: { row: MarketplaceRow; size: number }) {
     )
   }
 
-  const Glyph = { executor: Cpu, mcp: McpServer, plugin: Plug, skill: Bulb }[row.kind]
-
-  return (
-    <span
-      className="flex shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
-      style={{ height: size, width: size }}
-    >
-      {row.kind === 'executor' && row.shipped ? (
-        <Robot aria-hidden size={size / 2} stroke={1.5} />
-      ) : (
-        <Glyph aria-hidden size={size / 2} stroke={1.5} />
-      )}
-    </span>
-  )
-}
-
-function Badge({ children }: { children: ReactNode }) {
-  return <span className="shrink-0 rounded-full bg-selected px-2 py-0.5 text-xs font-medium text-soft">{children}</span>
+  return <KindPicture glyph={row.kind === 'executor' && row.shipped ? Robot : undefined} kind={row.kind} size={size} />
 }
 
 function Failed({ text }: { text: string }) {

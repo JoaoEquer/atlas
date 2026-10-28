@@ -28,6 +28,7 @@ import binascii
 import dataclasses
 import json
 import logging
+import re
 import secrets
 import shutil
 import tempfile
@@ -267,6 +268,8 @@ from atlas.server.protocol import (
     MarketplaceSecretParams,
     MarketplaceSecretRow,
     MarketplaceUpdateParams,
+    McpList,
+    McpServerRow,
     MemoryEdit,
     MemoryEntries,
     MemoryEntriesParams,
@@ -344,6 +347,8 @@ from atlas.server.protocol import (
     SettingRow,
     SettingsList,
     SettingsWrite,
+    SkillList,
+    SkillRow,
     SlashCommandList,
     SlashCommandRow,
     Soul,
@@ -392,7 +397,7 @@ from atlas.server.protocol import (
     read,
 )
 from atlas.server.replay import Replay
-from atlas.skills import SkillLibrary, SkillUsage
+from atlas.skills import SkillLibrary, SkillUsage, changed, read_manifest
 from atlas.terminals import TerminalError, Terminals
 from atlas.tools import (
     SECRET_REQUEST_SECONDS,
@@ -513,6 +518,8 @@ class Gateway:
         self._plugin_watch: asyncio.Task[None] | None = None
         self._ask_seconds = ask_seconds
         self._connections: set[Connection] = set()
+        #: The MCP servers as the clients were last told, so `mcp.changed` says only a change.
+        self._mcp_shown = McpList([], None)
         self._requests: dict[str, _Pending] = {}
         self._housekeeping: asyncio.Task[None] | None = None
         #: The server's event loop, once it runs: what happens in a worker thread is told to
@@ -586,6 +593,8 @@ class Gateway:
             "plugin.screens": self._plugin_screens,
             "plugin.themes": self._plugin_themes,
             "plugin.call": self._plugin_call_python,
+            "mcp.list": self._mcp_list,
+            "skill.list": self._skill_list,
             "marketplace.list": self._marketplace_list,
             "marketplace.page": self._marketplace_page,
             "marketplace.install": self._marketplace_install,
@@ -710,6 +719,7 @@ class Gateway:
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
         self.assistant.on_bots_changed = self._bots_changed
+        self.assistant.on_mcp_changed = self._mcp_changed
         self.assistant.start()
         abandoned = self.scheduler.start()
         if abandoned:
@@ -1893,6 +1903,67 @@ class Gateway:
     async def _plugin_changed(self, name: str) -> PluginRow:
         self.plugins_changed()
         return self._plugin_row(await asyncio.to_thread(self.plugins.view, name))
+
+    # -- the Extensions screen's MCP servers and skills -------------------------------------------
+
+    async def _mcp_list(self, connection: Connection, params: Empty) -> McpList:
+        return self._mcp_servers()
+
+    def _mcp_servers(self) -> McpList:
+        client = self.assistant.mcp
+        if client is None:
+            return McpList([], "MCP servers are left out here: the mcp extra is not installed.")
+        rows = [
+            McpServerRow(
+                name=status.name,
+                transport=status.transport.value,
+                plugin=status.plugin,
+                state=status.state.value,
+                tools=status.tools,
+                problem=status.problem,
+                login=_login_command(status.name) if status.signs_in else None,
+            )
+            for status in client.status()
+        ]
+        return McpList(rows, client.file_problem)
+
+    def _mcp_changed(self) -> None:
+        """Tell every client when what `mcp.list` gives changed, and only then: the toolset is
+        rebuilt more often than a server changes how it stands."""
+        shown = self._mcp_servers()
+        if shown == self._mcp_shown:
+            return
+        self._mcp_shown = shown
+        frame = self._event_frame("mcp.changed", Empty())
+        for connection in self._connections:
+            connection.put(frame)
+
+    async def _skill_list(self, connection: Connection, params: Empty) -> SkillList:
+        def read() -> list[SkillRow]:
+            shipped = read_manifest(self._home.skills_folder)
+            library = SkillLibrary(self._home.skills_folder)
+            rows: list[SkillRow] = []
+            for skill in self.assistant.skills():
+                plugin, _, _ = skill.name.rpartition(":")
+                source: Literal["atlas", "home", "plugin"]
+                if plugin:
+                    source = "plugin"
+                elif changed(library, skill.name, shipped) is False:
+                    source = "atlas"
+                else:
+                    source = "home"
+                rows.append(
+                    SkillRow(
+                        name=skill.name,
+                        description=skill.description,
+                        source=source,
+                        plugin=plugin,
+                        user_invocable=skill.user_invocable,
+                    )
+                )
+            return sorted(rows, key=lambda row: row.name)
+
+        return SkillList(await asyncio.to_thread(read))
 
     # -- the marketplace (step 16s) ---------------------------------------------------------------
 
@@ -3082,6 +3153,12 @@ def _absolute(path: str) -> Path:
     if not path or not Path(path).is_absolute():
         raise ProtocolError(INVALID_PARAMS, f"{path!r} is not an absolute path.")
     return Path(path)
+
+
+def _login_command(server: str) -> str:
+    """The command that signs in to an MCP server, its name quoted when a shell would split it."""
+    name = server if re.fullmatch(r"[A-Za-z0-9_.:-]+", server) else f'"{server}"'
+    return f"atlas mcp login {name}"
 
 
 def _stamp(path: Path) -> tuple[int, int]:

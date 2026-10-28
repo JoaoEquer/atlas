@@ -81,6 +81,32 @@ class ServerConfig:
         return f"mcp:{self.name}"
 
 
+class ServerState(StrEnum):
+    #: Declared, its connection not tried to the end yet.
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    #: Tried and left out: its `problem` says why and what fixes it.
+    LEFT_OUT = "left_out"
+
+
+@dataclass(frozen=True, slots=True)
+class ServerStatus:
+    """A declared server as the client holds it now, for the app's Extensions screen."""
+
+    name: str
+    transport: Transport
+    #: Declared by a plugin that is on, not by the home's `mcp.json`.
+    plugin: bool
+    state: ServerState
+    #: The tools it gives the model; 0 until it connected.
+    tools: int
+    #: Why it, or some of its tools, were left out.
+    problem: str | None
+    #: It signs in with OAuth (`"oauth"` in its entry), or the user signed in to it: the sign-in
+    #: is `atlas mcp login <name>`, in a terminal.
+    signs_in: bool
+
+
 def parse_config(text: str, where: str) -> list[ServerConfig]:
     """The servers in an `mcp.json`. Raises `McpConfigError` naming what is wrong."""
     try:

@@ -11,7 +11,7 @@ already uses: `OPENAI_API_KEY` or `GEMINI_API_KEY`.
 
 ## Turn it on
 
-Open **Settings**, then **Plugins**, and choose **Turn on…** beside Voice. Atlas shows what it may
+Open **Settings**, then **Extensions**, and on the **Plugins** tab choose **Turn on…** on Voice's card. Atlas shows what it may
 do (reach `api.openai.com` and `generativelanguage.googleapis.com`, read the two keys, hold a key on
 your keyboard and paste where you are) and turns it on once you agree. With no key yet, add one
 first ([Models and keys](/docs/guides/models/)).
@@ -98,7 +98,7 @@ conversation hands over to Atlas runs on the plugin's own model (GPT-6 Luna thro
 
 ## Its settings
 
-Under **Settings**, then **Plugins**, then Voice:
+Under **Settings**, then **Extensions**, on Voice's card on the **Plugins** tab:
 
 | Setting | Default | What it does |
 |---|---|---|

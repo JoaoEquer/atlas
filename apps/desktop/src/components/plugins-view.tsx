@@ -20,25 +20,32 @@ import {
   storePluginSecret,
   writePlugin
 } from '@/store/app'
+import { matches } from '@/store/extensions'
 import { closeSettings } from '@/store/settings'
+
+import { Badge, ExtensionCard, Shelf } from './extension-card'
 
 /**
  * The plugins (docs/ARCHITECTURE.md, Plugins): each one off until turned on, and turning one on
  * shows what it declares first, for consent; its secrets and settings; and the
  * people its channels let in, or who wait with a code (a pairing, approved here instead of
- * only in a terminal). The settings screen's Plugins since step 15b.
+ * only in a terminal). The settings screen's Plugins since step 15b, the Plugins tab of its
+ * Extensions since 28/10/2026: a card each, in the marketplace's grid, the Atlas team's first.
  */
-export function PluginsSection() {
+export function PluginsTab({ query }: { query: string }) {
   const plugins = useStore($plugins)
   const pairings = useStore($pairings)
   const error = useStore($pluginError)
   const channels = plugins.some(plugin => plugin.channels.length > 0)
+  const shown = plugins.filter(plugin => matches(query, plugin.name, plugin.description, plugin.author))
+  const shipped = shown.filter(plugin => plugin.bundled)
+  const added = shown.filter(plugin => !plugin.bundled)
 
   return (
     <div data-testid="plugins-view">
       <div className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <p className="text-sm text-muted-foreground">{t.plugins.intro}</p>
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <p className="min-w-0 flex-1 basis-64 text-sm text-muted-foreground">{t.plugins.intro}</p>
           <div className="flex shrink-0 items-center gap-2">
             <a className="link text-sm" href={PLUGIN_GUIDE} rel="noreferrer" target="_blank">
               {t.plugins.guide}
@@ -72,10 +79,20 @@ export function PluginsSection() {
             {error}
           </p>
         )}
-        {plugins.length === 0 && <p className="text-muted-foreground">{t.plugins.empty}</p>}
-        {plugins.map(plugin => (
-          <Plugin key={`${plugin.name}-${String(plugin.bundled)}`} plugin={plugin} />
-        ))}
+        {plugins.length === 0 && <p className="text-sm text-muted-foreground">{t.plugins.empty}</p>}
+        {plugins.length > 0 && shown.length === 0 && (
+          <p className="text-sm text-muted-foreground">{t.extensions.noMatch}</p>
+        )}
+        <Shelf count={shipped.length} title={t.marketplace.official}>
+          {shipped.map(plugin => (
+            <Plugin key={`${plugin.name}-true`} plugin={plugin} />
+          ))}
+        </Shelf>
+        <Shelf count={added.length} title={t.extensions.added}>
+          {added.map(plugin => (
+            <Plugin key={`${plugin.name}-false`} plugin={plugin} />
+          ))}
+        </Shelf>
         {channels && <People pairings={pairings} />}
       </div>
     </div>
@@ -90,64 +107,60 @@ function Plugin({ plugin }: { plugin: PluginRow }) {
   const screenError = useStore($screenErrors)[plugin.name]
 
   return (
-    <div className="rounded-lg border border-border p-4" data-plugin={plugin.name} data-testid="plugin-row">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="font-medium">
-            {plugin.name}
-            {plugin.version && <span className="ml-2 text-sm font-normal text-muted-foreground">{plugin.version}</span>}
-            <span
-              className={`ml-2 rounded px-1.5 py-0.5 text-xs font-normal ${
-                plugin.running ? 'bg-selected text-foreground' : 'bg-muted text-soft'
-              }`}
-              data-testid="plugin-state"
-            >
-              {state}
-            </span>
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {plugin.description}
-            {plugin.bundled ? ` · ${t.plugins.shipped}` : ''}
-          </p>
-        </div>
-        <div className="shrink-0 text-sm">
-          {on ? (
+    <ExtensionCard
+      action={
+        on ? (
+          <button
+            className={`${BUTTON} shrink-0 text-sm`}
+            data-testid="plugin-disable"
+            onClick={() => void disablePlugin(plugin.name)}
+            type="button"
+          >
+            {t.plugins.disable}
+          </button>
+        ) : (
+          !asking && (
             <button
-              className={BUTTON}
-              data-testid="plugin-disable"
-              onClick={() => void disablePlugin(plugin.name)}
+              className={`${BUTTON} shrink-0 text-sm`}
+              data-testid="plugin-enable"
+              onClick={() => {
+                setAsking(true)
+              }}
               type="button"
             >
-              {t.plugins.disable}
+              {t.plugins.enable}
             </button>
-          ) : (
-            !asking && (
-              <button
-                className={BUTTON}
-                data-testid="plugin-enable"
-                onClick={() => {
-                  setAsking(true)
-                }}
-                type="button"
-              >
-                {t.plugins.enable}
-              </button>
-            )
-          )}
-        </div>
-      </div>
+          )
+        )
+      }
+      badge={plugin.bundled ? <Badge>{t.marketplace.officialBadge}</Badge> : undefined}
+      data={{ 'data-plugin': plugin.name, 'data-testid': 'plugin-row' }}
+      footer={
+        <span
+          className={`rounded px-1.5 py-0.5 ${plugin.running ? 'bg-selected text-foreground' : 'bg-muted text-soft'}`}
+          data-testid="plugin-state"
+        >
+          {state}
+        </span>
+      }
+      kind="plugin"
+      subtitle={[plugin.version, plugin.bundled ? t.plugins.shipped : plugin.author].filter(Boolean).join(' · ')}
+      summary={plugin.description}
+      title={plugin.name}
+      wide={asking && !on}
+    >
       {plugin.problem && (
-        <p className="mt-2 text-sm text-waiting-text" data-testid="plugin-problem">
+        <p className="text-sm text-waiting-text select-text" data-testid="plugin-problem">
           {plugin.problem}
         </p>
       )}
       {on && screenError && (
-        <p className="mt-2 text-sm text-waiting-text" data-testid="plugin-screen-problem">
+        <p className="text-sm text-waiting-text" data-testid="plugin-screen-problem">
           {t.plugins.screenNotLoaded(screenError)}
         </p>
       )}
       {asking && !on && (
-        <div className="mt-3 rounded-md bg-subtle p-3 text-sm" data-testid="plugin-consent">
+        <div className="rounded-md bg-subtle p-3 text-sm" data-testid="plugin-consent">
           <p className="font-medium">{t.plugins.consentIntro}</p>
           <ul className="mt-1 list-disc space-y-1 pl-5">
             {plugin.declaration.map(line => (
@@ -182,7 +195,7 @@ function Plugin({ plugin }: { plugin: PluginRow }) {
         <Secret key={secret.name} plugin={plugin.name} secret={secret} />
       ))}
       {plugin.settings.length > 0 && (
-        <details className="mt-3 text-sm">
+        <details className="text-sm">
           <summary className="cursor-pointer text-muted-foreground">{t.plugins.settings}</summary>
           {plugin.settings.map(setting => (
             <Setting
@@ -195,7 +208,7 @@ function Plugin({ plugin }: { plugin: PluginRow }) {
           ))}
         </details>
       )}
-    </div>
+    </ExtensionCard>
   )
 }
 
@@ -207,7 +220,7 @@ function Secret({ plugin, secret }: { plugin: string; secret: PluginSecretRow })
   const [changing, setChanging] = useState(false)
 
   return (
-    <div className="mt-3 text-sm" data-stored={secret.stored} data-testid="plugin-secret">
+    <div className="min-w-0 text-sm" data-stored={secret.stored} data-testid="plugin-secret">
       <p>
         <span className="font-mono">{secret.name}</span>
         <span className="ml-2 text-muted-foreground">{secret.stored ? t.plugins.stored : t.plugins.notStored}</span>

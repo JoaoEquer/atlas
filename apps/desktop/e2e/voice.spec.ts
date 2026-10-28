@@ -156,7 +156,7 @@ test("the voice's settings are picked from lists, which follow the provider", as
   desktop = await launch({ setup: voiceOn })
   const { page } = desktop
 
-  await openSettings(page, 'plugins')
+  await openSettings(page, 'extensions')
   const row = page.locator('[data-testid="plugin-row"][data-plugin="voice"]')
   await row.locator('summary').click()
   const provider = row.getByLabel('provider', { exact: true })

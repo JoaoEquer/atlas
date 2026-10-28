@@ -26,8 +26,7 @@ import {
   showSection
 } from '@/store/settings'
 
-import { ExecutorOffers } from './executor-offers'
-import { PluginsSection } from './plugins-view'
+import { ExtensionsSection } from './extensions-view'
 import {
   GeneralSection,
   ModelSection,
@@ -35,28 +34,15 @@ import {
   SafetySection,
   WorkspaceSection
 } from './settings-sections'
-import {
-  Adjustments,
-  Close,
-  Computer,
-  Copy,
-  Cpu,
-  Folder,
-  Key,
-  Machine,
-  Plug,
-  Plus,
-  Shield,
-  Sparkles,
-  Terminal
-} from './ui/icons'
+import { Adjustments, Close, Computer, Copy, Cpu, Folder, Key, Machine, Plug, Plus, Shield, Sparkles } from './ui/icons'
 import { ICON_BUTTON } from './ui/tip'
 
 /**
  * The settings screen (step 15b, docs/ARCHITECTURE.md, The settings screen): one large screen with
  * its sections on the left, each opening on
- * the right. General, Model, Personalization, Safety, Workspace, Plugins, Executors (the harnesses on
- * this computer, turned on here, out of the sidebar since 22/10/2026), and Machines, which step 15
+ * the right. General, Model, Personalization, Safety, Workspace, Extensions (the plugins, skills,
+ * MCP servers and executors, a tab each, since 28/10/2026; the executors out of the sidebar since
+ * 22/10/2026), and Machines, which step 15
  * began with: this machine's home always on and open to the user's
  * machines, with its connection code and a new password; and the other machines, each with Test,
  * Rename and Remove, and Add from a code.
@@ -121,12 +107,11 @@ export function SettingsView() {
 }
 
 const ICONS = {
-  executors: Terminal,
+  extensions: Plug,
   general: Adjustments,
   machines: Machine,
   model: Cpu,
   personalization: Sparkles,
-  plugins: Plug,
   safety: Shield,
   workspace: Folder
 } satisfies Record<SettingsSection, unknown>
@@ -143,10 +128,8 @@ function Section({ section }: { section: SettingsSection }) {
       return <SafetySection />
     case 'workspace':
       return <WorkspaceSection />
-    case 'plugins':
-      return <PluginsSection />
-    case 'executors':
-      return <ExecutorOffers />
+    case 'extensions':
+      return <ExtensionsSection />
     case 'machines':
       return (
         <>

@@ -21,7 +21,8 @@ atlas plugins new my-plugin --folder ~/code   # or in a folder of yours, install
 
 `new` writes the smallest plugin that works: a manifest, a tool and a skill. `validate` loads it
 as Atlas does, in a home of its own that is thrown away after, and says what it registers and what
-is wrong. Then turn it on in the app's Plugins screen (or `atlas plugins enable my-plugin`): Atlas
+is wrong. Then turn it on in the app, under **Settings**, **Extensions**, on its **Plugins** tab (or
+`atlas plugins enable my-plugin`): Atlas
 shows what it declares, and it runs only once you consent. A plugin that declares something new
 after an update is turned off until you consent again.
 
@@ -78,9 +79,9 @@ what it keeps while it runs (caches, `node_modules`, renders) goes in its data f
 - `tools`, `channels` and `executors` name what its Python registers. Registering anything it
   does not name fails the plugin.
 - `secrets` are read from the vault, and only those named (`ctx.secret`). The user stores them on
-  the Plugins screen, or with `atlas plugins secret`.
+  plugin's card in Settings, Extensions, or with `atlas plugins secret`.
 - `settings` are values the user may change, with their defaults (`ctx.setting`). With `choices`
-  (needs `api` 25) the Plugins screen lists them rather than taking typed text, and **Other…**
+  (needs `api` 25) the plugin's card lists them rather than taking typed text, and **Other…**
   still types one: a list of values (`["openai", "gemini"]`); `"models"`, the models Atlas's
   picker offers, as `provider/model`; or `"plugin"`, what its Python's call `setting_choices`
   answers when the screen shows the setting, which may ask a service what it has. That call gets
@@ -345,7 +346,7 @@ def register(ctx: PluginContext) -> None:
   when the plugin is on and stops when it is turned off.
 - **`run` receives until it is cancelled.** It returns or raises only when it cannot go on; Atlas
   says so and does not start it again. `host.failed(reason)` says why first (a refused token), on
-  the Plugins screen.
+  the plugin's card in Settings, Extensions.
 - **`Inbound.user` is a stable id**, never a name: pairing lets people in by it. `name` is what the
   user sees when someone asks to pair.
 - **Files people send** go in `Inbound.files` (`"api": 7`), each an `InboundFile` with its `name`
@@ -599,8 +600,8 @@ export default {
 ## While you write it
 
 Save, and Atlas loads it again: its Python, its skills, its hooks and its screen, in the app that
-is open. A save that breaks it says why in the Plugins screen; the next save that fixes it runs
-again. The Plugins screen's **Reload** does the same on asking. Keep what the plugin writes in its
+is open. A save that breaks it says why on its card in Settings, Extensions; the next save that
+fixes it runs again. **Reload**, on the Plugins tab there, does the same on asking. Keep what the plugin writes in its
 data folder (`${CLAUDE_PLUGIN_DATA}`), not in its own: a plugin writing in its folder loads itself
 again and again.
 

@@ -123,7 +123,7 @@ export function ExecutorsList() {
               className="link"
               data-testid="executors-open-settings"
               onClick={() => {
-                openSettings('executors')
+                openSettings('extensions', 'executor')
               }}
               type="button"
             >

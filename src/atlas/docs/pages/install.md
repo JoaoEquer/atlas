@@ -29,7 +29,7 @@ The site counts each download of the installer by system and country, to know ho
 
 1. The app asks for an API key from a model provider: OpenAI, Anthropic, Google Gemini or OpenRouter. Atlas checks the key without spending anything and keeps it in its encrypted vault.
 2. Start talking. Each conversation can switch models.
-3. To use your coding agents, open **Settings**, then **Executors**: it lists the harnesses on this computer, Claude Code, Codex, the Gemini CLI and DeepSeek's. Turn on the ones you use; each one shows up in the **Executors** tab of the sidebar, and one not installed shows the command that installs it.
+3. To use your coding agents, open **Settings**, then **Extensions**, on its **Executors** tab: it lists the harnesses on this computer, Claude Code, Codex, the Gemini CLI and DeepSeek's. Turn on the ones you use; each one shows up in the **Executors** tab of the sidebar, and one not installed shows the command that installs it.
 
 ## Updating
 

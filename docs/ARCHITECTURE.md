@@ -1730,16 +1730,42 @@ order:
    the snapshot frozen as one starts. The memory proposals stay where they are, with a shortcut.
 4. **Safety:** `[trust] deny`, `ask` and `ask_skip`, one per line, and `approval_timeout`.
 5. **Workspace:** `[workspace] folder` and `[time] zone`.
-6. **Plugins:** the screen that was in the sidebar. Someone
-   waiting with a code still shows in the sidebar, as the proposals do, and opens it.
-7. **Executors:** the harnesses on this computer, each installed one turned on here after its
-   consent, each one missing greyed out with the command that installs it (the key screen's list).
-   Out of the sidebar since 22/10/2026: the sidebar shows only the executors turned on, and with
-   none on, a link here.
-8. **Machines** (Several machines, below).
+6. **Extensions** (since 28/10/2026, in the place of Plugins and Executors; below): the plugins,
+   the skills, the MCP servers and the executors, a tab each. Someone waiting with a code still
+   shows in the sidebar, as the proposals do, and opens its Plugins tab. The executors are out of
+   the sidebar since 22/10/2026: the sidebar shows only the executors turned on, and with none on,
+   a link to the Executors tab.
+7. **Machines** (Several machines, below).
 
 The sidebar keeps Conversations, Bots, Executors and Routines, and the proposals when there are
 some. A search over the settings waits for use to ask for it: there are some fifteen settings.
+
+### Extensions on the settings screen — decided 2026-10-28
+
+Asked for by the user on 28/10/2026: the Plugins section stacked its plugins one under the other,
+each with its whole description, its state, its button and its settings, and read as a muddle.
+Extensions shows what the home has of each kind the marketplace offers, in the marketplace's look
+(`extension-card.tsx`, which both screens use): a tab per kind with its count, a search over the
+tab on screen, "Read again", shelves of cards two columns wide once the section holds them (a
+container query, so the narrow window gets one), the Atlas team's first, and a card each with its
+name, its mark, a summary cut to two lines and its action.
+
+- **Plugins:** turned on and off as before, through the same consent (`plugin.enable` with the
+  declaration's fingerprint), which widens its card across both columns while it asks; a missing
+  secret, a problem and the settings (folded) stay on the card.
+- **Skills** (`skill.list`): the main agent's, each with where it came from: `atlas`, shipped and
+  unchanged (the bundled manifest's digest); `home`, the home's own, the marketplace's included;
+  or `plugin`, a plugin's that is on. A card shows its `/command` when the user may call it.
+- **MCPs** (`mcp.list`, `McpClient.status`): each server of the home's `mcp.json` and of the
+  plugins that are on, connecting, connected with its tools, or left out with why, and why
+  `mcp.json` could not be read. A server that signs in with OAuth gives `atlas mcp login <name>`
+  to copy and run in a terminal; **the app has no sign-in of its own**, since the browser opens
+  on the machine of the home, which may be another. The server says `mcp.changed` when a server
+  connects, leaves or changes its tools, and a screen that read the list reads it again.
+- **Executors:** the harnesses' offers as Executors showed them, in the grid.
+- **Proved** by the MCP client's status against real servers (one that signs in, through the fake
+  authorization server), the server's methods and event over its WebSocket, the screen's tests,
+  and end to end in the real app after the marketplace installed a skill, a server and a plugin.
 
 ## The installer — decided 2026-10-13
 

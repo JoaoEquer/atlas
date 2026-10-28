@@ -378,5 +378,10 @@ does not load: copy its address from the address bar and paste it into the termi
 among your secrets, renews it on its own and connects the server within a few seconds, without a
 restart. A server whose sign-in has ended says so and names the command again.
 
+The app lists every server under **Settings**, **Extensions**, on the **MCPs** tab: connecting,
+connected with its number of tools, or left out with why. One that signs in with OAuth shows the
+`atlas mcp login` command to run, with a button that copies it; the app has no sign-in of its own,
+since the browser opens on the machine of the home.
+
 Plugins add no tools yet: the SDK registers channels (version 1) and executors (version 2), not
 tools (ARCHITECTURE, Plugins).

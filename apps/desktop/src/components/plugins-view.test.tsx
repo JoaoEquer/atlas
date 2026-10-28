@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PluginRow, PluginSettingRow } from '@/protocol/protocol.generated'
 import * as app from '@/store/app'
 
-import { PluginsSection, withValues } from './plugins-view'
+import { PluginsTab, withValues } from './plugins-view'
 
 afterEach(() => {
   cleanup()
@@ -43,7 +43,7 @@ const voice = (settings: PluginSettingRow[], enabled = true): PluginRow => ({
 /** The plugin's settings, opened as the user opens them. */
 function shown(settings: PluginSettingRow[], enabled = true) {
   app.$plugins.set([voice(settings, enabled)])
-  render(<PluginsSection />)
+  render(<PluginsTab query="" />)
   fireEvent.click(screen.getByText('Settings'))
 }
 

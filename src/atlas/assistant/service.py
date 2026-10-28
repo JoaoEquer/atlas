@@ -603,6 +603,8 @@ class Assistant:
         #: Told when a bot is made, changed or deleted: whoever keeps the process tells the
         #: screens.
         self.on_bots_changed: Callable[[], None] = lambda: None
+        #: Told when an MCP server connected, was left out or stopped, or its tools changed.
+        self.on_mcp_changed: Callable[[], None] = lambda: None
         self.routines = self._shared.routines
         self._curator = Curator(
             library,
@@ -627,6 +629,16 @@ class Assistant:
     def agent(self, name: str) -> AgentDefinition | None:
         """A plugin's agent by the name `delegate` gives it (`video:editor`), step 16k."""
         return self._shared.agents.get(name)
+
+    @property
+    def mcp(self) -> Any:
+        """The MCP client (`atlas.mcp.McpClient`) once `start` made it; `None` without the mcp
+        extra."""
+        return self._shared.mcp
+
+    def skills(self) -> list[Skill]:
+        """The skills the main agent can load: the library's, then the plugins' that are on."""
+        return self._shared.library.catalog.skills()
 
     @property
     def programs(self) -> tuple[Path, ...]:
@@ -1027,6 +1039,7 @@ class Assistant:
     def _mcp_changed(self) -> None:
         for conversation in self._open.values():
             conversation.sync_mcp()
+        self.on_mcp_changed()
 
 
 class OpenConversation:

@@ -375,6 +375,43 @@ export const en = {
     titleUser: 'Change to your profile',
     whole: 'See before and after in full'
   },
+  extensions: {
+    added: 'Added here',
+    copied: 'Copied',
+    copy: 'Copy the command',
+    fromPlugin: 'From a plugin that is on',
+    fromPlugins: 'From plugins',
+    inMcpFile: 'In mcp.json',
+    intro: 'What this home adds to Atlas, by kind. Find more in the Marketplace.',
+    mcpIntro:
+      'The servers in mcp.json, in the home folder, and those of the plugins that are on. The model finds their tools by search.',
+    mcpState: (state: string, tools: number): string =>
+      state === 'connected'
+        ? tools === 1
+          ? 'Connected · 1 tool'
+          : `Connected · ${tools} tools`
+        : state === 'connecting'
+          ? 'Connecting…'
+          : 'Left out',
+    mcpSummary: (transport: string): string =>
+      transport === 'stdio'
+        ? "A program Atlas starts on the home's machine."
+        : 'A server Atlas reaches at its address.',
+    modelOnly: 'The model loads it when it needs it',
+    noExecutors: 'No executors yet. Atlas looks for the harnesses it supports each time it opens.',
+    noMatch: 'Nothing matches the search.',
+    noMcp: 'No MCP servers. Add one to mcp.json, in the home folder, or install one from the Marketplace.',
+    noSkills: 'No skills yet. Atlas writes one when it learns how you do something; the Marketplace has more.',
+    reading: 'Reading…',
+    refresh: 'Read again',
+    search: 'Search',
+    signIn: "It signs in with OAuth. Sign in from a terminal on the home's machine:",
+    signInAgain: "It signs in with OAuth. To sign in again, in a terminal on the home's machine:",
+    skillSource: (source: string, plugin: string): string =>
+      source === 'atlas' ? 'Ships with Atlas' : source === 'plugin' ? `From the plugin ${plugin}` : "This home's own",
+    skillsIntro: 'Procedures the model loads by name when it needs them; the ones you may call show their /command.',
+    yours: "This home's own"
+  },
   plugins: {
     approve: 'Let in',
     pageGone: 'This page belonged to a plugin that is off now.',
@@ -570,12 +607,11 @@ export const en = {
     saved: 'Saved',
     saving: 'Saving…',
     sections: {
-      executors: 'Executors',
+      extensions: 'Extensions',
       general: 'General',
       machines: 'Machines',
       model: 'Model',
       personalization: 'Personalization',
-      plugins: 'Plugins',
       safety: 'Safety',
       workspace: 'Workspace'
     },

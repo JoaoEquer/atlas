@@ -978,6 +978,53 @@ class MarketplaceChanged:
 
 
 @dataclass(frozen=True, slots=True)
+class McpServerRow:
+    """An MCP server the home declares, as the Extensions screen shows it."""
+
+    name: str
+    #: `stdio`, `http` or `sse`.
+    transport: str
+    #: Declared by a plugin that is on, not by the home's `mcp.json`.
+    plugin: bool
+    state: Literal["connecting", "connected", "left_out"]
+    #: The tools it gives the model; 0 until it connected.
+    tools: int
+    #: Why it, or some of its tools, were left out, and what fixes it.
+    problem: str | None
+    #: The command that signs in to it, run in a terminal on the home's machine, when it signs
+    #: in with OAuth; `null` for a server that does not.
+    login: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class McpList:
+    servers: list[McpServerRow]
+    #: Why `mcp.json` could not be read, or why no server connects here; `null` when all is well.
+    problem: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SkillRow:
+    """A skill the main agent can load, as the Extensions screen shows it."""
+
+    name: str
+    description: str
+    #: `atlas`, shipped with Atlas and unchanged since; `home`, the home's own (written by the
+    #: user or the agent, installed from the marketplace, or shipped and changed since);
+    #: `plugin`, from a plugin that is on.
+    source: Literal["atlas", "home", "plugin"]
+    #: The plugin it comes from; empty unless `source` is `plugin`.
+    plugin: str
+    #: The user may load it with `/name`.
+    user_invocable: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SkillList:
+    skills: list[SkillRow]
+
+
+@dataclass(frozen=True, slots=True)
 class PairingRow:
     """Someone a channel let in, or who waits with a code."""
 
@@ -2291,6 +2338,20 @@ METHODS: Mapping[str, Method] = {
             "(SDK version 24); read again on plugins.changed.",
         ),
         Method(
+            "mcp.list",
+            Empty,
+            McpList,
+            "The MCP servers the home declares, its mcp.json's and its plugins', each connecting, "
+            "connected or left out with why; read again on mcp.changed.",
+        ),
+        Method(
+            "skill.list",
+            Empty,
+            SkillList,
+            "The skills the main agent can load: the library's and those of the plugins that are "
+            "on.",
+        ),
+        Method(
             "plugin.call",
             PluginCallParams,
             PluginCallResult,
@@ -3013,6 +3074,13 @@ EVENTS: Mapping[str, Event] = {
             PluginsChanged,
             "A plugin was turned on, off or failed, or someone asked to pair; read plugin.list "
             "and pairing.list.",
+            conversation=False,
+        ),
+        Event(
+            "mcp.changed",
+            Empty,
+            "An MCP server connected, was left out or stopped, or its tools changed; read "
+            "mcp.list.",
             conversation=False,
         ),
         Event(

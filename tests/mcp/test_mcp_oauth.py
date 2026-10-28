@@ -33,7 +33,14 @@ from starlette.routing import Route
 from atlas.__main__ import main
 from atlas.agent import Toolset
 from atlas.home import Redactor, SecretText, VaultSettings, open_home
-from atlas.mcp import McpClient, McpSignInError, read_sign_in, sign_in
+from atlas.mcp import (
+    McpClient,
+    McpSignInError,
+    ServerState,
+    ServerStatus,
+    read_sign_in,
+    sign_in,
+)
 from atlas.secrets import MCP_SIGN_IN_FILE, Vault
 
 SERVER = Path(__file__).parent.parent / "mcp_server.py"
@@ -369,23 +376,34 @@ def test_a_server_without_a_sign_in_is_left_out_saying_how_then_connects(tmp_pat
             },
         )
 
-        async def scenario() -> tuple[str, bool, bool, str | None]:
+        async def scenario() -> tuple[str, bool, bool, str | None, list[ServerStatus]]:
             toolset = Toolset()
             client = McpClient(file, {}.get, toolset, sign_ins=store)
             await client.start()
             before = client.problems.get("erp", "")
             notes = toolset.get("mcp__notes__add_note") is not None
+            statuses = client.status()
             await sign_in("erp", url, store, browse)  # `atlas mcp login erp`, elsewhere
             erp.mcp_headers.clear()
             await client.signed_in()
             erp_now = toolset.get("mcp__erp__add_note") is not None
+            statuses += client.status()
             await client.close()
-            return before, notes, erp_now, client.problems.get("erp")
+            return before, notes, erp_now, client.problems.get("erp"), statuses
 
-        before, notes, erp_now, after = asyncio.run(scenario())
+        before, notes, erp_now, after, statuses = asyncio.run(scenario())
 
     assert "atlas mcp login erp" in before
     assert notes is True  # the other server connected
+    # What the app shows: the server that signs in, left out until the user signed in, then
+    # connected; the stdio one never signs in.
+    by_name = [(row.name, row.state, row.signs_in) for row in statuses]
+    assert by_name == [
+        ("erp", ServerState.LEFT_OUT, True),
+        ("notes", ServerState.CONNECTED, False),
+        ("erp", ServerState.CONNECTED, True),
+        ("notes", ServerState.CONNECTED, False),
+    ]
     assert erp_now is True
     assert after is None
     assert erp.mcp_headers == [] or all(h.startswith("Bearer ") for h in erp.mcp_headers)
@@ -401,20 +419,23 @@ def test_a_server_that_asks_without_its_entry_saying_oauth_is_found_by_its_401(
         url = f"{base}/mcp"
         file = _write(tmp_path, {"erp": {"type": "http", "url": url}})
 
-        async def scenario() -> tuple[str, bool, str | None]:
+        async def scenario() -> tuple[str, bool, str | None, bool]:
             toolset = Toolset()
             client = McpClient(file, {}.get, toolset, sign_ins=store)
             await client.start()
             before = client.problems.get("erp", "")
+            # The app sends it to the terminal too, though its entry never said oauth.
+            [status] = client.status()
             await sign_in("erp", url, store, browse)
             await client.signed_in()
             connected = toolset.get("mcp__erp__add_note") is not None
             await client.close()
-            return before, connected, client.problems.get("erp")
+            return before, connected, client.problems.get("erp"), status.signs_in
 
-        before, connected, after = asyncio.run(scenario())
+        before, connected, after, signs_in = asyncio.run(scenario())
 
     assert "signs in with OAuth" in before
+    assert signs_in is True
     assert "atlas mcp login erp" in before
     assert connected is True
     assert after is None
@@ -423,15 +444,16 @@ def test_a_server_that_asks_without_its_entry_saying_oauth_is_found_by_its_401(
 def test_a_server_that_fails_without_a_401_says_its_own_error(tmp_path: Path) -> None:
     file = _write(tmp_path, {"gone": {"type": "http", "url": "http://127.0.0.1:9/mcp"}})
 
-    async def scenario() -> str:
+    async def scenario() -> tuple[str, bool]:
         client = McpClient(file, {}.get, Toolset(), sign_ins=Store())
         await client.start()
         await client.close()
-        return client.problems.get("gone", "")
+        return client.problems.get("gone", ""), client.status()[0].signs_in
 
-    problem = asyncio.run(scenario())
+    problem, signs_in = asyncio.run(scenario())
     assert problem
     assert "atlas mcp login" not in problem
+    assert signs_in is False
 
 
 def test_a_renewal_refused_leaves_the_server_out_saying_to_sign_in_again(tmp_path: Path) -> None:

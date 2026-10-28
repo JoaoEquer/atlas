@@ -165,7 +165,7 @@ export function Sidebar() {
             icon={Plug}
             label={t.plugins.title}
             onClick={() => {
-              openSettings('plugins')
+              openSettings('extensions', 'plugin')
             }}
             testId="plugins-entry"
           >

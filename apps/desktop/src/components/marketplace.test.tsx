@@ -5,7 +5,7 @@ import type { EventParams } from '@/protocol/channel'
 import type { AtlasClient } from '@/protocol/client'
 import type { MarketplaceDone, MarketplaceList, MarketplacePage, MarketplaceRow } from '@/protocol/protocol.generated'
 import { $restored, $view, DRAFT, openHome, showMarketplace, startApp } from '@/store/app'
-import { $settings, $settingsSection } from '@/store/settings'
+import { $extensionsTab, $settings, $settingsSection } from '@/store/settings'
 
 import { MarketplaceView } from './marketplace-view'
 
@@ -247,7 +247,8 @@ describe('an item installs from its card, and its page shows what it is and need
     fireEvent.click(within(screen.getByTestId('marketplace-card')).getByTestId('marketplace-action'))
 
     expect($settings.get()).toBe(true)
-    expect($settingsSection.get()).toBe('plugins')
+    expect($settingsSection.get()).toBe('extensions')
+    expect($extensionsTab.get()).toBe('plugin')
   })
 
   it('reads the list again when a plugin is turned on over it, so its card says On', async () => {

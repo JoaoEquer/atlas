@@ -29,8 +29,8 @@ class Provider:
 
     def no_key(self) -> str:
         return (
-            f"There is no {self.key} in the vault: store it on the Plugins screen, or with "
-            f"`atlas secrets set {self.key}`."
+            f"There is no {self.key} in the vault: store it on Voice's card in Settings, "
+            f"Extensions, or with `atlas secrets set {self.key}`."
         )
 
 

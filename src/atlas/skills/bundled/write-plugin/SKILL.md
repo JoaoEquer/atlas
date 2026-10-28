@@ -37,7 +37,7 @@ Say which you picked and why before you write anything.
 4. **Install it**: `atlas plugins install <folder>/<name>`, which copies it into the home, off.
    Atlas asks the user first. Never write in the home's `plugins/` yourself: the file tools refuse
    it.
-5. **The user turns it on**, in Settings → Plugins, where Atlas shows what it declares. Never run
+5. **The user turns it on**, in Settings → Extensions → Plugins, where Atlas shows what it declares. Never run
    `atlas plugins enable` yourself: the consent is theirs to give. Tell them where to go.
 6. **A change** is made in `<folder>/<name>`, checked again, and brought in with
    `atlas plugins update <name>`, asked too. A folder that is a git repository is installed from

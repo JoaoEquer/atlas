@@ -21,6 +21,8 @@ from atlas.mcp import (
     McpConfigError,
     McpConnection,
     ServerConfig,
+    ServerState,
+    ServerStatus,
     Transport,
     filled,
     parse_config,
@@ -294,6 +296,40 @@ def test_a_server_that_cannot_start_is_left_out_and_the_others_connect(tmp_path:
     assert "could not start" in client.problems["missing"]
 
 
+def test_the_status_says_each_server_connecting_connected_or_left_out(tmp_path: Path) -> None:
+    file = _write(
+        tmp_path,
+        {"notes": _notes(), "missing": {"command": str(tmp_path / "no-such-program")}},
+    )
+
+    async def scenario() -> tuple[list[ServerStatus], list[ServerStatus], list[ServerStatus]]:
+        client = McpClient(file, {}.get, Toolset())
+        starting = asyncio.create_task(client.start())
+        await asyncio.sleep(0)
+        connecting = client.status()
+        await starting
+        connected = client.status()
+        await client.close()
+        return connecting, connected, client.status()
+
+    connecting, connected, closed = _run(scenario)
+
+    assert [(row.name, row.state) for row in connecting] == [
+        ("notes", ServerState.CONNECTING),
+        ("missing", ServerState.CONNECTING),
+    ]
+    notes, missing = connected
+    assert notes.state is ServerState.CONNECTED
+    assert notes.tools > 0
+    assert notes.problem is None
+    assert (notes.transport, notes.plugin, notes.signs_in) == (Transport.STDIO, False, False)
+    assert missing.state is ServerState.LEFT_OUT
+    assert missing.tools == 0
+    assert missing.problem is not None
+    assert "could not start" in missing.problem
+    assert closed[0].state is not ServerState.CONNECTED
+
+
 def test_a_broken_file_is_reported_and_atlas_goes_on(tmp_path: Path) -> None:
     (tmp_path / "mcp.json").write_text("{", encoding="utf-8")
 
@@ -302,7 +338,10 @@ def test_a_broken_file_is_reported_and_atlas_goes_on(tmp_path: Path) -> None:
         await client.start()
         return client
 
-    assert "is not valid JSON" in _run(scenario).problems["mcp.json"]
+    client = _run(scenario)
+    assert "is not valid JSON" in client.problems["mcp.json"]
+    assert client.file_problem == client.problems["mcp.json"]
+    assert client.status() == []
 
 
 def test_no_file_no_servers(tmp_path: Path) -> None:

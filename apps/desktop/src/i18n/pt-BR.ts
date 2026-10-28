@@ -356,6 +356,44 @@ export const ptBR: Override<Messages> = {
     titleUser: 'Mudança no seu perfil',
     whole: 'Ver antes e depois inteiros'
   },
+  extensions: {
+    added: 'Adicionados aqui',
+    copied: 'Copiado',
+    copy: 'Copiar o comando',
+    fromPlugin: 'De um plugin ligado',
+    fromPlugins: 'De plugins',
+    inMcpFile: 'No mcp.json',
+    intro: 'O que esta casa acrescenta ao Atlas, por tipo. Encontre mais na Loja.',
+    mcpIntro:
+      'Os servidores do mcp.json, na pasta da casa, e os dos plugins ligados. O modelo encontra as ferramentas deles pela busca.',
+    mcpState: (state: string, tools: number) =>
+      state === 'connected'
+        ? tools === 1
+          ? 'Conectado · 1 ferramenta'
+          : `Conectado · ${tools} ferramentas`
+        : state === 'connecting'
+          ? 'Conectando…'
+          : 'Deixado de fora',
+    mcpSummary: (transport: string) =>
+      transport === 'stdio'
+        ? 'Um programa que o Atlas inicia na máquina da casa.'
+        : 'Um servidor que o Atlas alcança pelo endereço dele.',
+    modelOnly: 'O modelo carrega quando precisa',
+    noExecutors: 'Nenhum executor ainda. O Atlas procura os harnesses que suporta toda vez que abre.',
+    noMatch: 'Nada corresponde à busca.',
+    noMcp: 'Nenhum servidor MCP. Adicione um no mcp.json, na pasta da casa, ou instale um pela Loja.',
+    noSkills: 'Nenhuma skill ainda. O Atlas escreve uma quando aprende como você faz algo; a Loja tem mais.',
+    reading: 'Lendo…',
+    refresh: 'Ler de novo',
+    search: 'Buscar',
+    signIn: 'Ele entra com OAuth. Entre por um terminal na máquina da casa:',
+    signInAgain: 'Ele entra com OAuth. Para entrar de novo, num terminal na máquina da casa:',
+    skillSource: (source: string, plugin: string) =>
+      source === 'atlas' ? 'Vem com o Atlas' : source === 'plugin' ? `Do plugin ${plugin}` : 'Desta casa',
+    skillsIntro:
+      'Procedimentos que o modelo carrega pelo nome quando precisa; os que você pode chamar mostram o /comando.',
+    yours: 'Desta casa'
+  },
   plugins: {
     approve: 'Deixar entrar',
     pageGone: 'Esta página era de um plugin que está desligado agora.',
@@ -553,12 +591,11 @@ export const ptBR: Override<Messages> = {
     saved: 'Salvo',
     saving: 'Salvando…',
     sections: {
-      executors: 'Executores',
+      extensions: 'Extensões',
       general: 'Geral',
       machines: 'Máquinas',
       model: 'Modelo',
       personalization: 'Personalização',
-      plugins: 'Plugins',
       safety: 'Segurança',
       workspace: 'Área de trabalho'
     },

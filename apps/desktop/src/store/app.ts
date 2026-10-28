@@ -44,6 +44,7 @@ import type {
   InstanceRow,
   KeyProvider,
   MarketplaceChanged,
+  McpList,
   MemoryEdit,
   MemoryEntries,
   MemoryEntriesParams,
@@ -70,6 +71,7 @@ import type {
   SessionRow,
   SettingChange,
   SettingsList,
+  SkillRow,
   SlashCommandRow,
   Soul,
   SubagentRow,
@@ -385,6 +387,11 @@ export class HomeSession {
   readonly $pairings = atom<PairingRow[]>([])
   /** What the server refused on the Plugins screen, said there. */
   readonly $pluginError = atom<null | string>(null)
+  /** The home's MCP servers and its skills, for the Extensions screen; `null` until it read them. */
+  readonly $mcpServers = atom<McpList | null>(null)
+  readonly $skills = atom<null | SkillRow[]>(null)
+  /** Why the Extensions screen could not read its MCP servers or its skills. */
+  readonly $extensionsError = atom<null | string>(null)
   /** Each routine's runs, read when its row opens. */
   readonly $runs = map<Record<string, RunRow[] | undefined>>({})
   /** Each conversation's running subagents, for its agent map: read when it opens, kept by its events. */
@@ -2134,6 +2141,22 @@ export class HomeSession {
     return true
   }
 
+  /** The MCP servers and the skills, for the Extensions screen; why not is said there. */
+  async refreshExtensions(): Promise<void> {
+    this.$extensionsError.set(null)
+
+    try {
+      const [mcp, { skills }] = await Promise.all([
+        this.client.call('mcp.list', {}),
+        this.client.call('skill.list', {})
+      ])
+      this.$mcpServers.set(mcp)
+      this.$skills.set(skills)
+    } catch (error) {
+      this.$extensionsError.set(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   async refreshPlugins(): Promise<void> {
     const [{ plugins }, { pairings }] = await Promise.all([
       this.client.call('plugin.list', {}),
@@ -2561,6 +2584,20 @@ export class HomeSession {
         void this.refreshMarketplace()
       }
 
+      // A plugin's skills come and go with it.
+      if (this.$skills.get() !== null) {
+        void this.refreshExtensions()
+      }
+
+      return
+    }
+
+    if (event.type === 'mcp.changed') {
+      // Read again only by a screen that read it once.
+      if (this.$mcpServers.get() !== null) {
+        void this.refreshExtensions()
+      }
+
       return
     }
 
@@ -2581,6 +2618,11 @@ export class HomeSession {
 
       if (open !== null && (changed.name === '' || changed.name === open)) {
         void this.readMarketPage(open)
+      }
+
+      // A skill installed or removed, as the Extensions screen lists them.
+      if (this.$skills.get() !== null) {
+        void this.refreshExtensions()
       }
 
       return
@@ -2797,6 +2839,9 @@ export const $plugins = atom<PluginRow[]>([])
 export const $screens = atom<PluginScreenRow[]>([])
 export const $pairings = atom<PairingRow[]>([])
 export const $pluginError = atom<null | string>(null)
+export const $mcpServers = atom<McpList | null>(null)
+export const $skills = atom<null | SkillRow[]>(null)
+export const $extensionsError = atom<null | string>(null)
 export const $runs = map<Record<string, RunRow[] | undefined>>({})
 export const $subagents = map<Record<string, SubagentRow[] | undefined>>({})
 export const $commands = map<Record<string, CommandRow[] | undefined>>({})
@@ -2887,6 +2932,9 @@ const MIRRORS: Mirror[] = [
   mirror($screens, s => s.$screens),
   mirror($pairings, s => s.$pairings),
   mirror($pluginError, s => s.$pluginError),
+  mirror($mcpServers, s => s.$mcpServers),
+  mirror($skills, s => s.$skills),
+  mirror($extensionsError, s => s.$extensionsError),
   mirror($runs, s => s.$runs),
   mirror($subagents, s => s.$subagents),
   mirror($commands, s => s.$commands),
@@ -3306,7 +3354,12 @@ export function writeSoul(text: string): Promise<Soul> {
   return current().client.call('soul.write', { text })
 }
 
-/** Read the plugins again, for the settings screen's Plugins. */
+/** Read the MCP servers and the skills again, for the settings screen's Extensions. */
+export function refreshExtensions(): void {
+  void current().refreshExtensions()
+}
+
+/** Read the plugins again, for the settings screen's Extensions. */
 export function refreshPlugins(): void {
   const session = current()
   session.$pluginError.set(null)

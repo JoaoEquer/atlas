@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AtlasClient } from '@/protocol/client'
 import type { ExecutorRow } from '@/protocol/protocol.generated'
 import { current, openHome, showSidebarTab, startApp } from '@/store/app'
-import { $settings, $settingsSection } from '@/store/settings'
+import { $extensionsTab, $settings, $settingsSection } from '@/store/settings'
 
 import { ExecutorOffers } from './executor-offers'
 import { ExecutorsList } from './executors-list'
@@ -93,7 +93,8 @@ describe('the harnesses on this computer', () => {
     expect(screen.queryByTestId('executor-offers')).toBeNull()
     fireEvent.click(screen.getByTestId('executors-open-settings'))
     expect($settings.get()).toBe(true)
-    expect($settingsSection.get()).toBe('executors')
+    expect($settingsSection.get()).toBe('extensions')
+    expect($extensionsTab.get()).toBe('executor')
   })
 
   it('says why one is not usable, with the command that installs it', async () => {
