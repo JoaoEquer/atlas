@@ -17,17 +17,16 @@ import { $extensionsTab, showExtensionsTab } from '@/store/settings'
 
 import { ExecutorOffers } from './executor-offers'
 import { Badge, ExtensionCard, KindTabs, Shelf } from './extension-card'
+import { McpSignIn } from './mcp-sign-in'
 import { PluginsTab } from './plugins-view'
-import { Check, Copy } from './ui/icons'
-import { IconButton } from './ui/tip'
 
 /**
  * The settings screen's Extensions (decided with the user on 28/10/2026, in place of its Plugins
  * and its Executors): what the home has of each kind the marketplace offers, in the marketplace's
  * look, a tab per kind with its count, a search, and a card each with its action. Plugins turn on
  * with their consent, as before; skills say where they came from; MCP servers say how they stand,
- * and the one that signs in with OAuth gives the command that signs in from a terminal, since the
- * sign-in opens a browser on the home's machine; executors turn on with their consent.
+ * and the one that signs in with OAuth has a Sign in button, and the command that signs in from a
+ * terminal (`McpSignIn`); executors turn on with their consent.
  */
 export function ExtensionsSection() {
   const tab = useStore($extensionsTab)
@@ -213,36 +212,8 @@ function McpServer({ server }: { server: McpServerRow }) {
           {server.problem}
         </p>
       )}
-      {server.login && <SignIn command={server.login} out={out} />}
+      <McpSignIn server={server} />
     </ExtensionCard>
-  )
-}
-
-/** How to sign in to a server that signs in with OAuth: in a terminal, where the home runs. */
-function SignIn({ command, out }: { command: string; out: boolean }) {
-  const [copied, setCopied] = useState(false)
-
-  return (
-    <div className="space-y-1 rounded-md bg-subtle p-2 text-xs" data-testid="mcp-sign-in">
-      <p className={out ? 'text-waiting-text' : 'text-muted-foreground'}>
-        {out ? t.extensions.signIn : t.extensions.signInAgain}
-      </p>
-      <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate font-mono select-text" data-testid="mcp-login" title={command}>
-          {command}
-        </code>
-        <IconButton
-          icon={copied ? Check : Copy}
-          label={copied ? t.extensions.copied : t.extensions.copy}
-          onClick={() => {
-            void navigator.clipboard.writeText(command).then(() => {
-              setCopied(true)
-            })
-          }}
-          testId="mcp-login-copy"
-        />
-      </div>
-    </div>
   )
 }
 

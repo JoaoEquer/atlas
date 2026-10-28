@@ -407,6 +407,11 @@ export const en = {
     search: 'Search',
     signIn: "It signs in with OAuth. Sign in from a terminal on the home's machine:",
     signInAgain: "It signs in with OAuth. To sign in again, in a terminal on the home's machine:",
+    signInAgainButton: 'Sign in again',
+    signInButton: 'Sign in',
+    signInNeeded: (server: string): string => `${server} waits for you to sign in.`,
+    signInOrTerminal: "Or from a terminal on the home's machine:",
+    signInWaiting: 'Authorize Atlas in the browser that opened. It connects as soon as you do.',
     skillSource: (source: string, plugin: string): string =>
       source === 'atlas' ? 'Ships with Atlas' : source === 'plugin' ? `From the plugin ${plugin}` : "This home's own",
     skillsIntro: 'Procedures the model loads by name when it needs them; the ones you may call show their /command.',

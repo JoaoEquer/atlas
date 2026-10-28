@@ -997,6 +997,19 @@ class McpServerRow:
 
 
 @dataclass(frozen=True, slots=True)
+class McpSignInParams:
+    #: The server's name, as `mcp.list` gives it.
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class McpSignInPage:
+    #: The server's authorization page, for the app to open in the browser. The browser comes
+    #: back to an address Atlas listens on, on the home's machine.
+    page: str
+
+
+@dataclass(frozen=True, slots=True)
 class McpList:
     servers: list[McpServerRow]
     #: Why `mcp.json` could not be read, or why no server connects here; `null` when all is well.
@@ -2343,6 +2356,14 @@ METHODS: Mapping[str, Method] = {
             McpList,
             "The MCP servers the home declares, its mcp.json's and its plugins', each connecting, "
             "connected or left out with why; read again on mcp.changed.",
+        ),
+        Method(
+            "mcp.sign_in",
+            McpSignInParams,
+            McpSignInPage,
+            "Start signing in to a server that signs in with OAuth, the app's Sign in button: the "
+            "page to open in the browser. Once the user authorized Atlas there, the server "
+            "connects and mcp.changed follows; a sign-in that fails leaves it out saying why.",
         ),
         Method(
             "skill.list",

@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from atlas.home import Home
+from atlas.server.protocol import INVALID_PARAMS
 from atlas.skills import SkillLibrary, sync_bundled
 from server_support import Client, Serve
 
@@ -54,6 +55,26 @@ def test_the_mcp_servers_say_how_they_stand_and_how_to_sign_in(home: Home, serve
     assert "atlas mcp login erp" in str(erp["problem"])
     assert erp["tools"] == 0
     assert listing["problem"] is None
+
+
+def test_the_sign_in_button_starts_only_for_a_server_that_signs_in(
+    home: Home, serve: Serve
+) -> None:
+    home.mcp_file.write_text(
+        json.dumps({"mcpServers": {"notes": {"command": "python", "args": [str(SERVER)]}}}),
+        encoding="utf-8",
+    )
+    server = serve()
+
+    with server.client() as app:
+        _listed(app, "notes", "connected")
+        stdio = app.call("mcp.sign_in", {"name": "notes"})
+        unknown = app.call("mcp.sign_in", {"name": "crm"})
+
+    assert stdio["error"]["code"] == INVALID_PARAMS
+    assert "does not sign in" in stdio["error"]["message"]
+    assert unknown["error"]["code"] == INVALID_PARAMS
+    assert "No MCP server is named crm." in unknown["error"]["message"]
 
 
 def test_a_broken_mcp_file_is_said(home: Home, serve: Serve) -> None:

@@ -5,7 +5,7 @@ import type { EventParams } from '@/protocol/channel'
 import type { AtlasClient } from '@/protocol/client'
 import type { McpList, McpServerRow, PluginRow, SkillRow } from '@/protocol/protocol.generated'
 import { openHome, startApp } from '@/store/app'
-import { matches } from '@/store/extensions'
+import { matches, pluginSignIns } from '@/store/extensions'
 import { $extensionsTab, $settingsSection, closeSettings, openSettings, SECTIONS } from '@/store/settings'
 
 import { ExtensionsSection } from './extensions-view'
@@ -51,8 +51,12 @@ const server = (name: string, change: Partial<McpServerRow> = {}): McpServerRow 
 interface Home {
   mcp: McpList
   plugins: PluginRow[]
+  /** Why `mcp.sign_in` fails, when it does. */
+  signInRefused?: string
   skills: SkillRow[]
 }
+
+const PAGE = 'https://auth.example.com/authorize?client_id=atlas'
 
 const HOME: Home = {
   mcp: {
@@ -90,12 +94,16 @@ function client(home: Home, calls: string[]): AtlasClient {
     'pairing.list': () => ({ pairings: [] }),
     'plugin.enable': () => ({ ...home.plugins[0], consented: true, enabled: true }),
     'plugin.list': () => ({ plugins: home.plugins }),
+    'mcp.sign_in': () => ({ page: PAGE }),
     'skill.list': () => ({ skills: home.skills })
   }
 
   return {
-    call: (method: string) => {
-      calls.push(method)
+    call: (method: string, params: unknown) => {
+      calls.push(method === 'mcp.sign_in' ? `${method} ${JSON.stringify(params)}` : method)
+      if (method === 'mcp.sign_in' && home.signInRefused) {
+        return Promise.reject(new Error(home.signInRefused))
+      }
 
       return Promise.resolve(answers[method]?.() ?? {})
     },
@@ -114,9 +122,13 @@ function client(home: Home, calls: string[]): AtlasClient {
   } as unknown as AtlasClient
 }
 
-async function open(home: Home = HOME, tab?: Parameters<typeof openSettings>[1]): Promise<string[]> {
+async function open(home: Home = HOME, tab?: Parameters<typeof openSettings>[1], remote = false): Promise<string[]> {
   const calls: string[] = []
-  stop = startApp({ client: () => client(home, calls), shell: { focus: () => undefined, notify: () => undefined } })
+  stop = startApp({
+    client: () => client(home, calls),
+    remote,
+    shell: { focus: () => undefined, notify: () => undefined }
+  })
   await openHome('work')
   render(<ExtensionsSection />)
   await act(async () => {
@@ -200,7 +212,7 @@ describe('Extensions shows a tab per kind, as the marketplace does', () => {
     expect(at(cards, 2).textContent).toContain('From the plugin video')
   })
 
-  it('says how each MCP server stands, and sends the one that signs in with OAuth to the terminal', async () => {
+  it('says how each MCP server stands, and offers the one that signs in with OAuth a Sign in button', async () => {
     await open(HOME, 'mcp')
     const cards = screen.getAllByTestId('mcp-card')
     const notes = at(cards, 0)
@@ -212,11 +224,70 @@ describe('Extensions shows a tab per kind, as the marketplace does', () => {
     expect(within(notes).queryByTestId('mcp-sign-in')).toBeNull()
     expect(within(erp).getByTestId('mcp-state').textContent).toBe('Left out')
     expect(within(erp).getByTestId('mcp-login').textContent).toBe('atlas mcp login erp')
-    expect(within(erp).getByTestId('mcp-sign-in').textContent).toContain('Sign in from a terminal')
-    // The sign-in opens a browser where the home runs: the app gives the command, not a button.
-    expect(within(erp).queryByRole('button', { name: /sign in/i })).toBeNull()
+    expect(within(erp).getByTestId('mcp-sign-in-button').textContent).toBe('Sign in')
+    expect(within(erp).getByTestId('mcp-sign-in').textContent).toContain('Or from a terminal')
     expect(within(video).getByTestId('mcp-state').textContent).toBe('Connected · 1 tool')
     expect(video.textContent).toContain('From a plugin that is on')
+  })
+
+  it('signs in from the button: the page opens in the browser, and the card waits for it', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null)
+    const calls = await open(HOME, 'mcp')
+    const erp = at(screen.getAllByTestId('mcp-card'), 1)
+
+    await act(async () => {
+      fireEvent.click(within(erp).getByTestId('mcp-sign-in-button'))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    expect(calls).toContain('mcp.sign_in {"name":"erp"}')
+    expect(opened).toHaveBeenCalledWith(PAGE)
+    expect(within(erp).getByTestId('mcp-sign-in-waiting').textContent).toContain('Authorize Atlas')
+    expect(within(erp).getByTestId<HTMLButtonElement>('mcp-sign-in-button').disabled).toBe(true)
+    opened.mockRestore()
+  })
+
+  it('says why a sign-in could not start, and lets the user try again', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null)
+    await open({ ...HOME, signInRefused: 'The MCP server erp did not answer.' }, 'mcp')
+    const erp = at(screen.getAllByTestId('mcp-card'), 1)
+
+    await act(async () => {
+      fireEvent.click(within(erp).getByTestId('mcp-sign-in-button'))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    expect(within(erp).getByTestId('mcp-sign-in-error').textContent).toBe('The MCP server erp did not answer.')
+    expect(within(erp).getByTestId<HTMLButtonElement>('mcp-sign-in-button').disabled).toBe(false)
+    expect(opened).not.toHaveBeenCalled()
+    opened.mockRestore()
+  })
+
+  it('gives only the command when the home runs on another machine, where the browser cannot come back', async () => {
+    await open(HOME, 'mcp', true)
+    const erp = at(screen.getAllByTestId('mcp-card'), 1)
+
+    expect(within(erp).queryByTestId('mcp-sign-in-button')).toBeNull()
+    expect(within(erp).getByTestId('mcp-sign-in').textContent).toContain('Sign in from a terminal')
+    expect(within(erp).getByTestId('mcp-login').textContent).toBe('atlas mcp login erp')
+  })
+
+  it('offers the Sign in button on the card of the plugin whose server waits for it', async () => {
+    const waiting = server('plugin_video_api', {
+      login: 'atlas mcp login plugin_video_api',
+      plugin: true,
+      state: 'left_out',
+      tools: 0,
+      transport: 'http'
+    })
+    await open({ ...HOME, mcp: { problem: null, servers: [...HOME.mcp.servers, waiting] } })
+    const rows = screen.getAllByTestId('plugin-row')
+
+    // Off, telegram has nothing to sign in to; video, on, has its server waiting.
+    expect(within(at(rows, 0)).queryByTestId('plugin-sign-in')).toBeNull()
+    const video = within(at(rows, 1)).getByTestId('plugin-sign-in')
+    expect(video.textContent).toContain('plugin_video_api waits for you to sign in.')
+    expect(within(video).getByTestId('mcp-sign-in-button')).toBeTruthy()
   })
 
   it('reads the MCP servers again when the server says they changed', async () => {
@@ -258,5 +329,18 @@ describe('the search', () => {
     expect(matches('', 'anything')).toBe(true)
     expect(matches('Tele GRAM', 'telegram', 'Talk to Atlas')).toBe(true)
     expect(matches('tele voice', 'telegram', 'Talk to Atlas')).toBe(false)
+  })
+})
+
+describe("a plugin's sign-ins", () => {
+  it('are its own servers that sign in, by the name Atlas gives them', () => {
+    const servers = [
+      server('plugin_video_api', { login: 'atlas mcp login plugin_video_api', plugin: true }),
+      server('plugin_video_files', { plugin: true }),
+      server('plugin_videos_api', { login: 'atlas mcp login plugin_videos_api', plugin: true }),
+      server('plugin_video_erp', { login: 'atlas mcp login plugin_video_erp' })
+    ]
+
+    expect(pluginSignIns(servers, 'video').map(row => row.name)).toEqual(['plugin_video_api'])
   })
 })

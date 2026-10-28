@@ -363,9 +363,14 @@ Decided 2026-10-09, in step 5 (`atlas.tools`):
   and one that fails to connect is asked once more without a token: a 401 leaves it out the same
   way (28/10/2026), since Claude Code finds a server's sign-in by its 401 and a plugin written for
   it names only the address (Cloudflare's). `atlas mcp login` finds a plugin's server too, by its
-  `plugin_<plugin>_<server>` name, among the plugins that are on.
-  Left out: Claude Code's `oauth` fields (a fixed client id, a callback port) and a sign-in from
-  the app.
+  `plugin_<plugin>_<server>` name, among the plugins that are on. **The app's Sign in button**
+  (asked for by the user on 28/10/2026: installing a plugin and signing in from a terminal was
+  backwards) is `mcp.sign_in`: the server starts the same sign-in (`McpClient.sign_in`,
+  `oauth.begin_sign_in`) and answers with the page as soon as it has one; the app opens it in the
+  system browser, which comes back to the loopback address on the home's machine, and the server
+  connects as the command's sign-in does, `mcp.changed` redrawing its card. A second press starts
+  over. Against a home on another machine the app gives only the command, since the browser could
+  not come back. Left out: Claude Code's `oauth` fields (a fixed client id, a callback port).
 - **The toolset changes while Atlas runs**: a source's tools are replaced together, or not at all
   when a name clashes, and the tool search is installed again after.
 
@@ -1758,9 +1763,10 @@ name, its mark, a summary cut to two lines and its action.
   or `plugin`, a plugin's that is on. A card shows its `/command` when the user may call it.
 - **MCPs** (`mcp.list`, `McpClient.status`): each server of the home's `mcp.json` and of the
   plugins that are on, connecting, connected with its tools, or left out with why, and why
-  `mcp.json` could not be read. A server that signs in with OAuth gives `atlas mcp login <name>`
-  to copy and run in a terminal; **the app has no sign-in of its own**, since the browser opens
-  on the machine of the home, which may be another. The server says `mcp.changed` when a server
+  `mcp.json` could not be read. A server that signs in with OAuth has a Sign in button
+  (`mcp.sign_in`, above), and gives `atlas mcp login <name>` to copy and run in a terminal; a
+  home on another machine gives only the command. A plugin's server waiting for a sign-in shows
+  the same button on the plugin's card. The server says `mcp.changed` when a server
   connects, leaves or changes its tools, and a screen that read the list reads it again.
 - **Executors:** the harnesses' offers as Executors showed them, in the grid.
 - **Proved** by the MCP client's status against real servers (one that signs in, through the fake

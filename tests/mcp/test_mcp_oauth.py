@@ -483,6 +483,58 @@ def test_a_server_that_fails_without_a_401_says_its_own_error(tmp_path: Path) ->
     assert signs_in is False
 
 
+def test_the_app_s_sign_in_button_connects_the_server_once_the_user_authorized(
+    tmp_path: Path,
+) -> None:
+    erp = FakeErp()
+    store = Store()
+    with serving(erp) as base:
+        file = _write(tmp_path, {"erp": {"type": "http", "url": f"{base}/mcp", "oauth": {}}})
+
+        async def scenario() -> tuple[str, str, bool, str | None]:
+            toolset = Toolset()
+            client = McpClient(file, {}.get, toolset, sign_ins=store)
+            await client.start()
+            before = client.problems.get("erp", "")
+            page = await client.sign_in("erp")  # the button; the app opens the page
+            browse(page)  # the user authorizes Atlas
+            for _ in range(200):
+                if toolset.get("mcp__erp__add_note") is not None:
+                    break
+                await asyncio.sleep(0.05)
+            connected = toolset.get("mcp__erp__add_note") is not None
+            await client.close()
+            return before, page, connected, client.problems.get("erp")
+
+        before, page, connected, after = asyncio.run(scenario())
+
+    assert "atlas mcp login erp" in before
+    assert "/oauth/authorize?" in page
+    assert connected is True
+    assert after is None
+
+
+def test_the_sign_in_button_says_why_a_server_cannot_sign_in(tmp_path: Path) -> None:
+    file = _write(tmp_path, {"notes": {"command": "python", "args": [str(SERVER)]}})
+
+    async def scenario() -> list[str]:
+        client = McpClient(file, {}.get, Toolset(), sign_ins=Store())
+        await client.start()
+        why: list[str] = []
+        for name in ("notes", "crm"):
+            try:
+                await client.sign_in(name)
+            except McpSignInError as error:
+                why.append(str(error))
+        await client.close()
+        return why
+
+    assert asyncio.run(scenario()) == [
+        "The MCP server notes runs on this machine and does not sign in.",
+        "No MCP server is named crm.",
+    ]
+
+
 def test_a_renewal_refused_leaves_the_server_out_saying_to_sign_in_again(tmp_path: Path) -> None:
     erp = FakeErp(expires_in=5)
     store = Store()

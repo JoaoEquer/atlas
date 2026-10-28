@@ -545,6 +545,14 @@ export interface McpServerRow {
   /** The command that signs in to it, run in a terminal on the home's machine, when it signs in with OAuth; `null` for a server that does not. */
   login: string | null
 }
+export interface McpSignInParams {
+  /** The server's name, as `mcp.list` gives it. */
+  name: string
+}
+export interface McpSignInPage {
+  /** The server's authorization page, for the app to open in the browser. The browser comes back to an address Atlas listens on, on the home's machine. */
+  page: string
+}
 export interface SkillList {
   skills: SkillRow[]
 }
@@ -1766,6 +1774,8 @@ export interface RpcMethods {
   'marketplace.update': { params: MarketplaceUpdateParams; result: MarketplaceDone }
   /** The MCP servers the home declares, its mcp.json's and its plugins', each connecting, connected or left out with why; read again on mcp.changed. */
   'mcp.list': { params: Empty; result: McpList }
+  /** Start signing in to a server that signs in with OAuth, the app's Sign in button: the page to open in the browser. Once the user authorized Atlas there, the server connects and mcp.changed follows; a sign-in that fails leaves it out saying why. */
+  'mcp.sign_in': { params: McpSignInParams; result: McpSignInPage }
   /** Apply a memory proposal, only if the entries it changes are as they were; it stays when it cannot apply. */
   'memory.approve': { params: ProposalRef; result: ProposalApproved }
   /** Drop a memory proposal without applying it. */
@@ -1951,6 +1961,7 @@ export const RPC_METHODS = [
   'marketplace.secret',
   'marketplace.update',
   'mcp.list',
+  'mcp.sign_in',
   'memory.approve',
   'memory.discard',
   'memory.edit',

@@ -19,8 +19,9 @@ fix and left out; the others still connect, and Atlas runs without it.
 its bearer token on every request, renewed before it ends and once on a 401 (`atlas.mcp.oauth`).
 One whose entry does not say so is found by its 401 when it fails to connect, as Claude Code finds
 it, and is left out the same way.
-The sign-in itself is the user's, in a terminal (`atlas mcp login`): without one the server is left
-out saying so, and `signed_in` tries it again once the user signed in.
+The sign-in itself is the user's, in a terminal (`atlas mcp login`) or by the app's Sign in button
+(`sign_in`): without one the server is left out saying so, and `signed_in` tries it again once
+the user signed in.
 
 **The plugins' servers** (step 16j) come beside the file's, as one more MCP file whose servers are
 named for their plugin (`atlas.plugins`): they connect when their plugin is turned on and leave
@@ -56,7 +57,14 @@ from atlas.mcp.model import (
     secrets_needed,
     tool_name,
 )
-from atlas.mcp.oauth import SignedIn, SignIns, asks_sign_in, login_hint, read_sign_in
+from atlas.mcp.oauth import (
+    SignedIn,
+    SignIns,
+    asks_sign_in,
+    begin_sign_in,
+    login_hint,
+    read_sign_in,
+)
 from atlas.mcp.store import McpConnection
 from atlas.trust import untrusted
 
@@ -97,6 +105,8 @@ class McpClient:
         #: The servers that sign in with OAuth or that the user signed in to, as last tried.
         self._signs_in: set[str] = set()
         self._refreshes: set[asyncio.Task[None]] = set()
+        #: The sign-ins the app started, waiting for the browser, by server name.
+        self._signing: dict[str, asyncio.Task[None]] = {}
 
     @property
     def sources(self) -> dict[str, str]:
@@ -372,8 +382,48 @@ class McpClient:
         await asyncio.gather(*(self._connect(server) for server in to_retry))
         self._changed()
 
+    async def sign_in(self, name: str) -> str:
+        """The app's Sign in button: start signing in to the declared server `name` and give the
+        page for the app to open in the browser. Once the user authorized Atlas there, the sign-in
+        is kept and the server connects (`signed_in`); a sign-in that fails leaves the server out
+        saying why. A second press starts over. Raises `McpError` before there is a page."""
+        if self._sign_ins is None:
+            raise McpSignInError("This Atlas keeps no sign-ins.")
+        declared = self._file_declared.get(name) or self._plugin_servers.get(name)
+        if declared is None:
+            raise McpSignInError(f"No MCP server is named {name}.")
+        if declared.transport is Transport.STDIO:
+            raise McpSignInError(
+                f"The MCP server {name} runs on this machine and does not sign in."
+            )
+        server = filled(declared, self._secret)
+        previous = self._signing.pop(name, None)
+        if previous is not None:
+            previous.cancel()
+        page, signing = await begin_sign_in(name, server.url, self._sign_ins)
+        self._signing[name] = asyncio.create_task(self._signed_in_by_app(name, signing))
+        return page
+
+    async def _signed_in_by_app(self, name: str, signing: asyncio.Task[Any]) -> None:
+        try:
+            await signing
+        except asyncio.CancelledError:
+            signing.cancel()
+            raise
+        except McpError as error:
+            self._left_out(name, str(error))
+            self._changed()
+            return
+        finally:
+            if self._signing.get(name) is asyncio.current_task():
+                del self._signing[name]
+        await self.signed_in()
+
     async def close(self) -> None:
         """Stop every server and take its tools out."""
+        for signing in self._signing.values():
+            signing.cancel()
+        self._signing.clear()
         for connection in self._connections.values():
             self._toolset.replace(connection.server.source, [])
             await connection.close()

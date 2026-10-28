@@ -5,6 +5,7 @@ import { t } from '@/i18n'
 import { $screenErrors } from '@/plugins/registry'
 import type { PairingRow, PluginRow, PluginSecretRow, PluginSettingRow } from '@/protocol/protocol.generated'
 import {
+  $mcpServers,
   $pairings,
   $pluginError,
   $plugins,
@@ -20,10 +21,11 @@ import {
   storePluginSecret,
   writePlugin
 } from '@/store/app'
-import { matches } from '@/store/extensions'
+import { matches, pluginSignIns } from '@/store/extensions'
 import { closeSettings } from '@/store/settings'
 
 import { Badge, ExtensionCard, Shelf } from './extension-card'
+import { McpSignIn } from './mcp-sign-in'
 
 /**
  * The plugins (docs/ARCHITECTURE.md, Plugins): each one off until turned on, and turning one on
@@ -105,6 +107,10 @@ function Plugin({ plugin }: { plugin: PluginRow }) {
   const state = plugin.running ? t.plugins.running : on ? t.plugins.on : t.plugins.off
   // Its screen loads in the app (step 16m), so why it did not is the app's to say.
   const screenError = useStore($screenErrors)[plugin.name]
+  // Its MCP servers waiting for a sign-in, right where it was turned on.
+  const signIns = pluginSignIns(useStore($mcpServers)?.servers ?? [], plugin.name).filter(
+    server => server.state === 'left_out'
+  )
 
   return (
     <ExtensionCard
@@ -191,6 +197,13 @@ function Plugin({ plugin }: { plugin: PluginRow }) {
           </div>
         </div>
       )}
+      {on &&
+        signIns.map(server => (
+          <div className="space-y-1" data-testid="plugin-sign-in" key={server.name}>
+            <p className="text-sm text-waiting-text">{t.extensions.signInNeeded(server.name)}</p>
+            <McpSignIn server={server} />
+          </div>
+        ))}
       {plugin.secrets.map(secret => (
         <Secret key={secret.name} plugin={plugin.name} secret={secret} />
       ))}

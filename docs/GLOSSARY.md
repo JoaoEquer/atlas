@@ -24,7 +24,7 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `vault` | cofre | The encrypted file of secrets in the home (`secrets/vault.json`), one age-encrypted entry per secret |
 | `secret` | segredo | One value in the vault: an API key, a token, a password |
 | `secret request` | pedido de chave | The `secrets` tool asking the user for a secret by name: a card in the app with a masked field, whose value goes straight to the vault; the model gets only `stored` or `no_answer`. A channel never answers it |
-| `MCP sign-in` | login do MCP | The OAuth 2.1 tokens a remote MCP server gave Atlas once the user authorized it (`atlas mcp login`), kept by server name in `secrets/mcp-sign-ins.json` beside the vault and renewed by Atlas |
+| `MCP sign-in` | login do MCP | The OAuth 2.1 tokens a remote MCP server gave Atlas once the user authorized it (`atlas mcp login`, or the app's Sign in button, `mcp.sign_in`), kept by server name in `secrets/mcp-sign-ins.json` beside the vault and renewed by Atlas |
 | `vault key` | chave do cofre | The age identity that opens the vault. Bound to its machine; never in a backup |
 | `migration` | migração | One numbered, forward-only change to a subject's tables, recorded once it runs and never edited after |
 | `provider` | provedor | A service that runs models behind one address and one key: OpenAI, OpenRouter, Gemini, a local Ollama |

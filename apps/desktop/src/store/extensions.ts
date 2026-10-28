@@ -28,6 +28,12 @@ export function skillShelves(skills: readonly SkillRow[]): Record<SkillRow['sour
   }
 }
 
+/** A plugin's MCP servers that sign in, for its card: the server names it as
+ * `plugin_<plugin>_<server>` (`atlas.plugins.server_name`). */
+export function pluginSignIns(servers: readonly McpServerRow[], plugin: string): McpServerRow[] {
+  return servers.filter(server => server.plugin && server.login && server.name.startsWith(`plugin_${plugin}_`))
+}
+
 /** The MCP servers by shelf: the home's `mcp.json`, then the plugins'. */
 export function mcpShelves(servers: readonly McpServerRow[]): { file: McpServerRow[]; plugins: McpServerRow[] } {
   return {

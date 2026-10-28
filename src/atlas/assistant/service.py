@@ -820,6 +820,17 @@ class Assistant:
         if self._shared.mcp is not None:
             await self._shared.mcp.reload_file()
 
+    async def mcp_sign_in(self, name: str) -> str:
+        """The app's Sign in button for the MCP server `name`: the page to open in the browser
+        (`atlas.mcp.McpClient.sign_in`). Raises `ValueError` saying why there is none."""
+        if self._shared.mcp is None:
+            raise ValueError("MCP servers are left out here: the mcp extra is not installed.")
+        module = importlib.import_module("atlas.mcp")
+        try:
+            return await self._shared.mcp.sign_in(name)
+        except module.McpError as error:
+            raise ValueError(str(error)) from error
+
     async def mcp_signed_in(self) -> None:
         """The MCP sign-ins changed (`atlas mcp login`): the servers left out for want of one are
         tried again."""

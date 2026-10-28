@@ -270,6 +270,8 @@ from atlas.server.protocol import (
     MarketplaceUpdateParams,
     McpList,
     McpServerRow,
+    McpSignInPage,
+    McpSignInParams,
     MemoryEdit,
     MemoryEntries,
     MemoryEntriesParams,
@@ -594,6 +596,7 @@ class Gateway:
             "plugin.themes": self._plugin_themes,
             "plugin.call": self._plugin_call_python,
             "mcp.list": self._mcp_list,
+            "mcp.sign_in": self._mcp_sign_in,
             "skill.list": self._skill_list,
             "marketplace.list": self._marketplace_list,
             "marketplace.page": self._marketplace_page,
@@ -1908,6 +1911,12 @@ class Gateway:
 
     async def _mcp_list(self, connection: Connection, params: Empty) -> McpList:
         return self._mcp_servers()
+
+    async def _mcp_sign_in(self, connection: Connection, params: McpSignInParams) -> McpSignInPage:
+        try:
+            return McpSignInPage(await self.assistant.mcp_sign_in(params.name))
+        except ValueError as error:
+            raise ProtocolError(INVALID_PARAMS, str(error)) from error
 
     def _mcp_servers(self) -> McpList:
         client = self.assistant.mcp

@@ -363,8 +363,8 @@ connected. Each tool is named `mcp__<server>__<tool>` and is deferred unless the
 declare itself read-only. Their results reach the model as untrusted data. ARCHITECTURE, Tools.
 
 A remote server that signs in with OAuth (`"oauth": {}` in its entry, or one that asks when Atlas
-connects) waits for you to sign in from a terminal, once. A plugin's server is named
-`plugin_<plugin>_<server>`:
+connects) waits for you to sign in, once: press **Sign in** on its card in the app (below), or
+from a terminal. A plugin's server is named `plugin_<plugin>_<server>`:
 
 ```bash
 atlas mcp login erp        # opens the server's page; authorize Atlas there
@@ -379,9 +379,12 @@ among your secrets, renews it on its own and connects the server within a few se
 restart. A server whose sign-in has ended says so and names the command again.
 
 The app lists every server under **Settings**, **Extensions**, on the **MCPs** tab: connecting,
-connected with its number of tools, or left out with why. One that signs in with OAuth shows the
-`atlas mcp login` command to run, with a button that copies it; the app has no sign-in of its own,
-since the browser opens on the machine of the home.
+connected with its number of tools, or left out with why. One that signs in with OAuth has a
+**Sign in** button: its page opens in your browser, you authorize Atlas there, and the server
+connects. A plugin's server that waits for a sign-in shows the same button on the plugin's card,
+on the **Plugins** tab. The card also gives the `atlas mcp login` command, with a button that
+copies it. When the home runs on another machine, the card gives only the command: the browser
+must come back to the machine where Atlas runs.
 
 Plugins add no tools yet: the SDK registers channels (version 1) and executors (version 2), not
 tools (ARCHITECTURE, Plugins).

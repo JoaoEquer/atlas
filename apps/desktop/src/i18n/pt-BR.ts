@@ -388,6 +388,11 @@ export const ptBR: Override<Messages> = {
     search: 'Buscar',
     signIn: 'Ele entra com OAuth. Entre por um terminal na máquina da casa:',
     signInAgain: 'Ele entra com OAuth. Para entrar de novo, num terminal na máquina da casa:',
+    signInAgainButton: 'Entrar de novo',
+    signInButton: 'Entrar',
+    signInNeeded: (server: string): string => `${server} espera você entrar.`,
+    signInOrTerminal: 'Ou por um terminal na máquina da casa:',
+    signInWaiting: 'Autorize o Atlas no navegador que abriu. Ele conecta assim que você autorizar.',
     skillSource: (source: string, plugin: string) =>
       source === 'atlas' ? 'Vem com o Atlas' : source === 'plugin' ? `Do plugin ${plugin}` : 'Desta casa',
     skillsIntro:

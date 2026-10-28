@@ -3359,6 +3359,22 @@ export function refreshExtensions(): void {
   void current().refreshExtensions()
 }
 
+/**
+ * The Sign in button of an MCP server that signs in with OAuth: the server's page opens in the
+ * system browser, and once the user authorized Atlas there the server connects, and
+ * `mcp.changed` redraws its card. Gives why it could not start, or `null`.
+ */
+export async function signInToMcp(name: string): Promise<null | string> {
+  try {
+    const { page } = await current().client.call('mcp.sign_in', { name })
+    window.open(page)
+
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
 /** Read the plugins again, for the settings screen's Extensions. */
 export function refreshPlugins(): void {
   const session = current()

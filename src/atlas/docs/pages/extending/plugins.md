@@ -211,8 +211,8 @@ stops when it is turned off.
   itself read-only (`readOnlyHint`), as Claude Code asks before a plugin's MCP tools. A plugin
   whose server only reads may say `"trust": "full"` in its entry.
 - A remote server that signs in with OAuth needs nothing more than its address: Atlas finds out
-  when the server asks, leaves it out until you sign in, and connects it once you run
-  `atlas mcp login plugin_<plugin>_<server>`.
+  when the server asks, leaves it out until you sign in, and connects it once you press **Sign
+  in** on the plugin's card, or run `atlas mcp login plugin_<plugin>_<server>`.
 
 An MCP server's tools reach the model behind the tool search, like every MCP tool.
 
