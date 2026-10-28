@@ -1,17 +1,25 @@
 """Voice, talking to Atlas by voice: the plugin's `register` (step 17a).
 
-- **Audio the user sends**, dropped in the app or sent on a channel, is written down by OpenAI's
-  transcription model before the turn (a reader, SDK version 21), and the model reads what it says.
+Everything goes through one provider, the `provider` setting's: OpenAI or Gemini, each with the
+key Atlas's provider of that name reads, and each with its own models where a setting is left
+empty.
+
+- **Audio the user sends**, dropped in the app or sent on a channel, is written down by the
+  provider's transcription model before the turn (a reader, SDK version 21), and the model reads
+  what it says.
 - **Dictation**: the box's microphone (its screen, `desktop/plugin.js`) records, and the words come
   back into the box to be corrected before they are sent (the `dictate` call). **Anywhere** (step
   17b): a shortcut heard in every program records, and the words are pasted where the user is.
   Every dictation is kept in the home with its recording (`dictations`, the screen's page).
-- **Atlas speaks when asked**: `voice_speak` says a text with OpenAI's speech model and sends it to
-  the user (SDK version 22), a voice message on Telegram, a file in the app. Receiving audio never
-  makes Atlas answer in audio.
-- **The live conversation**: the screen talks with OpenAI's full-duplex voice model, whose session
-  this opens (`live_session`) so the key stays here; each request the voice hands over is a turn of
-  the conversation, which a `UserPromptSubmit` hook marks as spoken (`live_turn`, then the note).
+- **Atlas speaks when asked**: `voice_speak` says a text with the provider's speech model and sends
+  it to the user (SDK version 22), a voice message on Telegram, a file in the app. Receiving audio
+  never makes Atlas answer in audio.
+- **The live conversation**: the screen talks with the provider's full-duplex voice model, whose
+  session this opens (`live_session`) so the key stays here; each request the voice hands over is a
+  turn of the conversation, which a `UserPromptSubmit` hook marks as spoken (`live_turn`, then the
+  note).
+- **The settings' lists** (SDK version 25): the Plugins screen asks `setting_choices` for the
+  models and voices the provider has, so they are picked rather than typed.
 
 It imports from Atlas only `atlas.plugins.sdk`, as every plugin must; the rest is its own.
 """
@@ -22,22 +30,21 @@ import secrets
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from atlas.plugins.sdk import PluginContext, ToolHost
 
+from .audio import voice_note
+from .choices import CONVERSATION_MODEL, setting_choices
 from .dictations import Dictation, Dictations
-from .endpoint import OpenAIError
+from .endpoint import GEMINI, OPENAI, PROVIDERS, Provider, VoiceError
+from .gemini import GeminiLive, GeminiSpeaker, GeminiTranscriber, live_history
 from .live import LiveSessions, history_of, turn_note
 from .speech import Speaker
-from .transcribe import NO_KEY, Transcriber
+from .transcribe import Transcriber
 
-#: The vault name of the OpenAI key, the one Atlas's OpenAI provider reads.
-KEY_SECRET = "OPENAI_API_KEY"  # noqa: S105 - a name, not the key
 #: The longest dictation the screen may send, in bytes: a few minutes of speech.
 DICTATION_BYTES = 10 * 1024 * 1024
-#: The setting's value that keeps the conversation's own model for spoken turns.
-CONVERSATION_MODEL = "conversation"
 #: How long a spoken turn's context waits for its turn.
 CONTEXT_SECONDS = 60.0
 
@@ -61,37 +68,57 @@ SPEAK_PARAMETERS: dict[str, Any] = {
 }
 
 
+class Transcribes(Protocol):
+    async def transcribe_data(self, name: str, data: bytes, media_type: str) -> str: ...
+
+
 def register(ctx: PluginContext) -> None:
     #: The spoken exchange each conversation's next turn refers to, and when it was handed over.
     spoken: dict[str, tuple[str, float]] = {}
 
-    def transcriber() -> Transcriber:
-        # Read on each use, so a key stored after the plugin was turned on is used.
-        return Transcriber(
-            ctx.secret(KEY_SECRET), ctx.setting("api_url"), ctx.setting("transcription_model")
-        )
+    # Read on each use, so a key or a setting changed after the plugin was turned on is used.
+    def provider() -> Provider:
+        return PROVIDERS.get(ctx.setting("provider").strip().lower(), OPENAI)
+
+    def key() -> str | None:
+        return ctx.secret(provider().key)
+
+    def api_url() -> str:
+        return ctx.setting("api_url").strip() or provider().api_url
+
+    def chosen(setting: str, default: str) -> str:
+        return ctx.setting(setting).strip() or default
+
+    def transcriber() -> Transcribes:
+        model = chosen("transcription_model", provider().transcription_model)
+        if provider() is GEMINI:
+            return GeminiTranscriber(key(), api_url(), model)
+        return Transcriber(key(), api_url(), model)
 
     async def read(path: Path, media_type: str) -> str:
-        return await transcriber().transcribe(path, media_type)
+        return await transcriber().transcribe_data(path.name, path.read_bytes(), media_type)
 
     async def speak(arguments: dict[str, Any], host: ToolHost) -> str:
         text = str(arguments.get("text") or "").strip()
         if not text:
             raise ValueError("Give the text to say.")
         host.progress("Speaking")
-        speaker = Speaker(
-            ctx.secret(KEY_SECRET),
-            ctx.setting("api_url"),
-            ctx.setting("speech_model"),
-            ctx.setting("voice"),
-        )
+        using = provider()
+        model = chosen("speech_model", using.speech_model)
+        voice = chosen("voice", using.voice)
+        tone = str(arguments.get("tone") or "")
         try:
-            audio = await speaker.speak(text, tone=str(arguments.get("tone") or ""))
-        except OpenAIError as error:
+            if using is GEMINI:
+                wav = await GeminiSpeaker(key(), api_url(), model, voice).speak(text, tone=tone)
+                audio, suffix = await voice_note(wav)
+            else:
+                audio = await Speaker(key(), api_url(), model, voice).speak(text, tone=tone)
+                suffix = ".ogg"
+        except VoiceError as error:
             raise ValueError(str(error)) from error
         folder = ctx.data_folder / "speech"
         folder.mkdir(parents=True, exist_ok=True)
-        made = folder / f"atlas-{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}.ogg"
+        made = folder / f"atlas-{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}{suffix}"
         made.write_bytes(audio)
         try:
             kept = await host.send_file(made)
@@ -118,7 +145,7 @@ def register(ctx: PluginContext) -> None:
         name = "dictation.ogg" if "ogg" in dictation.media_type else "dictation.webm"
         try:
             text = await transcriber().transcribe_data(name, data, dictation.media_type)
-        except OpenAIError as error:
+        except VoiceError as error:
             kept.written(dictation, "", str(error))
             raise ValueError(str(error)) from error
         return kept.written(dictation, text)
@@ -140,10 +167,10 @@ def register(ctx: PluginContext) -> None:
         return {"id": done.id, "text": done.text}
 
     async def dictation_status(_params: Any) -> dict[str, Any]:
-        ready = bool(ctx.secret(KEY_SECRET))
+        ready = bool(key())
         return {
             "ready": ready,
-            "why": "" if ready else NO_KEY,
+            "why": "" if ready else provider().no_key(),
             "shortcut": ctx.setting("dictation_shortcut").strip(),
         }
 
@@ -164,34 +191,37 @@ def register(ctx: PluginContext) -> None:
         kept.delete(str(_object(params).get("id") or ""))
         return True
 
-    def live() -> LiveSessions:
-        return LiveSessions(
-            ctx.secret(KEY_SECRET),
-            ctx.setting("api_url"),
-            ctx.setting("live_model"),
-            ctx.setting("voice"),
-        )
-
     async def live_status(_params: Any) -> dict[str, Any]:
-        chosen = ctx.setting("voice_turns_model").strip()
-        provider, _, model = chosen.partition("/")
-        fixed = chosen != CONVERSATION_MODEL and bool(provider and model)
+        using = provider()
+        turns = chosen("voice_turns_model", using.turns_model)
+        provider_id, _, model = turns.partition("/")
+        fixed = turns != CONVERSATION_MODEL and bool(provider_id and model)
+        ready = bool(key())
         return {
-            "ready": live().ready,
-            "why": "" if live().ready else "There is no OPENAI_API_KEY in the vault.",
+            "ready": ready,
+            "why": "" if ready else using.no_key(),
+            # The screen speaks WebRTC to OpenAI and a WebSocket to Gemini.
+            "provider": using.id,
             # Spoken turns run on a model of their own, with no reasoning, or the conversation's.
-            "turns": {"provider": provider, "model": model, "effort": "none"} if fixed else None,
+            "turns": {"provider": provider_id, "model": model, "effort": "none"} if fixed else None,
             "quiet_seconds": _seconds(ctx.setting("quiet_close_seconds"), 120),
         }
 
-    async def live_session(params: Any) -> dict[str, str]:
+    async def live_session(params: Any) -> dict[str, Any]:
         given = _object(params)
-        offer = str(given.get("sdp") or "")
-        if not offer.startswith("v="):
-            raise ValueError("The screen sent no WebRTC offer.")
+        using = provider()
+        model = chosen("live_model", using.live_model)
+        voice = chosen("voice", using.voice)
+        history = history_of(given.get("history"))
         try:
-            return await live().open(offer, history_of(given.get("history")))
-        except OpenAIError as error:
+            if using is GEMINI:
+                live = GeminiLive(key(), api_url(), model, voice)
+                return await live.open(live_history(history), str(given.get("resume") or ""))
+            offer = str(given.get("sdp") or "")
+            if not offer.startswith("v="):
+                raise ValueError("The screen sent no WebRTC offer.")
+            return dict(await LiveSessions(key(), api_url(), model, voice).open(offer, history))
+        except VoiceError as error:
             raise ValueError(str(error)) from error
 
     async def live_turn(params: Any) -> bool:
@@ -199,6 +229,17 @@ def register(ctx: PluginContext) -> None:
         conversation = str(given.get("conversation") or "")
         spoken[conversation] = (str(given.get("spoken") or "")[-4_000:], time.monotonic())
         return True
+
+    async def choices(params: Any) -> dict[str, Any]:
+        given = _object(params)
+        return await setting_choices(
+            str(given.get("setting") or ""),
+            provider(),
+            key(),
+            api_url(),
+            given.get("models"),
+            str(given.get("language") or "")[:20],
+        )
 
     ctx.register_reader("audio", read)
     ctx.register_tool("voice_speak", SPEAK_DESCRIPTION, SPEAK_PARAMETERS, speak)
@@ -212,6 +253,7 @@ def register(ctx: PluginContext) -> None:
     ctx.register_call("live_status", live_status)
     ctx.register_call("live_session", live_session)
     ctx.register_call("live_turn", live_turn)
+    ctx.register_call("setting_choices", choices)
 
 
 def _object(params: Any) -> dict[str, Any]:

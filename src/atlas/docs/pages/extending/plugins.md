@@ -79,7 +79,15 @@ what it keeps while it runs (caches, `node_modules`, renders) goes in its data f
   does not name fails the plugin.
 - `secrets` are read from the vault, and only those named (`ctx.secret`). The user stores them on
   the Plugins screen, or with `atlas plugins secret`.
-- `settings` are values the user may change, with their defaults (`ctx.setting`).
+- `settings` are values the user may change, with their defaults (`ctx.setting`). With `choices`
+  (needs `api` 25) the Plugins screen lists them rather than taking typed text, and **Other…**
+  still types one: a list of values (`["openai", "gemini"]`); `"models"`, the models Atlas's
+  picker offers, as `provider/model`; or `"plugin"`, what its Python's call `setting_choices`
+  answers when the screen shows the setting, which may ask a service what it has. That call gets
+  `{setting, models, language}` (the picker's models as `{value, label}`, the app's language such
+  as `pt-BR`), returns `{"choices": [{"value", "label"}], "why": ""}`, `why` saying what kept the
+  list short, and is named under `calls`. The list is asked again when another of the plugin's
+  settings or keys changes.
 - `network` lists the hosts it reaches. It is shown at consent and not enforced.
 - `hooks` names the events its Python hooks into (needs `api` 15).
 - `readers` names the kinds of attachment its Python reads into text, `audio` (needs `api` 21).
@@ -672,7 +680,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 ## What the SDK offers
 
-Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 24), and the ACP
+Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 25), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
 (`SCREEN_API` 3). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.

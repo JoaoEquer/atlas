@@ -377,6 +377,10 @@ export const ptBR: Override<Messages> = {
     peopleIntro:
       'Quem pode falar com o Atlas por um canal. Quem é novo recebe um código; deixe a pessoa entrar aqui, e ela manda a mensagem de novo.',
     noPeople: 'Ninguém ainda.',
+    other: 'Outro…',
+    otherHint: 'Digitar um valor que não está na lista',
+    list: 'Lista',
+    listHint: 'Escolher da lista de novo',
     reload: 'Recarregar',
     reloadHint:
       'Carrega de novo, dos arquivos, os plugins ligados. O Atlas também faz isso quando um arquivo de um deles é salvo.',

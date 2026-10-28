@@ -12,8 +12,7 @@ from typing import Any, cast
 
 import httpx2
 
-from .endpoint import OpenAIError, refusal
-from .transcribe import NO_KEY
+from .endpoint import OPENAI, VoiceError, refusal, unreachable
 
 REQUEST_SECONDS = 30.0
 
@@ -68,9 +67,9 @@ class LiveSessions:
     async def open(self, offer: str, history: list[dict[str, Any]]) -> dict[str, str]:
         """OpenAI's answer to the app's WebRTC offer: `{"session": id, "sdp": answer}`. `history`
         is the conversation's last messages, in the voice model's input shape, so the voice knows
-        what was said before. Raises `OpenAIError`."""
+        what was said before. Raises `VoiceError`."""
         if not self._key:
-            raise OpenAIError(NO_KEY)
+            raise VoiceError(OPENAI.no_key())
         session: dict[str, Any] = {
             "model": self._model,
             "instructions": PERSONA,
@@ -86,17 +85,17 @@ class LiveSessions:
                     self._url, headers={"Authorization": f"Bearer {self._key}"}, json=body
                 )
             except httpx2.HTTPError as error:
-                raise OpenAIError(f"OpenAI could not be reached: {error}") from error
+                raise unreachable(OPENAI, error) from error
         if response.status_code not in (200, 201):
-            raise OpenAIError(refusal("the voice session", response))
+            raise VoiceError(refusal(OPENAI, "the voice session", response))
         try:
             found = cast("dict[str, Any]", response.json())
         except ValueError as error:
-            raise OpenAIError("OpenAI's answer was not JSON.") from error
+            raise VoiceError("OpenAI's answer was not JSON.") from error
         transport = found.get("transport")
         sdp = cast("dict[str, Any]", transport).get("sdp") if isinstance(transport, dict) else None
         if not isinstance(sdp, str) or not sdp:
-            raise OpenAIError("OpenAI's answer held no WebRTC answer.")
+            raise VoiceError("OpenAI's answer held no WebRTC answer.")
         opened = found.get("session")
         session_id = cast("dict[str, Any]", opened).get("id") if isinstance(opened, dict) else ""
         return {"session": str(session_id or ""), "sdp": sdp}

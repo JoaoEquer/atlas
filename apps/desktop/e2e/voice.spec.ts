@@ -4,6 +4,9 @@
  * model server's transcription; the live conversation asks the plugin's Python for its session,
  * which reaches OpenAI's session endpoint with the app's WebRTC offer.
  *
+ * Its settings are picked from lists its Python asks the provider for (SDK version 25), and switch
+ * to Gemini's when the provider changes.
+ *
  * Chromium's fake microphone stands in for a real one. The voice itself, spoken and heard over
  * WebRTC, needs OpenAI: the fake answers no real WebRTC, so the conversation ends there, saying why.
  */
@@ -11,7 +14,7 @@ import { spawnSync } from 'node:child_process'
 
 import { expect, test } from '@playwright/test'
 
-import { atlas, cleanEnvironment, type Desktop, type FakeModel, launch, ROOT } from './harness'
+import { atlas, cleanEnvironment, type Desktop, type FakeModel, launch, openSettings, ROOT } from './harness'
 
 let desktop: Desktop | undefined
 
@@ -147,4 +150,24 @@ test('the shortcut dictates anywhere: pasted where the user is, and kept on the 
   // Deleted from the page, gone from the home.
   await page.getByTestId('voice-dictation-remove').first().click()
   await expect(rows).toHaveCount(1)
+})
+
+test("the voice's settings are picked from lists, which follow the provider", async () => {
+  desktop = await launch({ setup: voiceOn })
+  const { page } = desktop
+
+  await openSettings(page, 'plugins')
+  const row = page.locator('[data-testid="plugin-row"][data-plugin="voice"]')
+  await row.locator('summary').click()
+  const provider = row.getByLabel('provider', { exact: true })
+  const model = row.getByLabel('transcription_model', { exact: true })
+
+  await expect(provider.locator('option')).toHaveText(['openai', 'gemini', 'Other…'])
+  // The fake's OpenAI lists no transcription model: the provider's own is left, and typing another.
+  await expect(model.locator('option')).toHaveText(["OpenAI's choice: gpt-transcribe", 'Other…'])
+
+  await provider.selectOption('gemini')
+
+  await expect(model.locator('option').first()).toHaveText("Gemini's choice: gemini-3.5-transcribe")
+  await expect(row).toContainText('There is no GEMINI_API_KEY in the vault')
 })

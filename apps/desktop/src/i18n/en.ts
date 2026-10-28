@@ -396,6 +396,10 @@ export const en = {
     peopleIntro:
       'Who may talk to Atlas through a channel. Someone new gets a code; let them in here, and they send their message again.',
     noPeople: 'Nobody yet.',
+    other: 'Other…',
+    otherHint: 'Type a value that is not on the list',
+    list: 'List',
+    listHint: 'Pick from the list again',
     reload: 'Reload',
     reloadHint: 'Load the plugins that are on again from their files. Atlas also does it when a file of one is saved.',
     remove: 'Remove',

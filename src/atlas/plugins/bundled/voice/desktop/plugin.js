@@ -10,14 +10,15 @@
  *   unsent, a recording stops on its own at 10 minutes, and a press while the words are being
  *   written down starts nothing. Every dictation, the box's too, is kept in the home with its
  *   recording, on the page "Dictations" (`dictations`).
- * - **The live conversation**: OpenAI's full-duplex voice model (`gpt-live-1`) talks with the user
- *   over WebRTC from this app; the plugin's Python opens the session, so the key never reaches the
- *   app (`live_session`). The voice has no tools: each request it hands over (a delegation) is sent
- *   to the conversation as the box sends a message, marked as spoken for the model (`live_turn`, a
- *   note the Python's hook adds), and what Atlas answers is given back to the voice to say. It
- *   runs on a model of its own when the plugin's setting says so, the conversation's model put
- *   back at the end. It ends on the button, on a spoken "stop", or after a silence, which OpenAI
- *   bills too.
+ * - **The live conversation**: the provider's full-duplex voice model talks with the user from
+ *   this app: OpenAI's (`gpt-live-1`) over WebRTC, Gemini's (`gemini-3.8-live`) over a WebSocket.
+ *   The plugin's Python opens the session, so the key never reaches the app (`live_session`). The
+ *   voice has no tools: each request it hands over (OpenAI's delegation, Gemini's call of
+ *   `ask_atlas`) is sent to the conversation as the box sends a message, marked as spoken for the
+ *   model (`live_turn`, a note the Python's hook adds), and what Atlas answers is given back to the
+ *   voice to say. It runs on a model of its own when the plugin's setting says so, the
+ *   conversation's model put back at the end. It ends on the button, on a spoken "stop", or after
+ *   a silence, which the provider bills too.
  *
  * Plain ESM, loaded by the app as it is: only `@atlas/plugin-sdk` and `react` are imported.
  */
@@ -42,7 +43,7 @@ const WORDS = PORTUGUESE
       ended: "A conversa por voz terminou",
       quiet:
         "A conversa por voz fechou depois do silêncio, que também é cobrado.",
-      noKey: "A voz precisa do OPENAI_API_KEY no cofre.",
+      noKey: "A voz precisa da chave do provedor no cofre.",
       working: (name) =>
         `O Atlas está trabalhando (${name}). Ainda não terminou.`,
       noAnswer: "O Atlas terminou sem uma resposta para dizer.",
@@ -86,7 +87,7 @@ const WORDS = PORTUGUESE
       ended: "The voice conversation ended",
       quiet:
         "The voice conversation closed after the silence, which is billed too.",
-      noKey: "Voice needs the OPENAI_API_KEY in the vault.",
+      noKey: "Voice needs the provider's key in the vault.",
       working: (name) => `Atlas is working (${name}). Not done yet.`,
       noAnswer: "Atlas finished without an answer to say.",
       anywhereRecording: (key) => `Recording: ${key} to stop`,
@@ -162,8 +163,9 @@ export function isStopPhrase(said) {
 }
 
 /** A delegation's turn from the spoken exchange: `prompt`, what the user said last (the
- *  conversation's user message), and `spoken`, the exchange, for the model's note. */
-export function delegated(fragments) {
+ *  conversation's user message), or else the `request` the voice model wrote, and `spoken`, the
+ *  exchange, for the model's note. */
+export function delegated(fragments, request = "") {
   const turns = [];
 
   for (const fragment of fragments.slice(-CONTEXT_FRAGMENTS)) {
@@ -185,7 +187,10 @@ export function delegated(fragments) {
     .filter((line) => !line.endsWith(": "))
     .join("\n");
 
-  return { prompt: tidy(lastUser?.text ?? "") || spoken.slice(-400), spoken };
+  return {
+    prompt: tidy(lastUser?.text ?? "") || tidy(request) || spoken.slice(-400),
+    spoken,
+  };
 }
 
 /** Atlas's answer as words to say: no Markdown, no code, no addresses. */
@@ -228,8 +233,9 @@ export function appends(text, most = APPEND_CHARACTERS) {
 }
 
 /**
- * One live conversation, apart from WebRTC: `link` talks to the voice model, `atlas` to the
- * conversation. Each is a few functions, so the engine is tested without a microphone.
+ * One live conversation, apart from the connection: `link` talks to the voice model, `atlas` to the
+ * conversation. Each is a few functions, so the engine is tested without a microphone. The events
+ * both ways are OpenAI's voice model's; the Gemini link reads Gemini's into them and back.
  *
  *   link:  open(history) -> Promise, send(event), close()
  *   atlas: conversation() -> id | null, send(text), mark(conversation, spoken),
@@ -302,7 +308,7 @@ export class LiveTalk {
       }
 
       case "session.delegation.created":
-        this.delegate(event.delegation?.id ?? null);
+        this.delegate(event.delegation?.id ?? null, event.request ?? "");
 
         return;
 
@@ -330,12 +336,12 @@ export class LiveTalk {
     }, SETTLE_MS);
   }
 
-  delegate(id) {
+  delegate(id, request = "") {
     if (!id) {
       return;
     }
 
-    const { prompt, spoken } = delegated(this.fragments);
+    const { prompt, spoken } = delegated(this.fragments, request);
 
     if (isStopPhrase(prompt)) {
       void this.end("stop_phrase");
@@ -391,11 +397,8 @@ export class LiveTalk {
         ? speakable(event.payload?.text ?? "")
         : "";
 
-    if (text) {
-      this.say(id, text);
-    } else {
-      this.think(id, WORDS.noAnswer);
-    }
+    // Said either way: a voice waiting on its request is answered, even with nothing.
+    this.say(id, text || WORDS.noAnswer);
 
     this.set("listening");
   }
@@ -1075,6 +1078,400 @@ class WebRtcLink {
   }
 }
 
+/** The one function Gemini's voice has, which hands a request to Atlas. */
+const ASK_ATLAS = "ask_atlas";
+/** What the microphone sends Gemini, and what its voice answers in. */
+const MICROPHONE_RATE = 16000;
+const SPEAKER_RATE = 24000;
+
+/** Gemini's message as the engine's events, which are OpenAI's voice model's: the words heard
+ *  each way, and each call of `ask_atlas` as a delegation. */
+export function geminiEvents(message) {
+  const events = [];
+  const content = message?.serverContent;
+
+  if (content?.inputTranscription?.text) {
+    events.push({
+      delta: content.inputTranscription.text,
+      type: "session.input_transcript.delta",
+    });
+  }
+
+  if (content?.outputTranscription?.text) {
+    events.push({
+      delta: content.outputTranscription.text,
+      type: "session.output_transcript.delta",
+    });
+  }
+
+  for (const call of message?.toolCall?.functionCalls ?? []) {
+    if (call?.name === ASK_ATLAS && call.id) {
+      events.push({
+        delegation: { id: call.id },
+        request: String(call.args?.request ?? ""),
+        type: "session.delegation.created",
+      });
+    }
+  }
+
+  return events;
+}
+
+/** Samples from -1 to 1 as 16-bit little-endian PCM, in base64. */
+export function pcmBase64(samples) {
+  const bytes = new Uint8Array(samples.length * 2);
+  const view = new DataView(bytes.buffer);
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index]));
+    view.setInt16(
+      index * 2,
+      sample < 0 ? sample * 0x8000 : sample * 0x7fff,
+      true,
+    );
+  }
+
+  let binary = "";
+
+  for (let start = 0; start < bytes.length; start += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(start, start + 0x8000));
+  }
+
+  return btoa(binary);
+}
+
+/** 16-bit little-endian PCM in base64, as samples from -1 to 1. */
+export function pcmSamples(base64) {
+  const binary = atob(base64);
+  const samples = new Float32Array(Math.floor(binary.length / 2));
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const low = binary.charCodeAt(index * 2);
+    const high = binary.charCodeAt(index * 2 + 1);
+    const value = (high << 8) | low;
+    samples[index] = (value >= 0x8000 ? value - 0x10000 : value) / 0x8000;
+  }
+
+  return samples;
+}
+
+/** The microphone and the speaker, through Web Audio: Gemini takes and gives raw PCM. */
+const webAudio = {
+  async microphone(onChunk) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        autoGainControl: true,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    });
+    // The context resamples the microphone to the rate Gemini takes.
+    const context = new AudioContext({ sampleRate: MICROPHONE_RATE });
+    const source = context.createMediaStreamSource(stream);
+    const processor = context.createScriptProcessor(2048, 1, 1);
+    const silent = context.createGain();
+    silent.gain.value = 0;
+    processor.addEventListener("audioprocess", (event) => {
+      onChunk(pcmBase64(event.inputBuffer.getChannelData(0)));
+    });
+    source.connect(processor);
+    processor.connect(silent);
+    silent.connect(context.destination);
+
+    return {
+      stop() {
+        processor.disconnect();
+        source.disconnect();
+        stream.getTracks().forEach((track) => track.stop());
+        void context.close().catch(() => undefined);
+      },
+    };
+  },
+
+  speaker() {
+    const context = new AudioContext({ sampleRate: SPEAKER_RATE });
+    const playing = new Set();
+    let next = 0;
+
+    return {
+      close() {
+        this.flush();
+        void context.close().catch(() => undefined);
+      },
+      /** What was still to be said dropped: the user spoke over the voice. */
+      flush() {
+        for (const node of playing) {
+          try {
+            node.stop();
+          } catch {
+            // Already ended.
+          }
+        }
+
+        playing.clear();
+        next = 0;
+      },
+      play(base64) {
+        const samples = pcmSamples(base64);
+
+        if (samples.length === 0) {
+          return;
+        }
+
+        const buffer = context.createBuffer(1, samples.length, SPEAKER_RATE);
+        buffer.copyToChannel(samples, 0);
+        const node = context.createBufferSource();
+        node.buffer = buffer;
+        node.connect(context.destination);
+        const at = Math.max(context.currentTime, next);
+        node.start(at);
+        next = at + buffer.duration;
+        playing.add(node);
+        node.addEventListener("ended", () => playing.delete(node));
+      },
+    };
+  },
+};
+
+/**
+ * The WebSocket side, for Gemini's Live API: the microphone out and the voice in as raw PCM, and
+ * Gemini's messages read into the engine's events and back. A call of `ask_atlas` waits for its
+ * answer, sent as the function's response; a call Gemini cancelled (the user spoke over it) gets
+ * Atlas's answer as a new turn instead. Gemini closes a connection after some minutes, saying so
+ * first: the session goes on in a new one, with the handle it gave.
+ *
+ * `socket` makes the WebSocket and `audio` gives the microphone and the speaker, so the link is
+ * tested without either.
+ */
+export class GeminiLink {
+  constructor(
+    ctx,
+    onEvent,
+    onClosed,
+    { audio = webAudio, socket = (url) => new WebSocket(url) } = {},
+  ) {
+    this.ctx = ctx;
+    this.onEvent = onEvent;
+    this.onClosed = onClosed;
+    this.audio = audio;
+    this.socket = socket;
+    this.ws = null;
+    this.ready = false;
+    this.closing = false;
+    this.resuming = false;
+    this.handle = "";
+    this.microphone = null;
+    this.speaker = null;
+    /** The calls of `ask_atlas` waiting for their answer, and the answers being gathered. */
+    this.waiting = new Set();
+    this.answers = new Map();
+  }
+
+  async open(history) {
+    this.speaker = this.audio.speaker();
+    await this.connect({ history });
+    this.microphone = await this.audio.microphone((chunk) =>
+      this.sendJson({
+        realtimeInput: {
+          audio: {
+            data: chunk,
+            mimeType: `audio/pcm;rate=${MICROPHONE_RATE}`,
+          },
+        },
+      }),
+    );
+  }
+
+  /** A connection opened and set up: the setup sent, its answer awaited, the history sent. */
+  async connect(params) {
+    const opened = await this.ctx.call("live_session", params);
+    const [setup, ...rest] = opened.messages ?? [];
+    const ws = this.socket(opened.url);
+    ws.binaryType = "arraybuffer";
+    this.ws = ws;
+    this.ready = false;
+
+    await new Promise((resolve, reject) => {
+      ws.addEventListener("open", () => ws.send(JSON.stringify(setup)));
+      ws.addEventListener("message", ({ data }) => {
+        const message = parsed(data);
+
+        if (!message || ws !== this.ws) {
+          return;
+        }
+
+        if (message.setupComplete && !this.ready) {
+          this.ready = true;
+          rest.forEach((item) => ws.send(JSON.stringify(item)));
+          resolve();
+
+          return;
+        }
+
+        this.received(message);
+      });
+      ws.addEventListener("close", (event) => {
+        if (ws !== this.ws) {
+          return;
+        }
+
+        if (!this.ready) {
+          reject(new Error(event.reason || "Gemini closed the voice session."));
+
+          return;
+        }
+
+        if (!this.closing) {
+          void this.resume();
+        }
+      });
+    });
+  }
+
+  received(message) {
+    const update = message.sessionResumptionUpdate;
+
+    if (update?.resumable && update.newHandle) {
+      this.handle = update.newHandle;
+    }
+
+    if (message.goAway) {
+      void this.resume();
+
+      return;
+    }
+
+    const content = message.serverContent;
+
+    if (content?.interrupted) {
+      this.speaker?.flush();
+    }
+
+    for (const part of content?.modelTurn?.parts ?? []) {
+      const audio = part.inlineData;
+
+      if (audio?.data && String(audio.mimeType).startsWith("audio/")) {
+        this.speaker?.play(audio.data);
+      }
+    }
+
+    for (const id of message.toolCallCancellation?.ids ?? []) {
+      this.waiting.delete(id);
+    }
+
+    for (const event of geminiEvents(message)) {
+      if (event.type === "session.delegation.created") {
+        this.waiting.add(event.delegation.id);
+      }
+
+      this.onEvent(event);
+    }
+  }
+
+  /** The session in a new connection, where Gemini lets it go on; the end otherwise. */
+  async resume() {
+    if (this.closing || this.resuming) {
+      return;
+    }
+
+    if (!this.handle) {
+      this.onClosed("connection_lost");
+
+      return;
+    }
+
+    const old = this.ws;
+    this.resuming = true;
+
+    try {
+      await this.connect({ resume: this.handle });
+      old?.close();
+    } catch {
+      this.onClosed("connection_lost");
+    } finally {
+      this.resuming = false;
+    }
+  }
+
+  /** The engine's events, said Gemini's way: an answer as the function's response. */
+  send(event) {
+    if (event.type === "session.close") {
+      this.close();
+
+      return;
+    }
+
+    if (event.type !== "session.commentary.append") {
+      return;
+    }
+
+    const id = event.delegation_id;
+    const gathered = this.answers.get(id);
+    // The engine sends an answer in parts, at once: they go as one response.
+    this.answers.set(
+      id,
+      gathered === undefined ? event.content : `${gathered} ${event.content}`,
+    );
+
+    if (gathered === undefined) {
+      queueMicrotask(() => this.answer(id));
+    }
+  }
+
+  answer(id) {
+    const text = this.answers.get(id) ?? "";
+    this.answers.delete(id);
+
+    if (this.waiting.delete(id)) {
+      this.sendJson({
+        toolResponse: {
+          functionResponses: [
+            { id, name: ASK_ATLAS, response: { result: text } },
+          ],
+        },
+      });
+
+      return;
+    }
+
+    this.sendJson({
+      clientContent: {
+        turnComplete: true,
+        turns: [{ parts: [{ text: `Atlas answered: ${text}` }], role: "user" }],
+      },
+    });
+  }
+
+  sendJson(message) {
+    if (this.ready && this.ws?.readyState === 1) {
+      this.ws.send(JSON.stringify(message));
+    }
+  }
+
+  close() {
+    this.closing = true;
+    this.microphone?.stop();
+    this.microphone = null;
+    this.speaker?.close();
+    this.speaker = null;
+    this.ws?.close();
+  }
+}
+
+/** A WebSocket frame as JSON: Gemini sends its messages as binary frames of UTF-8 text. */
+function parsed(data) {
+  try {
+    const text =
+      typeof data === "string"
+        ? data
+        : new TextDecoder().decode(new Uint8Array(data));
+
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 /** The offer's candidates gathered, or 5 s gone: the voice model answers with those it has. */
 function gathered(peer) {
   if (peer.iceGatheringState === "complete") {
@@ -1302,7 +1699,8 @@ function TalkButton({ ctx }) {
     }
 
     let engine = null;
-    const link = new WebRtcLink(
+    const Link = status.provider === "gemini" ? GeminiLink : WebRtcLink;
+    const link = new Link(
       ctx,
       (event) => engine?.heard(event),
       (reason) => engine?.finish(reason),

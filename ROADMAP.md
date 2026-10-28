@@ -3456,6 +3456,40 @@ Electron, como o app. Os harnesses de agente não ditam fora da própria janela.
   - com a OpenAI de verdade (perguntar antes, menos de US$ 0,01): um ditado no Bloco de Notas, outro
     no terminal de um executor e outro numa janela do navegador.
 
+### Voz pelo Gemini e ajustes escolhidos numa lista (pedidos e feitos em 28/10, sem passo)
+
+Dois pedidos do usuário em 28/10: o crédito da OpenAI acabou e a voz inteira parou junto, enquanto
+a chave do Gemini que o Atlas já guarda dá acesso a modelos que transcrevem, falam e conversam; e
+os modelos tinham de ser digitados pelo nome nas configurações do plugin, quando dá para pedir a
+lista ao próprio provedor.
+
+- **Um provedor para a voz inteira**, o ajuste `provider` do plugin `voice`: `openai`, como antes,
+  ou `gemini`, cada um com a chave que o provedor de mesmo nome do Atlas já lê. Modelo ou voz
+  vazios são os do provedor (`gpt-transcribe`/`gemini-3.5-transcribe`,
+  `gpt-4o-mini-tts`/`gemini-3.8-flash-tts`, `gpt-live-1`/`gemini-3.8-live`, `marin`/`Kore`).
+- **O Gemini pela API própria dele** (a compatível com a OpenAI não transcreve, não fala e não
+  abre sessão ao vivo): transcrição e fala por `interactions`, gravação acima de 14 MB pela Files
+  API, e a fala, que vem em WAV, vira Opus com o ffmpeg quando o computador tem (sem ele, chega no
+  Telegram como arquivo de áudio, não como mensagem de voz).
+- **A conversa ao vivo pelo Gemini** é um WebSocket do app (a Live API não fala WebRTC), com um
+  token de uma sessão feito no Python (a chave não sai dali) e uma função, `ask_atlas`, para passar
+  o pedido ao Atlas. Segue sozinha numa conexão nova quando o Gemini fecha a dele.
+- **Ajustes escolhidos numa lista** (SDK versão 25, `choices` no manifesto): valores fixos, os
+  modelos do seletor do Atlas, ou o que a chamada `setting_choices` do plugin responde. A voz
+  pergunta ao provedor: o Gemini diz o que cada modelo faz e lista as vozes por idioma (as do
+  idioma do app primeiro); a OpenAI só dá os nomes, que já dizem a função. Nenhuma lista fica no
+  código. **Outro…** ainda digita um valor que a lista não tem.
+- **Escolhas próprias, marcadas:** um provedor só para tudo (não um por função); a resposta vazia
+  do Atlas agora é dita pela voz, não só "pensada", porque a chamada do Gemini espera uma; as vozes
+  listadas são as do idioma do app e as 30 primeiras do Gemini, que falam todos os idiomas (a
+  lista inteira tem milhares).
+- **A prova** em 28/10 no Gemini de verdade, com a chave do usuário e áudios de poucos segundos
+  (cota gratuita): fala com tom e com uma voz brasileira, o WAV virando Opus pelo ffmpeg,
+  transcrição em linha e pela Files API, sessão ao vivo com token que chamou `ask_atlas` e falou a
+  resposta, e as listas de modelos e vozes dos dois provedores. Depois os testes do Python contra o
+  Gemini falso e os do app com um WebSocket falso. **Falta** a conversa ao vivo falada e ouvida no
+  app, com o microfone do usuário.
+
 ### Site e documentação pública (decididos em 25/10, passo 19)
 
 Pedido do usuário em 25/10: um site com uma home bonita, uma página de novidades e uma documentação

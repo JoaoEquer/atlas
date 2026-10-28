@@ -23,6 +23,10 @@ every request it gets, and can behave like a particular provider:
   takes, its fields and its file recorded (`heard`), answered from a script of its own
   (`transcribe`), or a 500 when it runs out; its speech (`/v1/audio/speech`), an Ogg file; and its
   live voice sessions (`/v1/live/sessions`), a WebRTC answer to the offer.
+- **Gemini's voice** (`/v1beta`, the voice plugin's other provider): its interactions, which write
+  down an audio file from the same script (`transcribe`) or speak a WAV file; its Files API upload,
+  in its two requests; its lists of models and voices; and the tokens of its live sessions. Every
+  one takes the key in `x-goog-api-key`, and refuses as Gemini does.
 - **Driven from outside**, for the desktop app's end-to-end tests: `python tests/fake_model.py`
   serves until stopped and writes `FAKE_MODEL_READY port=<n>`; `POST /_fake/reply` queues replies
   given as JSON (`reply_from_json`), `POST /_fake/transcribe` the transcriptions' texts, and
@@ -32,12 +36,15 @@ every request it gets, and can behave like a particular provider:
 
 import argparse
 import asyncio
+import base64
 import dataclasses
 import hashlib
+import io
 import json
 import sys
 import threading
 import time
+import wave
 from collections import deque
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
@@ -56,6 +63,23 @@ STRICT_CALL_FIELDS = frozenset({"id", "type", "function"})
 SPOKEN = b"OggS\x00\x02" + b"\x00" * 40 + b"OpusHead"
 #: What the fake live session answers the WebRTC offer with.
 LIVE_ANSWER = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=fake\r\n"
+
+
+def _silence() -> bytes:
+    """A tenth of a second of silence as Gemini speaks: WAV, 24 kHz, 16-bit mono."""
+    made = io.BytesIO()
+    with wave.open(made, "wb") as file:
+        file.setnchannels(1)
+        file.setsampwidth(2)
+        file.setframerate(24_000)
+        file.writeframes(b"\x00\x00" * 2_400)
+    return made.getvalue()
+
+
+#: What Gemini's fake speech answers: a WAV file.
+SPOKEN_WAV = _silence()
+#: The token the fake gives a Gemini live session.
+LIVE_TOKEN = "auth_tokens/fake-token"
 
 
 @dataclass
@@ -198,6 +222,13 @@ class FakeModelServer:
         #: Each transcription asked for: its form's fields, and the file as `file_name`,
         #: `file_type` and `file_bytes`.
         self.heard: list[dict[str, Any]] = []
+        #: The model ids OpenAI's `/models` lists.
+        self.model_ids: list[str] = ["fake-model"]
+        #: What Gemini's `/models` lists, and its `/voices` by language.
+        self.gemini_models: list[dict[str, Any]] = []
+        self.gemini_voices: dict[str, list[dict[str, Any]]] = {}
+        #: The files uploaded through Gemini's Files API, by their URI.
+        self.uploaded: dict[str, bytes] = {}
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
         self._host = host
@@ -222,6 +253,11 @@ class FakeModelServer:
         return f"http://127.0.0.1:{self.port}/v1"
 
     @property
+    def gemini_url(self) -> str:
+        """The address for Gemini's own API, as the voice plugin reaches it."""
+        return f"http://127.0.0.1:{self.port}/v1beta"
+
+    @property
     def root_url(self) -> str:
         """The address for Anthropic's SDK, which adds `/v1/messages` itself."""
         return f"http://127.0.0.1:{self.port}"
@@ -243,6 +279,12 @@ class FakeModelServer:
                 Route("/v1/audio/transcriptions", self._transcription, methods=["POST"]),
                 Route("/v1/audio/speech", self._speech, methods=["POST"]),
                 Route("/v1/live/sessions", self._live_session, methods=["POST"]),
+                Route("/v1beta/interactions", self._interaction, methods=["POST"]),
+                Route("/v1beta/models", self._gemini_models, methods=["GET"]),
+                Route("/v1beta/voices", self._gemini_voices, methods=["GET"]),
+                Route("/v1beta/auth_tokens", self._gemini_token, methods=["POST"]),
+                Route("/upload/v1beta/files", self._upload_start, methods=["POST"]),
+                Route("/_fake/upload/{name}", self._upload, methods=["POST"]),
                 Route("/_fake/reply", self._queue, methods=["POST"]),
                 Route("/_fake/transcribe", self._queue_transcripts, methods=["POST"]),
                 Route("/_fake/requests", self._recorded, methods=["GET"]),
@@ -323,7 +365,12 @@ class FakeModelServer:
         if request.url.path.endswith("/key"):
             return JSONResponse({"data": {"label": "fake", "limit": None, "usage": 0}})
         return JSONResponse(
-            {"object": "list", "data": [{"id": "fake-model", "object": "model", "owned_by": "x"}]}
+            {
+                "object": "list",
+                "data": [
+                    {"id": name, "object": "model", "owned_by": "x"} for name in self.model_ids
+                ],
+            }
         )
 
     async def _transcription(self, request: Request) -> Response:
@@ -377,6 +424,87 @@ class FakeModelServer:
         return JSONResponse(
             {"session": {"id": "live_fake"}, "transport": {"type": "webrtc", "sdp": LIVE_ANSWER}}
         )
+
+    def _refused_google(self, request: Request) -> Response | None:
+        """Gemini's own API takes its key in `x-goog-api-key`, and nothing else."""
+        if self.key is None or (
+            request.headers.get("x-goog-api-key") == self.key
+            and "authorization" not in request.headers
+        ):
+            return None
+        return _google_error(400, "API key not valid. Please pass a valid API key.")
+
+    async def _interaction(self, request: Request) -> Response:
+        """Gemini's `interactions`: speech when the answer is audio, otherwise a transcription of
+        the audio in the input, from the script `transcribe` fills."""
+        body = await self._record(request) or {}
+        refused = self._refused_google(request)
+        if refused is not None:
+            return refused
+        items = cast("list[dict[str, Any]]", body.get("input") or [])
+        if not body.get("model") or not items:
+            return _google_error(400, "An interaction takes a model and an input.")
+        if cast("dict[str, Any]", body.get("response_format") or {}).get("type") == "audio":
+            audio = base64.b64encode(SPOKEN_WAV).decode("ascii")
+            content = [{"type": "audio", "mime_type": "audio/wav", "data": audio}]
+            return JSONResponse({"steps": [{"type": "model_output", "content": content}]})
+        audio = next((item for item in items if item.get("type") == "audio"), None)
+        if audio is None or not (audio.get("data") or audio.get("uri") in self.uploaded):
+            return _google_error(400, "No audio, or a file that was never uploaded.")
+        if not self._transcripts:
+            return _google_error(500, "The fake has no scripted transcription left.")
+        item = self._transcripts.popleft()
+        if isinstance(item, FakeError):
+            return _google_error(item.status, item.message)
+        return JSONResponse(
+            {
+                "status": "completed",
+                "steps": [
+                    {"type": "thought", "content": [{"type": "text", "text": "thinking"}]},
+                    {"type": "model_output", "content": [{"type": "text", "text": item}]},
+                ],
+            }
+        )
+
+    async def _gemini_models(self, request: Request) -> Response:
+        await self._record(request)
+        return self._refused_google(request) or JSONResponse({"models": self.gemini_models})
+
+    async def _gemini_voices(self, request: Request) -> Response:
+        await self._record(request)
+        language = request.query_params.get("language_code", "")
+        return self._refused_google(request) or JSONResponse(
+            {"voices": self.gemini_voices.get(language, [])}
+        )
+
+    async def _gemini_token(self, request: Request) -> Response:
+        body = await self._record(request) or {}
+        refused = self._refused_google(request)
+        if refused is not None:
+            return refused
+        if body.get("uses") != 1 or not body.get("expireTime"):
+            return _google_error(400, "A token takes its uses and when it expires.")
+        return JSONResponse({"name": LIVE_TOKEN})
+
+    async def _upload_start(self, request: Request) -> Response:
+        """The Files API's first request: where to send the bytes."""
+        body = await self._record(request) or {}
+        refused = self._refused_google(request)
+        if refused is not None:
+            return refused
+        if request.headers.get("x-goog-upload-command") != "start" or not body.get("file"):
+            return _google_error(400, "An upload starts with its command and its file.")
+        name = f"f{len(self.uploaded) + 1}"
+        place = f"http://127.0.0.1:{self.port}/_fake/upload/{name}"
+        return Response(headers={"x-goog-upload-url": place})
+
+    async def _upload(self, request: Request) -> Response:
+        """The Files API's second request: the bytes, and the file's URI."""
+        if request.headers.get("x-goog-upload-command") != "upload, finalize":
+            return _google_error(400, "The bytes go with upload, finalize.")
+        uri = f"https://example.com/v1beta/files/{request.path_params['name']}"
+        self.uploaded[uri] = await request.body()
+        return JSONResponse({"file": {"uri": uri, "state": "ACTIVE"}})
 
     async def _queue_transcripts(self, request: Request) -> Response:
         """Queue what the next transcriptions answer, for a test outside this process."""
@@ -1045,6 +1173,11 @@ class FakeModelServer:
     def _pieces(self, text: str) -> list[str]:
         size = self.chunk_size
         return [text[start : start + size] for start in range(0, len(text), size)]
+
+
+def _google_error(status: int, message: str) -> Response:
+    """An error as Gemini's own API answers one."""
+    return JSONResponse({"error": {"message": message, "code": str(status)}}, status_code=status)
 
 
 def _error(error: FakeError) -> Response:

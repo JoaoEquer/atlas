@@ -6,12 +6,11 @@ past Atlas's own 20 MB limit for audio. What fails raises with what to tell, and
 file's note.
 """
 
-from pathlib import Path
 from typing import Any, cast
 
 import httpx2
 
-from .endpoint import OpenAIError, refusal
+from .endpoint import OPENAI, VoiceError, refusal, unreachable
 
 #: A request's deadline: a long recording takes a while to write down.
 REQUEST_SECONDS = 110.0
@@ -25,14 +24,10 @@ class Transcriber:
         self._url = f"{api_url.rstrip('/')}/audio/transcriptions"
         self._model = model.strip()
 
-    async def transcribe(self, path: Path, media_type: str) -> str:
-        """What the file says, as text; raises `OpenAIError`."""
-        return await self.transcribe_data(path.name, path.read_bytes(), media_type)
-
     async def transcribe_data(self, name: str, data: bytes, media_type: str) -> str:
-        """What a recording held in memory says (the app's dictation), as text."""
+        """What a recording says, as text; raises `VoiceError`."""
         if not self._key:
-            raise OpenAIError(NO_KEY)
+            raise VoiceError(OPENAI.no_key())
         async with httpx2.AsyncClient(timeout=REQUEST_SECONDS) as client:
             try:
                 response = await client.post(
@@ -42,21 +37,14 @@ class Transcriber:
                     files={"file": (name, data, media_type or "application/octet-stream")},
                 )
             except httpx2.HTTPError as error:
-                raise OpenAIError(f"OpenAI could not be reached: {error}") from error
+                raise unreachable(OPENAI, error) from error
         if response.status_code != 200:
-            raise OpenAIError(refusal("the transcription", response))
+            raise VoiceError(refusal(OPENAI, "the transcription", response))
         try:
             body = cast("dict[str, Any]", response.json())
         except ValueError:
             body = {}
         text = body.get("text")
         if not isinstance(text, str):
-            raise OpenAIError("OpenAI's answer held no text.")
+            raise VoiceError("OpenAI's answer held no text.")
         return text.strip()
-
-
-#: What a call without the key says.
-NO_KEY = (
-    "There is no OPENAI_API_KEY in the vault: store it on the Plugins screen, or with "
-    "`atlas secrets set OPENAI_API_KEY`."
-)

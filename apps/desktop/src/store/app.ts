@@ -10,7 +10,7 @@
  */
 import { atom, map, type ReadableAtom, type WritableAtom } from 'nanostores'
 
-import { t } from '@/i18n'
+import { locale, t } from '@/i18n'
 import { emitPluginEvent } from '@/plugins/events'
 import { type EventParams, notFound, type ServerRequest } from '@/protocol/channel'
 import type { AtlasClient, ConnectionState } from '@/protocol/client'
@@ -52,6 +52,7 @@ import type {
   PairingRow,
   PluginRow,
   PluginScreenRow,
+  PluginSettingRow,
   PreviewPayload,
   ProposalApproved,
   ProposalRow,
@@ -3358,6 +3359,54 @@ export function disablePlugin(name: string): Promise<boolean> {
 
 export function storePluginSecret(name: string, secret: string, value: string): Promise<boolean> {
   return current().actOnPlugins(client => client.call('plugin.secret', { name, secret, value }))
+}
+
+/** A value a plugin's setting may take, as the settings screen lists it. */
+export interface SettingChoice {
+  label: string
+  value: string
+}
+
+/**
+ * What a plugin's setting may take (SDK version 25): the values its manifest fixes, the models the
+ * picker offers as `provider/model`, or what the plugin's own call `setting_choices` answers, which
+ * may ask a provider what it has. The call gets the picker's models and the screen's language, so
+ * a plugin may offer them; `why` is its word on a list kept short (no key, no network).
+ */
+export async function settingChoices(
+  plugin: string,
+  setting: PluginSettingRow
+): Promise<{ choices: SettingChoice[]; why: string }> {
+  const choices: SettingChoice[] = setting.choices.map(value => ({ label: value, value }))
+  const models = ($modelOptions.get()?.providers ?? []).flatMap(provider =>
+    provider.models.map(model => ({ label: `${provider.name} · ${model.name}`, value: `${provider.id}/${model.id}` }))
+  )
+
+  if (setting.choices_from === 'models') {
+    return { choices: [...choices, ...models], why: '' }
+  }
+
+  if (setting.choices_from !== 'plugin') {
+    return { choices, why: '' }
+  }
+
+  const { result } = await current().client.call('plugin.call', {
+    name: 'setting_choices',
+    params: { language: locale === 'en' ? 'en-US' : locale, models, setting: setting.name },
+    plugin
+  })
+  const answer = (result ?? {}) as { choices?: unknown; why?: unknown }
+  const listed = Array.isArray(answer.choices) ? (answer.choices as unknown[]) : []
+
+  for (const item of listed) {
+    const entry = (item ?? {}) as { label?: unknown; value?: unknown }
+
+    if (typeof entry.value === 'string') {
+      choices.push({ label: typeof entry.label === 'string' ? entry.label : entry.value, value: entry.value })
+    }
+  }
+
+  return { choices, why: typeof answer.why === 'string' ? answer.why : '' }
 }
 
 /** Change a plugin's setting; `null` goes back to its default. */

@@ -734,6 +734,11 @@ class PluginSettingRow:
     value: str
     default: str
     description: str
+    #: The values the app lists for it, fixed in the manifest (SDK version 25); empty for none.
+    choices: list[str]
+    #: Where the app asks for more when it shows the setting: `models`, the picker's models as
+    #: `provider/model`; `plugin`, the plugin's call `setting_choices`; empty for nowhere.
+    choices_from: str
 
 
 @dataclass(frozen=True, slots=True)

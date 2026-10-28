@@ -2033,7 +2033,12 @@ class Gateway:
             ],
             settings=[
                 PluginSettingRow(
-                    s.name, view.settings.get(s.name, s.default), s.default, s.description
+                    s.name,
+                    view.settings.get(s.name, s.default),
+                    s.default,
+                    s.description,
+                    list(s.choices),
+                    s.choices_from,
                 )
                 for s in manifest.settings
             ],

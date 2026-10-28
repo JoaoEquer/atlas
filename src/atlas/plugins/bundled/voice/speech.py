@@ -6,8 +6,7 @@ plays it too. A text past the endpoint's limit is cut at a sentence: a spoken an
 
 import httpx2
 
-from .endpoint import OpenAIError, refusal
-from .transcribe import NO_KEY
+from .endpoint import OPENAI, VoiceError, refusal, unreachable
 
 #: The speech endpoint takes 4,096 characters at most.
 MOST_CHARACTERS = 4_096
@@ -25,9 +24,9 @@ class Speaker:
 
     async def speak(self, text: str, *, tone: str = "") -> bytes:
         """`text` spoken, as an Ogg Opus file's bytes; `tone` says how (calm, cheerful).
-        Raises `OpenAIError`."""
+        Raises `VoiceError`."""
         if not self._key:
-            raise OpenAIError(NO_KEY)
+            raise VoiceError(OPENAI.no_key())
         body: dict[str, str] = {
             "model": self._model,
             "voice": self._voice,
@@ -42,11 +41,11 @@ class Speaker:
                     self._url, headers={"Authorization": f"Bearer {self._key}"}, json=body
                 )
             except httpx2.HTTPError as error:
-                raise OpenAIError(f"OpenAI could not be reached: {error}") from error
+                raise unreachable(OPENAI, error) from error
         if response.status_code != 200:
-            raise OpenAIError(refusal("the speech", response))
+            raise VoiceError(refusal(OPENAI, "the speech", response))
         if not response.content:
-            raise OpenAIError("OpenAI's answer held no audio.")
+            raise VoiceError("OpenAI's answer held no audio.")
         return response.content
 
 

@@ -25,7 +25,7 @@ interface Engine {
 
 const { appends, delegated, isStopPhrase, LiveTalk, speakable } = voice as {
   appends: (text: string, most?: number) => string[]
-  delegated: (fragments: { text: string; who: string }[]) => { prompt: string; spoken: string }
+  delegated: (fragments: { text: string; who: string }[], request?: string) => { prompt: string; spoken: string }
   isStopPhrase: (said: string) => boolean
   LiveTalk: new (options: Record<string, unknown>) => Engine
   speakable: (text: string) => string
@@ -79,6 +79,11 @@ describe('what the voice hands over', () => {
 
     expect(turn.prompt).toBe('No, tomorrow.')
     expect(turn.spoken).toBe('User: What is on today?\nVoice: Let me check.\nUser: No, tomorrow.')
+  })
+
+  it('is the request the voice model wrote when it heard nothing of the user yet', () => {
+    expect(delegated([], 'book a table').prompt).toBe('book a table')
+    expect(delegated([{ text: 'Book it.', who: 'user' }], 'book a table').prompt).toBe('Book it.')
   })
 
   it('ends the conversation on a stop phrase said alone, in either language', () => {
@@ -139,10 +144,11 @@ describe('a live conversation', () => {
     engine.heard({ delegation: { id: 'd1' }, type: 'session.delegation.created' })
     engine.answered({ payload: { status: 'failed', text: 'boom' }, type: 'message.complete' })
 
+    // Said, not thought: Gemini's voice waits on its call until it gets an answer.
     expect(sent.at(-1)).toEqual({
       content: 'Atlas finished without an answer to say.',
       delegation_id: 'd1',
-      type: 'session.thinking.append'
+      type: 'session.commentary.append'
     })
   })
 

@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { t } from '@/i18n'
 import { $screenErrors } from '@/plugins/registry'
@@ -15,6 +15,8 @@ import {
   PLUGIN_GUIDE,
   reloadPlugins,
   setPluginSetting,
+  type SettingChoice,
+  settingChoices,
   storePluginSecret,
   writePlugin
 } from '@/store/app'
@@ -183,7 +185,13 @@ function Plugin({ plugin }: { plugin: PluginRow }) {
         <details className="mt-3 text-sm">
           <summary className="cursor-pointer text-muted-foreground">{t.plugins.settings}</summary>
           {plugin.settings.map(setting => (
-            <Setting key={setting.name} plugin={plugin.name} setting={setting} />
+            <Setting
+              key={setting.name}
+              on={plugin.enabled}
+              plugin={plugin.name}
+              revision={revisionOf(plugin)}
+              setting={setting}
+            />
           ))}
         </details>
       )}
@@ -260,8 +268,65 @@ function Secret({ plugin, secret }: { plugin: string; secret: PluginSecretRow })
   )
 }
 
-function Setting({ plugin, setting }: { plugin: string; setting: PluginSettingRow }) {
+/** The option of the list that turns it into a box to type in. */
+const OTHER = '\u0000other'
+
+/**
+ * A setting: a list when it has choices (SDK version 25), asked again when another of the plugin's
+ * settings or keys changes (`revision`), since the list may hang on them; a box to type in when it
+ * has none, or when the user picks "Other…". The list always holds the value in use and the
+ * default, listed or not.
+ */
+function Setting({
+  on,
+  plugin,
+  revision,
+  setting
+}: {
+  on: boolean
+  plugin: string
+  revision: string
+  setting: PluginSettingRow
+}) {
   const [value, setValue] = useState(setting.value)
+  const [listed, setListed] = useState<{ choices: SettingChoice[]; why: string } | null>(null)
+  const [typing, setTyping] = useState(false)
+  const id = `${plugin}-${setting.name}`
+  // A plugin that is off answers no call: its own choices wait for it to be on.
+  const offers =
+    setting.choices.length > 0 || setting.choices_from === 'models' || (setting.choices_from === 'plugin' && on)
+
+  useEffect(() => {
+    setValue(setting.value)
+  }, [setting.value])
+
+  useEffect(() => {
+    if (!offers) {
+      return
+    }
+
+    let live = true
+    settingChoices(plugin, setting)
+      .then(found => {
+        if (live) {
+          setListed(found)
+        }
+      })
+      .catch((error: unknown) => {
+        if (live) {
+          setListed({ choices: [], why: error instanceof Error ? error.message : String(error) })
+        }
+      })
+
+    return () => {
+      live = false
+    }
+    // The setting's own value is not among them: picking one does not change the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plugin, setting.name, offers, revision])
+
+  const options = listed === null ? [] : withValues(listed.choices, [setting.value, setting.default])
+  const listing = offers && !typing && listed !== null && listed.choices.length > 0
 
   return (
     <form
@@ -271,22 +336,64 @@ function Setting({ plugin, setting }: { plugin: string; setting: PluginSettingRo
         void setPluginSetting(plugin, setting.name, value)
       }}
     >
-      <label className="block font-mono" htmlFor={`${plugin}-${setting.name}`}>
+      <label className="block font-mono" htmlFor={id}>
         {setting.name}
       </label>
       {setting.description && <p className="text-muted-foreground">{setting.description}</p>}
       <div className="mt-1 flex gap-2">
-        <input
-          className={INPUT}
-          id={`${plugin}-${setting.name}`}
-          onChange={event => {
-            setValue(event.target.value)
-          }}
-          value={value}
-        />
-        <button className={BUTTON} type="submit">
-          {t.plugins.save}
-        </button>
+        {listing ? (
+          <select
+            className={INPUT}
+            id={id}
+            onChange={event => {
+              if (event.target.value === OTHER) {
+                setTyping(true)
+
+                return
+              }
+
+              setValue(event.target.value)
+              void setPluginSetting(plugin, setting.name, event.target.value)
+            }}
+            title={value}
+            value={value}
+          >
+            {options.map(choice => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
+              </option>
+            ))}
+            <option title={t.plugins.otherHint} value={OTHER}>
+              {t.plugins.other}
+            </option>
+          </select>
+        ) : (
+          <input
+            className={INPUT}
+            id={id}
+            onChange={event => {
+              setValue(event.target.value)
+            }}
+            value={value}
+          />
+        )}
+        {listing ? null : (
+          <button className={BUTTON} type="submit">
+            {t.plugins.save}
+          </button>
+        )}
+        {typing && (
+          <button
+            className={BUTTON}
+            onClick={() => {
+              setTyping(false)
+            }}
+            title={t.plugins.listHint}
+            type="button"
+          >
+            {t.plugins.list}
+          </button>
+        )}
         <button
           className={BUTTON}
           onClick={() => {
@@ -299,8 +406,31 @@ function Setting({ plugin, setting }: { plugin: string; setting: PluginSettingRo
           {t.plugins.reset}
         </button>
       </div>
+      {listed?.why && <p className="mt-1 text-muted-foreground">{listed.why}</p>}
     </form>
   )
+}
+
+/** What a setting's list may hang on: the plugin's settings, its keys, and whether it is on. */
+function revisionOf(plugin: PluginRow): string {
+  return JSON.stringify([
+    plugin.enabled,
+    plugin.settings.map(setting => setting.value),
+    plugin.secrets.map(secret => secret.stored)
+  ])
+}
+
+/** The choices with each of `values` among them, the ones the list did not hold added at the end. */
+export function withValues(choices: readonly SettingChoice[], values: readonly string[]): SettingChoice[] {
+  const all = [...choices]
+
+  for (const value of values) {
+    if (!all.some(choice => choice.value === value)) {
+      all.push({ label: value, value })
+    }
+  }
+
+  return all
 }
 
 function People({ pairings }: { pairings: PairingRow[] }) {

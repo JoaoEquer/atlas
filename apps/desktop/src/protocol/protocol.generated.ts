@@ -475,6 +475,10 @@ export interface PluginSettingRow {
   value: string
   default: string
   description: string
+  /** The values the app lists for it, fixed in the manifest (SDK version 25); empty for none. */
+  choices: string[]
+  /** Where the app asks for more when it shows the setting: `models`, the picker's models as `provider/model`; `plugin`, the plugin's call `setting_choices`; empty for nowhere. */
+  choices_from: string
 }
 export interface PluginEnableParams {
   name: string

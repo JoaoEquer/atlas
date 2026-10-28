@@ -310,7 +310,9 @@ def test_atlas_ships_its_channel_and_executor_plugins_off(home: Home, vault: Vau
     assert (voice.name, voice.bundled, voice.enabled, voice.problem) == ("voice", True, False, None)
     assert voice.manifest is not None
     assert voice.manifest.readers == ("audio",)
-    assert voice.secrets == {"OPENAI_API_KEY": False}, "the OpenAI provider's own key"
+    assert voice.secrets == {"OPENAI_API_KEY": False, "GEMINI_API_KEY": False}, (
+        "the OpenAI and Gemini providers' own keys"
+    )
 
 
 #: The SDK: its pure module, and its ACP client since version 18.

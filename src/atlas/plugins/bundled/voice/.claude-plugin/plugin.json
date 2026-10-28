@@ -1,13 +1,13 @@
 {
   "name": "voice",
   "displayName": "Voice",
-  "version": "0.3.0",
-  "description": "Talk to Atlas by voice: audio you send is written down, you dictate in the box or anywhere on the computer with a shortcut, Atlas speaks when you ask, and a live voice conversation hands the work to Atlas.",
+  "version": "0.4.0",
+  "description": "Talk to Atlas by voice, through OpenAI or Gemini: audio you send is written down, you dictate in the box or anywhere on the computer with a shortcut, Atlas speaks when you ask, and a live voice conversation hands the work to Atlas.",
   "author": { "name": "the Atlas contributors" },
   "license": "MIT",
   "keywords": ["voice", "audio", "transcription", "speech"],
   "atlas": {
-    "api": 23,
+    "api": 25,
     "readers": ["audio"],
     "tools": ["voice_speak"],
     "hooks": ["UserPromptSubmit"],
@@ -20,21 +20,34 @@
       "dictation_delete",
       "live_status",
       "live_session",
-      "live_turn"
+      "live_turn",
+      "setting_choices"
     ],
     "desktop": ["shortcut", "paste"],
     "secrets": [
       {
         "name": "OPENAI_API_KEY",
-        "description": "Your OpenAI API key, the one Atlas's OpenAI provider uses: speech is written down, spoken and talked through OpenAI's models. The live conversation costs US$ 0.05 a minute, silence included.",
+        "description": "Your OpenAI API key, the one Atlas's OpenAI provider uses, for the voice through OpenAI. The live conversation costs US$ 0.05 a minute, silence included.",
         "url": "https://platform.openai.com/api-keys"
+      },
+      {
+        "name": "GEMINI_API_KEY",
+        "description": "Your Gemini API key, the one Atlas's Gemini provider uses, for the voice through Gemini.",
+        "url": "https://aistudio.google.com/app/apikey"
       }
     ],
     "settings": [
       {
+        "name": "provider",
+        "default": "openai",
+        "choices": ["openai", "gemini"],
+        "description": "Who writes down, speaks and talks: openai or gemini, each with its key above."
+      },
+      {
         "name": "transcription_model",
-        "default": "gpt-transcribe",
-        "description": "OpenAI's model that writes down what you say."
+        "default": "",
+        "choices": "plugin",
+        "description": "The model that writes down what you say; empty for the provider's own choice."
       },
       {
         "name": "dictation_shortcut",
@@ -43,23 +56,27 @@
       },
       {
         "name": "speech_model",
-        "default": "gpt-4o-mini-tts",
-        "description": "OpenAI's model that speaks Atlas's answers when you ask to hear them."
+        "default": "",
+        "choices": "plugin",
+        "description": "The model that speaks Atlas's answers when you ask to hear them; empty for the provider's own choice."
       },
       {
         "name": "live_model",
-        "default": "gpt-live-1",
-        "description": "OpenAI's full-duplex voice model of the live conversation."
+        "default": "",
+        "choices": "plugin",
+        "description": "The full-duplex voice model of the live conversation; empty for the provider's own choice."
       },
       {
         "name": "voice",
-        "default": "marin",
-        "description": "The voice that speaks, in the live conversation and in audio answers."
+        "default": "",
+        "choices": "plugin",
+        "description": "The voice that speaks, in the live conversation and in audio answers; empty for the provider's own choice."
       },
       {
         "name": "voice_turns_model",
-        "default": "openai/gpt-6-luna",
-        "description": "The model that answers what you ask in the live conversation, as provider/model, with no reasoning; \"conversation\" for the conversation's own model."
+        "default": "",
+        "choices": "plugin",
+        "description": "The model that answers what you ask in the live conversation, with no reasoning: one of Atlas's models, \"conversation\" for the conversation's own, or empty for the provider's own choice."
       },
       {
         "name": "quiet_close_seconds",
@@ -68,10 +85,10 @@
       },
       {
         "name": "api_url",
-        "default": "https://api.openai.com/v1",
-        "description": "OpenAI's API address; another one only for a compatible server, or for tests."
+        "default": "",
+        "description": "The provider's API address, empty for its own; another one only for a compatible server, or for tests."
       }
     ],
-    "network": ["api.openai.com"]
+    "network": ["api.openai.com", "generativelanguage.googleapis.com"]
   }
 }

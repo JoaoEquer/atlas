@@ -442,6 +442,13 @@ def test_the_plugins_screen_turns_it_on_with_consent_and_shows_why_it_stopped(
             }
         ]
         assert any("no sandbox" in line for line in row["declaration"])
+        # A setting with no choices is typed; the voice's are picked from lists (SDK 25).
+        assert all(s["choices"] == [] and s["choices_from"] == "" for s in row["settings"])
+        voice = next(r for r in client.result("plugin.list")["plugins"] if r["name"] == "voice")
+        listed = {s["name"]: (s["choices"], s["choices_from"]) for s in voice["settings"]}
+        assert listed["provider"] == (["openai", "gemini"], "")
+        assert listed["transcription_model"] == ([], "plugin")
+        assert listed["dictation_shortcut"] == ([], "")
 
         refused = client.call("plugin.enable", {"name": "telegram", "consent": "stale"})
         assert "other than what was shown" in refused["error"]["message"]

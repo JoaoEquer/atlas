@@ -100,8 +100,9 @@ from typing import Any, Literal, Protocol
 #: 17, the calls its screen makes; 18, the ACP client (`atlas.plugins.acp`); 19, whether the plan
 #: pays on past its limits; 20, a session's tokens of context; 21, attachment readers; 22, files
 #: a tool sends the user, and a channel that sends them; 23, a screen's desktop powers (a global
-#: shortcut, pasting into the program in focus).
-API_VERSION = 24
+#: shortcut, pasting into the program in focus); 24, themes; 25, a setting's choices, listed by
+#: the app (fixed, Atlas's models, or the plugin's call `setting_choices`).
+API_VERSION = 25
 
 
 @dataclass(frozen=True, slots=True)

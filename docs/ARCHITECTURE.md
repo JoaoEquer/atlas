@@ -2972,6 +2972,53 @@ voice plugin's, and still no voice in the core: screens gain what they may do ou
   taking the focus, and the words, accents included, landing in another program's field with the
   clipboard put back.
 
+### Voice through Gemini, and settings picked from lists — decided 2026-10-28
+
+Asked for by the user on 28/10/2026: the OpenAI credit ran out, and every voice feature stopped
+with it, while the Gemini key Atlas already holds reaches models that write down, speak and talk;
+and a model had to be typed by name into the plugin's settings.
+
+- **One provider for the whole voice**, the plugin's `provider` setting: `openai`, as before, or
+  `gemini`, each on the key Atlas's provider of that name reads (`OPENAI_API_KEY`,
+  `GEMINI_API_KEY`). A model or voice left empty is the provider's own, a dated choice in the
+  plugin (`endpoint.py`), as the catalog's defaults are.
+- **Gemini's half** (`gemini.py`), on its own API rather than its OpenAI-compatible one, which has
+  no transcription, speech or live sessions. Writing down and speaking are interactions
+  (`POST /interactions`): `gemini-3.5-transcribe` takes the audio alone, any other model is asked
+  for the words only beside it, and a recording past 14 MB (Gemini takes 20 MB a request, base64
+  grows by a third) goes up through the Files API first. Speech comes as WAV; Telegram plays only
+  Opus as a voice message, and Opus needs a native encoder no package brings alone, so the plugin
+  uses ffmpeg when the computer has it and sends the WAV as an audio file otherwise (`audio.py`).
+- **Gemini's live conversation** runs over a WebSocket from the app (Gemini's Live API takes no
+  WebRTC). The Python makes a token for one session (`POST /auth_tokens`), so the key stays here,
+  and the messages that open it: the persona, the voice, the conversation so far, and one function,
+  `ask_atlas`, Gemini's way of handing a request over. The app's link (`GeminiLink`) reads Gemini's
+  messages into the events the engine already speaks (OpenAI's), sends the microphone as 16 kHz
+  PCM, plays the 24 kHz answer and drops it when the user speaks over it; Atlas's answer goes back
+  as the function's response, or as a new turn when Gemini cancelled the call. Gemini ends a
+  connection after some minutes, warning first: the link goes on in a new one with the handle it
+  gave (`sessionResumption`), and the window slides (`contextWindowCompression`) so a long call
+  does not end. An answer with nothing to say is now said, not thought, since a call waits for one.
+- **A setting's choices** (SDK version 25, `choices` on a manifest setting): fixed values,
+  `models` (the picker's, as `provider/model`) or `plugin`, the plugin's call `setting_choices`,
+  asked when the Plugins screen shows the setting and again when another of its settings or keys
+  changes. The voice asks the provider: Gemini says what each model does
+  (`supportedGenerationMethods`) and lists its voices by language (the app's first, then the ones
+  that speak every language); OpenAI says only names, which carry the job (`transcribe`, `tts`,
+  `gpt-live`). Nothing is a list in the code, so a model the provider adds shows up by itself; a
+  list is kept ten minutes. **Other…** types a value no list holds, and a list that could not be
+  asked says why under it.
+- **Proved** on 28/10/2026 against Gemini itself, with the user's key and a few seconds of audio:
+  speech with a tone and a Brazilian voice, the WAV turned into Opus by ffmpeg, that audio written
+  down inline and through the Files API, a live session opened with a token that handed a request
+  over with `ask_atlas` and spoke the answer, with a classic voice and a Brazilian one, and the
+  lists of models and voices of both providers. Then by the Python tests against the fake model
+  server's Gemini (the requests each makes, the upload, the token and the setup, the lists and
+  their refusals, the speech with and without ffmpeg) and the app's tests (the link with a fake
+  WebSocket: the setup, the history, the microphone, the answer in one response, a cancelled call,
+  a connection gone on in a new one, a setup refused). The live conversation spoken and heard in
+  the app waits for the user's microphone.
+
 ## The executors tab and the side panel — decided 2026-10-15
 
 Step 16f, asked for by the user on 15/10/2026: the workbench's card played a conversation squeezed

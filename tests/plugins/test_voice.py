@@ -1,7 +1,8 @@
 """The voice plugin (step 17a): a plugin's reader (SDK version 21) and the voice plugin Atlas
-ships, which writes down what an audio file says through OpenAI's transcription; the answer spoken
-when the user asks, sent as a file (SDK version 22); the dictation; and the live conversation's
-server side, its session and the note each spoken turn carries.
+ships, which writes down what an audio file says through OpenAI's transcription or Gemini's; the
+answer spoken when the user asks, sent as a file (SDK version 22); the dictation; the live
+conversation's server side, its session and the note each spoken turn carries; and the lists its
+settings are picked from (SDK version 25), asked of the provider.
 
 The voice plugin is the shipped folder, loaded as Atlas loads it, and it reaches the fake model
 server over real HTTP, as it would reach OpenAI; the conversations run on the assistant against the
@@ -11,6 +12,7 @@ same server, so what reaches the model is what a provider would get.
 import asyncio
 import base64
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -22,11 +24,14 @@ from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSetting
 from atlas.hooks import Hooks
 from atlas.models import TOOL_SEARCH, AttachmentKind, CallLedger, UserMessage
 from atlas.plugins import BUNDLED_FOLDER, ManifestError, Plugins
+from atlas.plugins.bundled.voice.gemini import INLINE_BYTES
 from atlas.plugins.model import parse_manifest
 from atlas.secrets import Vault
 from fake_model import (
     LIVE_ANSWER,
+    LIVE_TOKEN,
     SPOKEN,
+    SPOKEN_WAV,
     FakeCall,
     FakeError,
     FakeModelServer,
@@ -49,10 +54,14 @@ def plugins(home: Home, vault: Vault) -> Plugins:
     return Plugins(home, database, vault, bundled_folder=BUNDLED_FOLDER)
 
 
-def _voice_on(plugins: Plugins, fake: FakeModelServer, key: str | None = "fake-key") -> None:
-    plugins.set_setting("voice", "api_url", fake.base_url)
+def _voice_on(
+    plugins: Plugins, fake: FakeModelServer, key: str | None = "fake-key", provider: str = "openai"
+) -> None:
+    plugins.set_setting("voice", "provider", provider)
+    gemini = provider == "gemini"
+    plugins.set_setting("voice", "api_url", fake.gemini_url if gemini else fake.base_url)
     if key is not None:
-        plugins.set_secret("voice", "OPENAI_API_KEY", key)
+        plugins.set_secret("voice", "GEMINI_API_KEY" if gemini else "OPENAI_API_KEY", key)
     manifest = plugins.view("voice").manifest
     assert manifest is not None
     plugins.enable("voice", manifest.fingerprint())
@@ -483,6 +492,7 @@ def test_the_live_session_is_opened_here_with_the_key_and_the_history(
     assert status == {
         "ready": True,
         "why": "",
+        "provider": "openai",
         "turns": {"provider": "openai", "model": "gpt-6-luna", "effort": "none"},
         "quiet_seconds": 120,
     }
@@ -553,3 +563,348 @@ def test_a_spoken_turn_carries_its_note_and_a_typed_one_does_not(
     assert "transcript of speech" in said
     assert "Voice: let me check" in said
     assert "transcript of speech" not in json.dumps(typed_turn["messages"][-1]), "only once"
+
+
+# -- a setting's choices (SDK version 25) ----------------------------------------------------------
+
+
+def _with_settings(settings: list[Any], api: int = 25, calls: tuple[str, ...] = ()) -> Any:
+    atlas = {"api": api, "settings": settings, "calls": list(calls)}
+    return parse_manifest(
+        json.dumps({"name": "tuned", "atlas": atlas}), {"__init__.py"}, folder_name="tuned"
+    )
+
+
+def test_a_setting_declares_its_choices() -> None:
+    manifest = _with_settings(
+        [
+            "plain",
+            {"name": "color", "default": "red", "choices": ["red", "green"]},
+            {"name": "model", "choices": "models"},
+            {"name": "voice", "description": "Who speaks.", "choices": "plugin"},
+        ],
+        calls=("setting_choices",),
+    )
+    assert [(s.name, s.choices, s.choices_from) for s in manifest.settings] == [
+        ("plain", (), ""),
+        ("color", ("red", "green"), ""),
+        ("model", (), "models"),
+        ("voice", (), "plugin"),
+    ]
+    assert manifest.settings[3].description == "Who speaks."
+
+
+@pytest.mark.parametrize(
+    ("setting", "api", "calls", "problem"),
+    [
+        ({"name": "x", "choices": ["a"]}, 24, (), "need atlas.api 25"),
+        ({"name": "x", "choices": "somewhere"}, 25, (), "come from models or plugin"),
+        ({"name": "x", "choices": "plugin"}, 25, (), "the call setting_choices"),
+        ({"name": "x", "choices": []}, 25, (), "1 to 64 values"),
+        ({"name": "x", "choices": ["a", 2]}, 25, (), "1 to 64 values"),
+        ({"name": "x", "choices": {"from": "models"}}, 25, (), "come from models or plugin"),
+        ({"name": "x", "default": 3}, 25, (), "an object of text"),
+    ],
+)
+def test_choices_declared_badly_are_refused(
+    setting: dict[str, Any], api: int, calls: tuple[str, ...], problem: str
+) -> None:
+    with pytest.raises(ManifestError, match=problem):
+        _with_settings([setting], api, calls)
+
+
+def test_the_voice_lists_the_models_the_provider_has_for_each_setting(
+    plugins: Plugins, fake: FakeModelServer
+) -> None:
+    _voice_on(plugins, fake)
+    fake.model_ids = [
+        "gpt-6-luna",
+        "gpt-transcribe",
+        "gpt-4o-mini-transcribe-2025-03-20",
+        "gpt-4o-mini-transcribe",
+        "gpt-live-transcribe",
+        "whisper-1",
+        "gpt-4o-mini-tts",
+        "gpt-live-1",
+    ]
+
+    def values(setting: str, **more: Any) -> list[str]:
+        found = _call(plugins, "setting_choices", {"setting": setting, **more})
+        assert found["why"] == ""
+        return [choice["value"] for choice in found["choices"]]
+
+    # The provider's own first, as the empty value; a dated snapshot after the name it pins.
+    assert values("transcription_model") == [
+        "",
+        "gpt-4o-mini-transcribe",
+        "gpt-transcribe",
+        "whisper-1",
+        "gpt-4o-mini-transcribe-2025-03-20",
+    ]
+    assert values("speech_model") == ["", "gpt-4o-mini-tts"]
+    assert values("live_model") == ["", "gpt-live-1"]
+    assert values("voice") == [""], "OpenAI lists no voices: its voice is typed"
+    models = [{"value": "gemini/gemini-3.8-flash", "label": "Google Gemini · Gemini 3.8 Flash"}]
+    assert values("voice_turns_model", models=[*models, {"value": "no-provider"}, 3]) == [
+        "",
+        "conversation",
+        "gemini/gemini-3.8-flash",
+    ]
+    found = _call(plugins, "setting_choices", {"setting": "transcription_model"})
+    assert found["choices"][0]["label"] == "OpenAI's choice: gpt-transcribe"
+    assert _call(plugins, "setting_choices", {"setting": "quiet_close_seconds"}) == {
+        "choices": [],
+        "why": "",
+    }
+
+
+def test_gemini_lists_what_each_model_does_and_its_voices_by_language(
+    plugins: Plugins, fake: FakeModelServer
+) -> None:
+    _voice_on(plugins, fake, provider="gemini")
+
+    def model(name: str, *methods: str) -> dict[str, Any]:
+        return {
+            "name": f"models/{name}",
+            "displayName": name.replace("-", " ").title(),
+            "supportedGenerationMethods": list(methods),
+        }
+
+    fake.gemini_models = [
+        model("gemini-3.8-flash", "generateContent"),
+        model("gemini-3.5-transcribe", "generateContent"),
+        model("gemini-3.8-flash-tts", "generateContent"),
+        model("gemini-3.1-flash-image", "generateContent"),
+        model("gemini-embedding-2", "embedContent"),
+        model("gemini-3.8-live", "bidiGenerateContent"),
+        model("gemini-3.5-transcribe-live", "bidiGenerateContent"),
+    ]
+    fake.gemini_voices = {
+        "pt-BR": [
+            {"id": "pt-br-advisor-1", "display_name": "Advisor 1", "gender": "female"},
+        ],
+        "en-US": [
+            {"id": "kore", "display_name": "Kore", "gender": "female"},
+            {"id": "en-us-tutor-1", "display_name": "Tutor 1", "gender": "male"},
+        ],
+    }
+
+    def values(setting: str, language: str = "") -> list[str]:
+        params = {"setting": setting, "language": language}
+        return [c["value"] for c in _call(plugins, "setting_choices", params)["choices"]]
+
+    # A transcription model first, then the models that talk; nothing that draws or embeds.
+    assert values("transcription_model") == ["", "gemini-3.5-transcribe", "gemini-3.8-flash"]
+    assert values("speech_model") == ["", "gemini-3.8-flash-tts"]
+    assert values("live_model") == ["", "gemini-3.8-live"]
+    assert values("voice", "pt-BR") == ["", "pt-br-advisor-1", "kore"]
+    assert values("voice", "en-US") == ["", "kore"]
+    labels = [
+        c["label"] for c in _call(plugins, "setting_choices", {"setting": "voice"})["choices"]
+    ]
+    assert labels == ["Gemini's choice: Kore", "Kore (female, every language)"]
+    keys = {r.headers.get("x-goog-api-key") for r in fake.requests if r.path.startswith("/v1beta")}
+    assert keys == {"fake-key"}
+
+
+def test_a_list_kept_short_says_why(plugins: Plugins, fake: FakeModelServer, vault: Vault) -> None:
+    _voice_on(plugins, fake, provider="gemini", key="wrong-key")
+    found = _call(plugins, "setting_choices", {"setting": "speech_model"})
+    assert [c["value"] for c in found["choices"]] == [""]
+    assert "Gemini refused the list of models (HTTP 400): API key not valid" in found["why"]
+    vault.delete("GEMINI_API_KEY")
+    found = _call(plugins, "setting_choices", {"setting": "speech_model"})
+    assert "no GEMINI_API_KEY" in found["why"]
+
+
+# -- the voice through Gemini --------------------------------------------------------------------
+
+
+def test_gemini_writes_down_audio_with_its_transcription_model(
+    plugins: Plugins, fake: FakeModelServer
+) -> None:
+    _voice_on(plugins, fake, provider="gemini")
+    fake.transcribe("Buy bread.", "Call the bank.")
+    recorded = base64.b64encode(b"webm recording").decode()
+    said = _call(plugins, "dictate", {"audio": recorded, "media_type": "audio/webm;codecs=opus"})
+    assert said["text"] == "Buy bread."
+    (body,) = fake.bodies("/v1beta/interactions")
+    assert body == {
+        "model": "gemini-3.5-transcribe",
+        "input": [{"type": "audio", "mime_type": "audio/webm", "data": recorded}],
+    }
+
+    # Another model is asked for the words only, beside the audio.
+    plugins.set_setting("voice", "transcription_model", "gemini-3.8-flash")
+    _call(plugins, "dictate", {"audio": recorded, "media_type": "audio/ogg"})
+    asked = fake.bodies("/v1beta/interactions")[-1]
+    assert asked["model"] == "gemini-3.8-flash"
+    assert asked["input"][0]["type"] == "text"
+    assert "words only" in asked["input"][0]["text"]
+    assert not any(r.headers.get("authorization") for r in fake.requests), "its key, its header"
+
+
+def test_gemini_takes_a_long_recording_through_its_files_api(
+    plugins: Plugins, fake: FakeModelServer
+) -> None:
+    _voice_on(plugins, fake, provider="gemini")
+    fake.transcribe("A long meeting.")
+    long = b"\x01" * (INLINE_BYTES + 1)
+    said = _call(plugins, "dictation_status", None)
+    assert said["ready"] is True
+
+    async def read() -> str:
+        parts = await plugins.parts()
+        [reader] = parts.readers
+        path = plugins.data_folder("voice") / "meeting.ogg"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(long)
+        try:
+            return await reader.run(path, "audio/ogg")
+        finally:
+            await plugins.stop()
+
+    assert asyncio.run(read()) == "A long meeting."
+    [(uri, data)] = fake.uploaded.items()
+    assert data == long
+    (body,) = fake.bodies("/v1beta/interactions")
+    assert body["input"] == [{"type": "audio", "mime_type": "audio/ogg", "uri": uri}]
+
+
+def test_without_the_gemini_key_the_voice_names_it(plugins: Plugins, fake: FakeModelServer) -> None:
+    _voice_on(plugins, fake, provider="gemini", key=None)
+    status = _call(plugins, "dictation_status", None)
+    assert status["ready"] is False
+    assert "no GEMINI_API_KEY" in status["why"]
+    with pytest.raises(ValueError, match="no GEMINI_API_KEY"):
+        _call(plugins, "dictate", {"audio": base64.b64encode(b"x").decode()})
+
+
+def _spoken_by_gemini(
+    plugins: Plugins,
+    home: Home,
+    vault: Vault,
+    fake: FakeModelServer,
+    connect: Connect,
+    tmp_path: Path,
+) -> Path:
+    """Atlas asked to speak, through Gemini: the file the conversation got."""
+    _voice_on(plugins, fake, provider="gemini")
+    heard: list[tuple[str, ConversationEvent]] = []
+    assistant = _assistant(home, vault, fake, connect, tmp_path, heard)
+    speak = '{"text": "It is sunny.", "tone": "calm"}'
+    fake.reply(
+        FakeReply(calls=[FakeCall(TOOL_SEARCH, '{"query": "speak audio"}', id="s1")], when=ATLAS),
+        FakeReply(calls=[FakeCall("voice_speak", speak, id="c1")], when=ATLAS),
+        FakeReply(text="Sent.", when=ATLAS),
+    )
+
+    async def scenario() -> str:
+        parts = await plugins.parts()
+        await assistant.set_plugins(parts.tools, {}, {}, readers=parts.readers)
+        conversation = assistant.conversation(assistant.conversations.create().id)
+        conversation.send("Tell me the weather, in audio.")
+        await conversation.wait()
+        await assistant.close()
+        await plugins.stop()
+        return conversation.id
+
+    conversation_id = asyncio.run(scenario())
+    (asked,) = fake.bodies("/v1beta/interactions")
+    assert asked == {
+        "model": "gemini-3.8-flash-tts",
+        "input": [
+            {
+                "type": "user_input",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "It is sunny.",
+                        "annotations": [{"type": "speech_metadata", "style": "calm"}],
+                    }
+                ],
+            }
+        ],
+        "response_format": {"type": "audio"},
+        "generation_config": {"speech_config": [{"voice": "Kore"}]},
+    }
+    [sent] = [e for c, e in heard if c == conversation_id and isinstance(e, FileSent)]
+    assert sent.attachment.kind is AttachmentKind.AUDIO
+    kept = assistant.attachments.path(sent.attachment.id)
+    assert kept is not None
+    return kept
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed here")
+def test_gemini_speech_becomes_a_voice_note_with_ffmpeg(
+    plugins: Plugins,
+    home: Home,
+    vault: Vault,
+    fake: FakeModelServer,
+    connect: Connect,
+    tmp_path: Path,
+) -> None:
+    kept = _spoken_by_gemini(plugins, home, vault, fake, connect, tmp_path)
+    assert kept.suffix == ".ogg"
+    assert kept.read_bytes().startswith(b"OggS"), "Opus in Ogg, which Telegram plays as a voice"
+
+
+def test_gemini_speech_goes_as_wav_without_ffmpeg(
+    plugins: Plugins,
+    home: Home,
+    vault: Vault,
+    fake: FakeModelServer,
+    connect: Connect,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A PATH with no ffmpeg on it, as on a computer that never installed it.
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    kept = _spoken_by_gemini(plugins, home, vault, fake, connect, tmp_path)
+    assert kept.suffix == ".wav"
+    assert kept.read_bytes() == SPOKEN_WAV
+
+
+def test_the_gemini_live_session_gets_a_token_and_its_setup_here(
+    plugins: Plugins, fake: FakeModelServer
+) -> None:
+    _voice_on(plugins, fake, provider="gemini")
+    plugins.set_setting("voice", "voice", "pt-br-advisor-1")
+    status = _call(plugins, "live_status", None)
+    assert (status["ready"], status["provider"]) == (True, "gemini")
+    assert status["turns"] == {"provider": "gemini", "model": "gemini-3.8-flash", "effort": "none"}
+    history = [
+        {"role": "user", "text": "What is on today?"},
+        {"role": "assistant", "text": "Two meetings."},
+    ]
+    opened = _call(plugins, "live_session", {"history": history})
+    assert opened["url"] == (
+        f"ws://127.0.0.1:{fake.port}/ws/google.ai.generativelanguage.v1beta.GenerativeService"
+        f".BidiGenerateContentConstrained?access_token={LIVE_TOKEN}"
+    )
+    setup_message, history_message = opened["messages"]
+    setup = setup_message["setup"]
+    assert setup["model"] == "models/gemini-3.8-live"
+    voice = setup["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]
+    assert voice == {"voiceName": "pt-br-advisor-1"}
+    assert "Atlas does the work" in setup["systemInstruction"]["parts"][0]["text"]
+    [declared] = setup["tools"][0]["functionDeclarations"]
+    assert declared["name"] == "ask_atlas"
+    assert setup["inputAudioTranscription"] == setup["outputAudioTranscription"] == {}
+    assert history_message == {
+        "clientContent": {
+            "turns": [
+                {"role": "user", "parts": [{"text": "What is on today?"}]},
+                {"role": "model", "parts": [{"text": "Two meetings."}]},
+            ],
+            "turnComplete": False,
+        }
+    }
+    assert "fake-key" not in json.dumps(opened), "the key never goes to the screen"
+    (token,) = fake.bodies("/v1beta/auth_tokens")
+    assert token["uses"] == 1
+
+    # Gemini let the session go on: a new token, the same session, no history again.
+    resumed = _call(plugins, "live_session", {"resume": "h-1"})
+    assert [list(m) for m in resumed["messages"]] == [["setup"]]
+    assert resumed["messages"][0]["setup"]["sessionResumption"] == {"handle": "h-1"}

@@ -97,6 +97,15 @@ DESKTOP_POWERS = ("paste", "shortcut")
 #: `themes/<name>.json` each. A theme is data: no Python, no screen, nothing runs.
 THEMES_API = 24
 THEMES_FOLDER = "themes"
+#: The SDK version of a setting's choices (version 25): the app offers them in a list rather than a
+#: box to type in. Fixed in the manifest, or asked when shown: `models`, the models Atlas's picker
+#: offers; `plugin`, the plugin's own call `CHOICES_CALL`, which may ask a provider what it has.
+CHOICES_API = 25
+CHOICES_FROM = ("models", "plugin")
+CHOICES_CALL = "setting_choices"
+#: The most fixed choices a setting lists, and the longest one.
+MOST_CHOICES = 64
+MOST_CHOICE_CHARACTERS = 200
 #: The largest theme file Atlas reads.
 THEME_BYTES = 64 * 1024
 THEME_BASES = ("light", "dark")
@@ -166,6 +175,11 @@ class SettingDeclaration:
     name: str
     default: str
     description: str = ""
+    #: The values the app lists for it (version 25), fixed in the manifest; empty for none.
+    choices: tuple[str, ...] = ()
+    #: Where the app asks for its choices when it shows them (version 25): `models` or `plugin`;
+    #: empty when they are fixed or there are none.
+    choices_from: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -623,10 +637,7 @@ def parse_manifest(
         SecretDeclaration(entry["name"], entry.get("description", ""), entry.get("url", ""))
         for entry in _entries(own, "secrets", _SECRET)
     )
-    settings = tuple(
-        SettingDeclaration(entry["name"], entry.get("default", ""), entry.get("description", ""))
-        for entry in _entries(own, "settings", _SETTING)
-    )
+    settings = _settings(own, api, calls)
     options, option_settings, option_secrets = _user_config(name, data.get("userConfig"))
     taken = {s.name for s in settings} | {s.name for s in secrets}
     clash = sorted(taken & ({s.name for s in option_settings} | {s.name for s in option_secrets}))
@@ -1010,6 +1021,71 @@ def _names(data: dict[str, Any], key: str, rule: re.Pattern[str]) -> tuple[str, 
         raise ManifestError(f"{MANIFEST}: atlas.{key} is a list of names.")
     items: list[str] = value  # pyright: ignore[reportUnknownVariableType]
     return tuple(dict.fromkeys(items))
+
+
+def _settings(
+    own: dict[str, Any], api: int, calls: tuple[str, ...]
+) -> tuple[SettingDeclaration, ...]:
+    """`atlas.settings`: each a name, or an object of text whose `choices` (version 25) is a list
+    of values or where to ask for them."""
+    value = own.get("settings", [])
+    if not isinstance(value, list):
+        raise ManifestError(f"{MANIFEST}: atlas.settings is a list.")
+    settings: list[SettingDeclaration] = []
+    for item in cast("list[object]", value):
+        if not isinstance(item, dict):
+            settings += [
+                SettingDeclaration(entry["name"], entry.get("default", ""))
+                for entry in _entries({"settings": [item]}, "settings", _SETTING)
+            ]
+            continue
+        fields = dict(cast("dict[str, object]", item))
+        choices = fields.pop("choices", None)
+        entry = _entries({"settings": [fields]}, "settings", _SETTING)[0]
+        where = f"{MANIFEST}: atlas.settings {entry['name']}"
+        fixed: tuple[str, ...] = ()
+        source = ""
+        if choices is not None and api < CHOICES_API:
+            raise ManifestError(f"{where}: choices need atlas.api {CHOICES_API}.")
+        if isinstance(choices, str):
+            if choices not in CHOICES_FROM:
+                raise ManifestError(
+                    f"{where}: choices come from {' or '.join(CHOICES_FROM)}, or are a list."
+                )
+            if choices == "plugin" and CHOICES_CALL not in calls:
+                raise ManifestError(
+                    f"{where}: choices from the plugin need the call {CHOICES_CALL} in atlas.calls."
+                )
+            source = choices
+        elif isinstance(choices, list):
+            listed = cast("list[object]", choices)
+            if (
+                not listed
+                or len(listed) > MOST_CHOICES
+                or not all(
+                    isinstance(choice, str) and 0 < len(choice) <= MOST_CHOICE_CHARACTERS
+                    for choice in listed
+                )
+            ):
+                raise ManifestError(
+                    f"{where}: choices list 1 to {MOST_CHOICES} values of text, each "
+                    f"{MOST_CHOICE_CHARACTERS} characters at most."
+                )
+            fixed = tuple(cast("list[str]", listed))
+        elif choices is not None:
+            raise ManifestError(
+                f"{where}: choices come from {' or '.join(CHOICES_FROM)}, or are a list."
+            )
+        settings.append(
+            SettingDeclaration(
+                entry["name"],
+                entry.get("default", ""),
+                entry.get("description", ""),
+                fixed,
+                source,
+            )
+        )
+    return tuple(settings)
 
 
 def _entries(data: dict[str, Any], key: str, rule: re.Pattern[str]) -> list[dict[str, str]]:
