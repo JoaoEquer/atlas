@@ -11,3 +11,7 @@ class McpConfigError(McpError):
 
 class McpServerError(McpError):
     """A server could not start, or failed or went away while it was used."""
+
+
+class McpSignInError(McpError):
+    """A server that signs in with OAuth has no sign-in, or its authorization server refused one."""

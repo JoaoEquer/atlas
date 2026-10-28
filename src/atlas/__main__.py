@@ -10,6 +10,8 @@ the settings to whoever needs them.
 import argparse
 import asyncio
 import getpass
+import importlib
+import importlib.util
 import inspect
 import io
 import json
@@ -22,7 +24,8 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Generator, Mapping, MutableMapping, Sequence
+import webbrowser
+from collections.abc import Awaitable, Callable, Generator, Mapping, MutableMapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import timedelta
 from decimal import Decimal
@@ -149,7 +152,7 @@ from atlas.plugins import (
     update_plugin,
     validate,
 )
-from atlas.secrets import SecretsError, Vault
+from atlas.secrets import MCP_SIGN_IN_FILE, SecretsError, Vault
 from atlas.server import (
     EXIT_CEILING_SECONDS,
     KEPT_TOKEN,
@@ -310,6 +313,22 @@ def build_parser() -> argparse.ArgumentParser:
     remove = actions.add_parser("delete", help="Remove a secret.")
     remove.add_argument("name")
     actions.add_parser("check", help="Decrypt every secret and report the ones that fail.")
+
+    mcp = commands.add_parser("mcp", help="Sign in to the MCP servers of mcp.json that use OAuth.")
+    mcp_actions = mcp.add_subparsers(dest="action", required=True)
+    login = mcp_actions.add_parser(
+        "login",
+        help="Sign in to a server: its page opens in the browser, where you authorize Atlas, and "
+        "the sign-in is kept and renewed.",
+    )
+    login.add_argument("name", help="The server's name in mcp.json.")
+    login.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Print the page's address without opening it, for a browser on another machine.",
+    )
+    logout = mcp_actions.add_parser("logout", help="Forget a server's sign-in.")
+    logout.add_argument("name", help="The server's name in mcp.json.")
 
     models = commands.add_parser("models", help="The model providers and their keys.")
     model_actions = models.add_subparsers(dest="action", required=True)
@@ -709,6 +728,8 @@ def main(
             return _plugins(args, home, vault, reader)
         if args.command == "marketplace":
             return _marketplace(args, home, loaded.settings, vault)
+        if args.command == "mcp":
+            return _mcp(args, home, vault, reader)
         return _secrets(args, vault, reader)
     except (
         SecretsError,
@@ -2048,6 +2069,76 @@ def _secrets(args: argparse.Namespace, vault: Vault, stdin: TextIO) -> int:
         sys.stderr.write(f"{name}: {problem}\n")
     sys.stdout.write(f"{len(vault.names()) - len(problems)} secrets open, {len(problems)} fail.\n")
     return 1 if problems else 0
+
+
+def _mcp(args: argparse.Namespace, home: Home, vault: Vault, stdin: TextIO) -> int:
+    """`atlas mcp login` and `logout`: the sign-in is the user's, in the browser
+    (`atlas.mcp.oauth`); a server serving the home connects the server within a few seconds."""
+    name: str = args.name
+    sign_ins = vault.beside(MCP_SIGN_IN_FILE)
+    if args.action == "logout":
+        if not sign_ins.delete(name):
+            sys.stderr.write(f"atlas: Atlas is not signed in to {name}.\n")
+            return 1
+        sys.stdout.write(f"Signed out of {name}.\n")
+        return 0
+    if importlib.util.find_spec("mcp") is None:
+        sys.stderr.write("atlas: MCP servers need the mcp extra, which is not installed.\n")
+        return 1
+    mcp: Any = importlib.import_module("atlas.mcp")
+    try:
+        text = home.mcp_file.read_text(encoding="utf-8") if home.mcp_file.exists() else ""
+        servers = {server.name: server for server in mcp.parse_config(text, str(home.mcp_file))}
+        declared = servers.get(name)
+        if declared is None:
+            known = ", ".join(sorted(servers)) or "none"
+            sys.stderr.write(f"atlas: mcp.json has no server named {name} (it has: {known}).\n")
+            return 1
+        if declared.transport is mcp.Transport.STDIO:
+            sys.stderr.write(f"atlas: {name} runs on this machine and does not sign in.\n")
+            return 1
+        server = mcp.filled(declared, vault.get)
+
+        def show(page: str) -> None:
+            sys.stdout.write(f"Open this page and authorize Atlas:\n\n  {page}\n\n")
+            if not args.no_browser:
+                with suppress(webbrowser.Error):
+                    webbrowser.open(page)
+            sys.stdout.write(
+                "Waiting for the browser. If it is on another machine, paste here the address "
+                "it landed on, and press Enter.\n"
+            )
+            sys.stdout.flush()
+
+        asyncio.run(mcp.sign_in(name, server.url, sign_ins, show, _pasted(stdin)))
+    except mcp.McpError as error:
+        sys.stderr.write(f"atlas: {error}\n")
+        return 1
+    sys.stdout.write(f"Signed in to {name}. A running Atlas connects it within a few seconds.\n")
+    return 0
+
+
+def _pasted(stdin: TextIO) -> Callable[[], Awaitable[str]]:
+    """A line the user pastes, read by a thread of its own that never holds the process open."""
+
+    async def wait() -> str:
+        loop = asyncio.get_running_loop()
+        answer: asyncio.Future[str] = loop.create_future()
+
+        def give(line: str) -> None:
+            if not answer.done():
+                answer.set_result(line)
+
+        def read() -> None:
+            line = stdin.readline()
+            if line.strip():
+                with suppress(RuntimeError):  # the sign-in ended first, and its loop with it
+                    loop.call_soon_threadsafe(give, line)
+
+        threading.Thread(target=read, daemon=True).start()
+        return await answer
+
+    return wait
 
 
 def _check_models(args: argparse.Namespace, settings: Settings, home: Home, vault: Vault) -> int:

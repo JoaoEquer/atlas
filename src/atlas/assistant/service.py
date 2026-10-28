@@ -165,7 +165,7 @@ from atlas.models import (
     sees_images,
 )
 from atlas.plugins import Executor, LoadedCommand, LoadedReader, LoadedTool, Transcript
-from atlas.secrets import SecretsError, Vault
+from atlas.secrets import MCP_SIGN_IN_FILE, SecretsError, Vault
 from atlas.skills import (
     Curator,
     CuratorRun,
@@ -808,6 +808,12 @@ class Assistant:
         if self._shared.mcp is not None:
             await self._shared.mcp.reload_file()
 
+    async def mcp_signed_in(self) -> None:
+        """The MCP sign-ins changed (`atlas mcp login`): the servers left out for want of one are
+        tried again."""
+        if self._shared.mcp is not None:
+            await self._shared.mcp.signed_in()
+
     # -- the process ------------------------------------------------------------------------------
 
     def start(self) -> None:
@@ -830,6 +836,7 @@ class Assistant:
             shared.mcp_tools,
             self._mcp_changed,
             plugins=lambda: shared.plugin_servers,
+            sign_ins=shared.vault.beside(MCP_SIGN_IN_FILE),
         )
         self._mcp_start = asyncio.create_task(shared.mcp.start())
 

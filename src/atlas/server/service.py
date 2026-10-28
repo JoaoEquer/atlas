@@ -159,7 +159,7 @@ from atlas.plugins import (
 from atlas.plugins import Permission as ExecutorPermission
 from atlas.plugins import Question as ExecutorQuestion
 from atlas.plugins import Verdict as ExecutorVerdict
-from atlas.secrets import SecretsError, Vault
+from atlas.secrets import MCP_SIGN_IN_FILE, SecretsError, Vault
 from atlas.server.channels import ChannelRunner
 from atlas.server.connection import Connection, Peer
 from atlas.server.previews import read_preview
@@ -551,6 +551,7 @@ class Gateway:
         #: `mcp.json` as last seen (step 16s): read again once it changes, by the marketplace or
         #: by hand.
         self._mcp_stamp: tuple[int, int] | None = None
+        self._sign_in_stamp: tuple[int, int] | None = None
         #: The model catalog before any plugin added a provider (step 16l).
         self._base_catalog: Catalog | None = None
         #: The calls the plugins' screens may make to their Python (step 16m).
@@ -1982,17 +1983,20 @@ class Gateway:
 
     async def _watch_mcp_file(self) -> None:
         """Read `mcp.json` again once it changed (step 16s): the marketplace wrote it, or the user
-        did, and its servers follow without a restart."""
-        try:
-            status = self._home.mcp_file.stat()
-            stamp = (status.st_mtime_ns, status.st_size)
-        except FileNotFoundError:
-            stamp = (0, 0)
+        did, and its servers follow without a restart. The MCP sign-ins too: a server left out for
+        want of one connects once the user signed in from a terminal (`atlas mcp login`)."""
+        stamp = _stamp(self._home.mcp_file)
         if self._mcp_stamp is None:
             self._mcp_stamp = stamp
         elif stamp != self._mcp_stamp:
             self._mcp_stamp = stamp
             await self.assistant.reload_mcp()
+        signed = _stamp(self._home.secrets_folder / MCP_SIGN_IN_FILE)
+        if self._sign_in_stamp is None:
+            self._sign_in_stamp = signed
+        elif signed != self._sign_in_stamp:
+            self._sign_in_stamp = signed
+            await self.assistant.mcp_signed_in()
 
     async def _plugin_call[**P, T](
         self, call: Callable[P, T], *args: P.args, **kwargs: P.kwargs
@@ -3078,6 +3082,15 @@ def _absolute(path: str) -> Path:
     if not path or not Path(path).is_absolute():
         raise ProtocolError(INVALID_PARAMS, f"{path!r} is not an absolute path.")
     return Path(path)
+
+
+def _stamp(path: Path) -> tuple[int, int]:
+    """A file's time and size, to see it changed; (0, 0) while it does not exist."""
+    try:
+        status = path.stat()
+    except FileNotFoundError:
+        return (0, 0)
+    return (status.st_mtime_ns, status.st_size)
 
 
 async def _maybe_await(value: object) -> None:

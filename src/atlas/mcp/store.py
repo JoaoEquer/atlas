@@ -54,8 +54,16 @@ _logger = logging.getLogger("atlas.mcp")
 class McpConnection:
     """A server's session, held open by a task of its own."""
 
-    def __init__(self, server: ServerConfig, on_tools_changed: Callable[[], None] | None = None):
+    def __init__(
+        self,
+        server: ServerConfig,
+        on_tools_changed: Callable[[], None] | None = None,
+        auth: httpx2.Auth | None = None,
+    ):
+        """`auth` signs each request to a network server: its OAuth sign-in (`atlas.mcp.oauth`),
+        which sends the bearer token and, on a 401, renews it and sends the request again once."""
         self.server = server
+        self._auth = auth
         self._on_tools_changed = on_tools_changed
         self._client: Client | None = None
         self._holder: asyncio.Task[None] | None = None
@@ -120,8 +128,10 @@ class McpConnection:
             if server.headers_helper:
                 headers |= await _helper_headers(server.name, server.headers_helper)
             if server.transport is Transport.SSE:
-                return sse_client(server.url, headers=headers, sse_read_timeout=self.call_seconds)
-            http = httpx2.AsyncClient(headers=headers, timeout=CONNECT_SECONDS)
+                return sse_client(
+                    server.url, headers=headers, sse_read_timeout=self.call_seconds, auth=self._auth
+                )
+            http = httpx2.AsyncClient(headers=headers, timeout=CONNECT_SECONDS, auth=self._auth)
             return streamable_http_client(server.url, http_client=http)
         command = sys.executable if Path(server.command).name.lower() in _PYTHON else server.command
         return StdioServerParameters(

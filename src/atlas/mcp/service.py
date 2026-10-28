@@ -12,8 +12,13 @@ at its root is flattened; and a tool whose schema no provider would take (an inv
 a parameter name outside `[A-Za-z0-9_.-]{1,64}`) is left out and said, since one such schema makes
 every request that carries it fail.
 
-A server that cannot start (a missing secret, a command not found, OAuth) is logged with the fix
-and left out; the others still connect, and Atlas runs without it.
+A server that cannot start (a missing secret, a command not found, no sign-in) is logged with the
+fix and left out; the others still connect, and Atlas runs without it.
+
+**A server that signs in with OAuth** (`"oauth"` in its entry, or one the user signed in to) gets
+its bearer token on every request, renewed before it ends and once on a 401 (`atlas.mcp.oauth`).
+The sign-in itself is the user's, in a terminal (`atlas mcp login`): without one the server is left
+out saying so, and `signed_in` tries it again once the user signed in.
 
 **The plugins' servers** (step 16j) come beside the file's, as one more MCP file whose servers are
 named for their plugin (`atlas.plugins`): they connect when their plugin is turned on and leave
@@ -32,9 +37,10 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
 from atlas.agent import Tool, Toolset
-from atlas.mcp.errors import McpConfigError, McpError
+from atlas.mcp.errors import McpConfigError, McpError, McpSignInError
 from atlas.mcp.model import (
     ServerConfig,
+    Transport,
     cut_description,
     filled,
     model_schema,
@@ -42,6 +48,7 @@ from atlas.mcp.model import (
     secrets_needed,
     tool_name,
 )
+from atlas.mcp.oauth import SignedIn, SignIns, read_sign_in
 from atlas.mcp.store import McpConnection
 from atlas.trust import untrusted
 
@@ -60,9 +67,11 @@ class McpClient:
         on_change: Callable[[], None] | None = None,
         *,
         plugins: Callable[[], Mapping[str, Any]] = lambda: {},
+        sign_ins: SignIns | None = None,
     ) -> None:
         """`plugins` gives the plugins' servers, as an MCP file's document, each time it is
-        asked."""
+        asked; `sign_ins` holds the OAuth sign-ins, by server name."""
+        self._sign_ins = sign_ins
         self._file = config_file
         self._secret = secret
         self._toolset = toolset
@@ -175,18 +184,13 @@ class McpClient:
                 declared.name,
                 ", ".join(declared.ignored),
             )
-        if declared.oauth:
-            self._left_out(
-                declared.name,
-                f"The MCP server {declared.name} signs in with OAuth, which Atlas does not do yet.",
-            )
-            return
         try:
             server = filled(declared, self._secret)
+            auth = await self._signed_in(server)
         except McpError as error:
             self._left_out(declared.name, str(error))
             return
-        connection = McpConnection(server, lambda: self._refresh_later(server.name))
+        connection = McpConnection(server, lambda: self._refresh_later(server.name), auth)
         try:
             await connection.open()
             tools = await connection.tools()
@@ -198,6 +202,48 @@ class McpClient:
         self._connections[server.name] = connection
         self._install(connection, tools)
         _logger.info("The MCP server %s connected with %d tools.", server.name, len(tools))
+
+    async def _signed_in(self, server: ServerConfig) -> SignedIn | None:
+        """The server's sign-in, renewed if it is about to end, when it signs in with OAuth or the
+        user signed in to it. Raises `McpSignInError` when it needs one and has none."""
+        if server.transport is Transport.STDIO:
+            return None
+        if self._sign_ins is None:
+            if server.oauth:
+                raise McpSignInError(
+                    f"The MCP server {server.name} signs in with OAuth, and this Atlas keeps no "
+                    "sign-ins."
+                )
+            return None
+        if not server.oauth and read_sign_in(self._sign_ins, server.name, server.url) is None:
+            return None
+        auth = SignedIn(server.name, server.url, self._sign_ins)
+        await auth.current()
+        return auth
+
+    async def signed_in(self) -> None:
+        """The sign-ins changed (`atlas mcp login`): try again every server left out that signs in
+        with OAuth or now has a sign-in. A connected server keeps its session; its next renewal
+        reads the new sign-in."""
+        if self._sign_ins is None:
+            return
+        servers = [*self._file_servers(), *self._plugin_servers.values()]
+        to_retry: list[ServerConfig] = []
+        for server in servers:
+            if server.name in self._connections or server.transport is Transport.STDIO:
+                continue
+            try:
+                kept = read_sign_in(self._sign_ins, server.name, filled(server, self._secret).url)
+            except McpError:
+                kept = None
+            if server.oauth or kept is not None:
+                to_retry.append(server)
+        if not to_retry:
+            return
+        for server in to_retry:
+            self.problems.pop(server.name, None)
+        await asyncio.gather(*(self._connect(server) for server in to_retry))
+        self._changed()
 
     def _left_out(self, name: str, why: str) -> None:
         self.problems[name] = why

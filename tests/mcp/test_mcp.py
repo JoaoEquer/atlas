@@ -453,6 +453,8 @@ def test_always_load_keeps_tools_on_as_the_entry_or_the_server_says(tmp_path: Pa
 
 
 def test_a_server_that_signs_in_with_oauth_is_left_out_with_the_reason(tmp_path: Path) -> None:
+    """Without a sign-in, or anywhere to keep one; `test_mcp_oauth.py` signs in."""
+
     async def problems(client: McpClient, toolset: Toolset) -> dict[str, str]:
         return client.problems
 
@@ -461,7 +463,7 @@ def test_a_server_that_signs_in_with_oauth_is_left_out_with_the_reason(tmp_path:
         {"slack": {"type": "http", "url": "https://mcp.slack.example/mcp", "oauth": {}}},
     )(problems)
 
-    assert "signs in with OAuth, which Atlas does not do yet" in found["slack"]
+    assert "signs in with OAuth, and this Atlas keeps no sign-ins" in found["slack"]
 
 
 def test_a_tool_whose_schema_no_provider_takes_is_left_out_and_said(tmp_path: Path) -> None:

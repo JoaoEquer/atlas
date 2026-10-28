@@ -1,6 +1,6 @@
 """MCP: the client for the user's MCP servers, whose tools are found by tool search."""
 
-from atlas.mcp.errors import McpConfigError, McpError, McpServerError
+from atlas.mcp.errors import McpConfigError, McpError, McpServerError, McpSignInError
 from atlas.mcp.model import (
     DESCRIPTION_CHARS,
     TOOL_NAME_CHARS,
@@ -11,6 +11,7 @@ from atlas.mcp.model import (
     secrets_needed,
     tool_name,
 )
+from atlas.mcp.oauth import SignedIn, SignIns, login_hint, read_sign_in, sign_in
 from atlas.mcp.service import McpClient
 from atlas.mcp.store import (
     CONNECT_SECONDS,
@@ -31,11 +32,17 @@ __all__ = [
     "McpConnection",
     "McpError",
     "McpServerError",
+    "McpSignInError",
     "ServerConfig",
+    "SignIns",
+    "SignedIn",
     "Transport",
     "filled",
+    "login_hint",
     "parse_config",
+    "read_sign_in",
     "result_text",
     "secrets_needed",
+    "sign_in",
     "tool_name",
 ]

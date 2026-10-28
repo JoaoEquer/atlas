@@ -362,5 +362,20 @@ connected. Each tool is named `mcp__<server>__<tool>` and is deferred unless the
 `alwaysLoad`. A server marked `"trust": "untrusted"` asks before every call to a tool that does not
 declare itself read-only. Their results reach the model as untrusted data. ARCHITECTURE, Tools.
 
+A remote server that signs in with OAuth (`"oauth": {}` in its entry) waits for you to sign in
+from a terminal, once:
+
+```bash
+atlas mcp login erp        # opens the server's page; authorize Atlas there
+atlas mcp logout erp       # forget the sign-in
+```
+
+The browser comes back to an address Atlas listens on, on this machine, for that sign-in only.
+When the browser is on another machine (Atlas in a container, or over SSH), the page it lands on
+does not load: copy its address from the address bar and paste it into the terminal, or pass
+`--no-browser` to only print the page. Atlas keeps the sign-in encrypted beside the vault, never
+among your secrets, renews it on its own and connects the server within a few seconds, without a
+restart. A server whose sign-in has ended says so and names the command again.
+
 Plugins add no tools yet: the SDK registers channels (version 1) and executors (version 2), not
 tools (ARCHITECTURE, Plugins).

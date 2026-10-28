@@ -14,12 +14,13 @@ from atlas.secrets.keys import (
     PROTECTED_KEY_FILE,
 )
 from atlas.secrets.model import check_name
-from atlas.secrets.store import LOCK_FILE, VAULT_FILE, Vault
+from atlas.secrets.store import LOCK_FILE, MCP_SIGN_IN_FILE, VAULT_FILE, Vault
 
 __all__ = [
     "KEY_FILE_VARIABLE",
     "KEY_VARIABLE",
     "LOCK_FILE",
+    "MCP_SIGN_IN_FILE",
     "PLAIN_KEY_FILE",
     "PROTECTED_KEY_FILE",
     "VAULT_FILE",

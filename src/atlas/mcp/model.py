@@ -6,11 +6,11 @@ server is stdio (`command`, `args`, `env`, `cwd`; an entry without `type`), `htt
 `streamable-http`) or `sse` (`url`, `headers`, `headersHelper`). Every kind takes Claude Code's
 `timeout` (milliseconds) and `alwaysLoad`. As in Claude Code, an entry with a `url` but no `type`
 is an error, since an entry without `type` is stdio. Fields Atlas does not know are ignored and
-reported, so a plugin written for a newer Claude Code still loads. `oauth` is understood, and such a
-server is left out until Atlas signs in to servers. No server ships connected (ROADMAP, decided
-2026-10-07). Atlas adds `trust`: `"untrusted"` makes every call that may write wait for the
-user's approval; a server is trusted unless it says so, and a value Atlas does not know is
-untrusted, so a typo never turns the gate off (decided 2026-10-10). The file is
+reported, so a plugin written for a newer Claude Code still loads. `oauth` is understood: such a
+server signs in with OAuth (`atlas.mcp.oauth`), and its fields are not read. No server ships
+connected (ROADMAP, decided 2026-10-07). Atlas adds `trust`: `"untrusted"` makes every call that
+may write wait for the user's approval; a server is trusted unless it says so, and a value Atlas
+does not know is untrusted, so a typo never turns the gate off (decided 2026-10-10). The file is
 `user` in the home's boundary and travels in a backup (decided 09/10/2026).
 
 **Secrets** are written `${NAME}` or `${NAME:-default}`, Claude Code's syntax, in `command`, `args`,
@@ -68,7 +68,7 @@ class ServerConfig:
     #: `True` keeps the server's tools always on; `False` keeps them all deferred; `None` leaves
     #: each tool as its server marks it (`anthropic/alwaysLoad`), deferred otherwise.
     always_load: bool | None = None
-    #: The server signs in with OAuth, which Atlas does not do yet.
+    #: The server signs in with OAuth (`atlas.mcp.oauth`).
     oauth: bool = False
     #: `False` when the entry says `"trust": "untrusted"` (or anything but `"full"`): its tools that
     #: may write ask the user first.

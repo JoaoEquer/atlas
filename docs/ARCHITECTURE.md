@@ -339,13 +339,29 @@ Decided 2026-10-09, in step 5 (`atlas.tools`):
   as an optional `executor`, their events reaching the user then.
 - **MCP** (`atlas.mcp`): the user's servers in `ATLAS_HOME/mcp.json`, Claude Code's `.mcp.json`
   format (stdio, `http`, `sse`; `timeout`, `headersHelper`, `alwaysLoad`; unknown fields ignored;
-  `oauth` servers left out until Atlas signs in), `user` in the home's boundary; none ships
+  `oauth` servers signed in to with OAuth 2.1, below), `user` in the home's boundary; none ships
   connected. Secrets are `${NAME}` or `${NAME:-default}` from the vault. One
   long-lived session per server, opened again when it died; a call waits for the server's
   `timeout`, or until 5 (network) or 30 (stdio) minutes of silence. MCP tools
   are deferred unless `alwaysLoad` says otherwise, named `mcp__<server>__<tool>`, their
   descriptions cut at 2,048 characters, and a tool whose schema no provider takes is left out and
   said. Only `atlas.mcp.store` imports the official SDK.
+- **A remote MCP server signs in with OAuth 2.1** (`atlas.mcp.oauth`), decided 2026-10-28, as
+  the MCP authorization spec asks: the server's resource metadata (RFC 9728, from its 401's
+  `WWW-Authenticate` or the well-known address), its authorization server's (RFC 8414), Atlas
+  registered as a public client for each sign-in (RFC 7591), the code grant with PKCE S256, a
+  `state`, the `iss` when sent (RFC 9207) and `resource` (RFC 8707). The SDK has a client of its
+  own, but it signs in from inside a request, where a connection has 30 seconds; the sign-in
+  is the user's, at a page only a person may approve, so it is a command, `atlas mcp login
+  <server>`, never a server process: the browser comes back to a loopback address (RFC 8252), or
+  the user pastes the address it landed on. The tokens are kept by server name in the vault's
+  second file, `secrets/mcp-sign-ins.json` (same key, same lock, `machine`), apart from the
+  secrets the user stored. Every request carries the bearer token, renewed a minute before it
+  ends and once on a 401, the request then sent again once. A server without a sign-in, or whose
+  renewal is refused, is left out naming the command, and the server, which watches the file,
+  connects it once the user signs in. An entry without `oauth` uses a sign-in when one is kept.
+  Left out: Claude Code's `oauth` fields (a fixed client id, a callback port) and a sign-in from
+  the app.
 - **The toolset changes while Atlas runs**: a source's tools are replaced together, or not at all
   when a name clashes, and the tool search is installed again after.
 

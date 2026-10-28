@@ -176,6 +176,35 @@ Decrypt every secret and report the ones that fail.
 atlas secrets check
 ```
 
+## `atlas mcp`
+
+Sign in to the MCP servers of mcp.json that use OAuth.
+
+### `atlas mcp login`
+
+Sign in to a server: its page opens in the browser, where you authorize Atlas, and the sign-in is kept and renewed.
+
+```
+atlas mcp login name [--no-browser]
+```
+
+| Argument | What it does |
+|---|---|
+| `name` | The server's name in mcp.json. |
+| `--no-browser` | Print the page's address without opening it, for a browser on another machine. |
+
+### `atlas mcp logout`
+
+Forget a server's sign-in.
+
+```
+atlas mcp logout name
+```
+
+| Argument | What it does |
+|---|---|
+| `name` | The server's name in mcp.json. |
+
 ## `atlas models`
 
 The model providers and their keys.

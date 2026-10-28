@@ -11,6 +11,10 @@ never half of each.
 no write goes over it.
 
 **Every secret read or written is registered with the `Redactor`**, so no log line shows it.
+
+**The MCP servers' sign-ins** are a second file of the same kind beside it,
+`secrets/mcp-sign-ins.json`, opened by the same key under the same lock: tokens a server gave
+Atlas, renewed by Atlas, never listed among the secrets the user stored (`atlas.mcp.oauth`).
 """
 
 import base64
@@ -42,6 +46,7 @@ from atlas.secrets.keys import VaultKey, create_home_key, find_key, missing_key_
 from atlas.secrets.model import Entry, VaultDocument, check_name, parse_document, render_document
 
 VAULT_FILE = "vault.json"
+MCP_SIGN_IN_FILE = "mcp-sign-ins.json"
 LOCK_FILE = "vault.lock"
 
 _logger = logging.getLogger("atlas.secrets")
@@ -50,12 +55,19 @@ _logger = logging.getLogger("atlas.secrets")
 class Vault:
     """The secrets of one home, addressed by name. The key is found once and kept in memory."""
 
-    def __init__(self, folder: Path, settings: VaultSettings, redactor: Redactor) -> None:
+    def __init__(
+        self, folder: Path, settings: VaultSettings, redactor: Redactor, file: str = VAULT_FILE
+    ) -> None:
+        """`file` is another file of the same key, `MCP_SIGN_IN_FILE` (`beside`)."""
         self.folder = folder
-        self.path = folder / VAULT_FILE
+        self.path = folder / file
         self._settings = settings
         self._redactor = redactor
         self._key: VaultKey | None = None
+
+    def beside(self, file: str) -> "Vault":
+        """Another file of this vault's folder, opened by the same key and redacted alike."""
+        return Vault(self.folder, self._settings, self._redactor, file)
 
     # -- reading ---------------------------------------------------------------------------------
 
