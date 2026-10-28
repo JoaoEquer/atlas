@@ -136,13 +136,13 @@ days are archived, never your own.
 **Windows**, in PowerShell:
 
 ```powershell
-irm https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.ps1 | iex
+irm https://atlasv4.com/install.ps1 | iex
 ```
 
 **macOS and Linux**, in a terminal:
 
 ```bash
-curl -fsSL https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.sh | bash
+curl -fsSL https://atlasv4.com/install.sh | bash
 ```
 
 The installer brings everything Atlas needs (its own Python, Node and tools, checked against pinned

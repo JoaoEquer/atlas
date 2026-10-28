@@ -137,13 +137,13 @@ creó y llevan 30 días sin usarse se archivan, nunca las tuyas.
 **Windows**, en PowerShell:
 
 ```powershell
-irm https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.ps1 | iex
+irm https://atlasv4.com/install.ps1 | iex
 ```
 
 **macOS y Linux**, en una terminal:
 
 ```bash
-curl -fsSL https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.sh | bash
+curl -fsSL https://atlasv4.com/install.sh | bash
 ```
 
 El instalador trae todo lo que Atlas necesita (su propio Python, Node y herramientas, comprobados

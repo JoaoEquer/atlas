@@ -18,6 +18,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "news:draft": "node scripts/news-draft.mjs",
+    "installs": "node scripts/installs.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
   },
   "dependencies": {

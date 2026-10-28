@@ -1728,15 +1728,21 @@ the app built and opened, with the defects such installers are known to meet as 
 packaged, signed app is step 18b.
 
 - **Two scripts, `scripts/install.ps1` and `scripts/install.sh`**, run as `irm <url> | iex` and
-  `curl -fsSL <url> | bash`. They are served from a public gist, a copy of `main`'s published
-  with `gh gist edit`, so the address the README gives stays short and never moves; the gist holds
-  nothing but the scripts. It is
-  `gist.github.com/marqueskaio/4e04aef1d784d6d6518f12e466621266` (the README gives the two lines),
-  updated after a change to either script reaches `main` with `gh gist edit 4e04aef1d784d6d6518f12e466621266
-  -f install.ps1 scripts/install.ps1` (and `install.sh`); its `raw` address always serves the
-  latest. A file handed over instead would
+  `curl -fsSL <url> | bash`. The site serves them, `atlasv4.com/install.ps1` and
+  `atlasv4.com/install.sh` (decided with the user on 28/10/2026; a gist served them before): its
+  build copies them byte for byte (`site/scripts/check-dist.mjs` compares), so each deploy of
+  `main` serves `main`'s, and its Worker answers them as UTF-8 text, never cached. A file handed
+  over instead would
   need `-ExecutionPolicy Bypass` (Windows refuses an unsigned script downloaded from the internet),
   and an `.exe` or `.cmd` the SmartScreen warning, which only signing (18b) removes.
+- **Each download is counted** (asked for by the user on 28/10/2026: how many installs began). The
+  Worker writes one data point to Cloudflare's Analytics Engine (`atlas_installs`,
+  `site/worker/installs.ts`): the system (`windows` for the `.ps1`, `unix` for the `.sh`), the
+  client (PowerShell, curl, or `other` for a browser or a crawler) and the country Cloudflare
+  reads, never the address. `npm run installs` in `site/` reads the last days back. It counts
+  installs begun, not finished ones, and a run again to repair counts again; the app's own update
+  fetches from GitHub and is not counted. The Privacy page says so. Left out: a call from the
+  installer when it finishes, and anything from the app itself.
 - **Where it installs**: `%LOCALAPPDATA%\atlas\` on Windows (where the installation already lives),
   `~/.local/share/atlas/` elsewhere, holding `atlas/` (the checkout), `tools/` (the pinned tools)
   and `bin/` (the `atlas` command); `~/.local/bin/atlas` on Linux and macOS. `ATLAS_HOME` is not

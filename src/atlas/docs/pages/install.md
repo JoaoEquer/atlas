@@ -12,7 +12,7 @@ Atlas installs with one line. The installer brings everything it needs, its own 
 In PowerShell:
 
 ```powershell
-irm https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.ps1 | iex
+irm https://atlasv4.com/install.ps1 | iex
 ```
 
 ## macOS and Linux
@@ -20,8 +20,10 @@ irm https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621
 In a terminal:
 
 ```bash
-curl -fsSL https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.sh | bash
+curl -fsSL https://atlasv4.com/install.sh | bash
 ```
+
+The site counts each download of the installer by system and country, to know how many installs began; it keeps nothing that tells who you are (see [Privacy](/docs/guides/privacy/)).
 
 ## The first time it opens
 

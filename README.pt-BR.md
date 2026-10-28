@@ -136,13 +136,13 @@ que ele criou e ficaram 30 dias sem uso são arquivadas, nunca as suas.
 **Windows**, no PowerShell:
 
 ```powershell
-irm https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.ps1 | iex
+irm https://atlasv4.com/install.ps1 | iex
 ```
 
 **macOS e Linux**, num terminal:
 
 ```bash
-curl -fsSL https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.sh | bash
+curl -fsSL https://atlasv4.com/install.sh | bash
 ```
 
 O instalador traz tudo o que o Atlas precisa (Python, Node e ferramentas próprios, conferidos contra

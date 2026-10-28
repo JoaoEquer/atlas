@@ -1,10 +1,12 @@
 // The site on Cloudflare Workers: the built files in dist, and worker/index.ts in front of the pages
 // for agents (Markdown on request, Link headers). Built files that are not pages skip the Worker.
+// Each download of an installer is written to Analytics Engine (worker/installs.ts).
 {
   "name": "atlas-site",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-25",
   "routes": [{ "pattern": "atlasv4.com", "custom_domain": true }],
+  "analytics_engine_datasets": [{ "binding": "INSTALLS", "dataset": "atlas_installs" }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

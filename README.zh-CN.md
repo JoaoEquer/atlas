@@ -117,13 +117,13 @@ Claude Code、Codex、Gemini CLI 和 DeepSeek 的 harness 都是**执行器**：
 **Windows**，在 PowerShell 中：
 
 ```powershell
-irm https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.ps1 | iex
+irm https://atlasv4.com/install.ps1 | iex
 ```
 
 **macOS 和 Linux**，在终端中：
 
 ```bash
-curl -fsSL https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw/install.sh | bash
+curl -fsSL https://atlasv4.com/install.sh | bash
 ```
 
 安装程序会带来 Atlas 所需的一切（独立的 Python、Node 和工具，并按固定的哈希值校验），

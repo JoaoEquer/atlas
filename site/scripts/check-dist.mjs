@@ -1,6 +1,7 @@
 // Checks the built site the way an agent and a visitor would meet it: every page and file agents
 // read is there, each documentation page has its Markdown twin, the skill's digest matches its
-// bytes, and no internal link leads nowhere. Runs after `astro build`; fails the build on a miss.
+// bytes, the installers are the repository's, and no internal link leads nowhere. Runs after
+// `astro build`; fails the build on a miss.
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -36,7 +37,9 @@ const required = [
   'docs/index.html',
   'docs.md',
   '.well-known/agent-skills/index.json',
-  '.well-known/agent-skills/atlas/SKILL.md'
+  '.well-known/agent-skills/atlas/SKILL.md',
+  'install.ps1',
+  'install.sh'
 ]
 for (const path of required) {
   if (!has(path)) {
@@ -56,6 +59,15 @@ const robots = existsSync(join(dist, 'robots.txt')) ? readFileSync(join(dist, 'r
 for (const line of ['Content-Signal:', 'Sitemap:', 'User-agent: *']) {
   if (!robots.includes(line)) {
     problems.push(`robots.txt lacks "${line}"`)
+  }
+}
+
+// The installers served are the repository's, byte for byte: the install page's line runs them.
+for (const name of ['install.ps1', 'install.sh']) {
+  const built = join(dist, name)
+  const source = fileURLToPath(new URL(`../../scripts/${name}`, import.meta.url))
+  if (existsSync(built) && !readFileSync(built).equals(readFileSync(source))) {
+    problems.push(`${name} differs from scripts/${name}`)
   }
 }
 

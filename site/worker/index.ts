@@ -1,10 +1,14 @@
 // The site on Cloudflare: the built files, with this Worker in front of the pages. An agent that
 // asks for Markdown (Accept: text/markdown) gets the page's Markdown twin; every page announces its
-// twin, and the home what agents read first, in Link headers.
+// twin, and the home what agents read first, in Link headers. The installers are served as text,
+// and each download counted (installs.ts).
+import { downloadPoint, installerOf } from './installs'
 import { CONTENT_SIGNAL, pageLinks, twinPath, wantsMarkdown } from './routing'
 
 interface Env {
   ASSETS: Fetcher
+  /** Optional: without the binding the installers are still served, only not counted. */
+  INSTALLS?: AnalyticsEngineDataset
 }
 
 function markdown(response: Response, head: boolean): Response {
@@ -19,6 +23,21 @@ export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url)
     const reading = request.method === 'GET' || request.method === 'HEAD'
+    const installer = reading ? installerOf(url.pathname) : null
+    if (installer) {
+      const answer = await env.ASSETS.fetch(request)
+      if (!answer.ok) {
+        return answer
+      }
+      if (request.method === 'GET') {
+        env.INSTALLS?.writeDataPoint(downloadPoint(installer, request.headers.get('User-Agent'), request.cf?.country))
+      }
+      // `irm` decodes by the charset it is told, and a script must never be cached stale.
+      const headers = new Headers(answer.headers)
+      headers.set('Content-Type', 'text/plain; charset=utf-8')
+      headers.set('Cache-Control', 'no-store')
+      return new Response(answer.body, { status: answer.status, headers })
+    }
     if (reading && wantsMarkdown(request.headers.get('Accept'))) {
       const twin = twinPath(url.pathname)
       if (twin) {

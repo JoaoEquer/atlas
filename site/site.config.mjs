@@ -12,8 +12,8 @@ export const SITE_URL = process.env.SITE_URL ?? 'https://atlasv4.com'
 /** The public repository the site, the app and the installers come from. */
 export const REPOSITORY = 'https://github.com/marqueskaio/atlas'
 
-/** Where the installers are served from until the site serves them itself. */
-export const INSTALLERS = 'https://gist.githubusercontent.com/marqueskaio/4e04aef1d784d6d6518f12e466621266/raw'
+/** Where the installers are served from: the site itself, which counts each download. */
+export const INSTALLERS = SITE_URL
 
 /**
  * The documentation's pages, in the package, where `atlas docs` reads them too. Found from the
@@ -21,6 +21,9 @@ export const INSTALLERS = 'https://gist.githubusercontent.com/marqueskaio/4e04ae
  * its own address is elsewhere.
  */
 export const PAGES = new URL('../src/atlas/docs/pages/', pathToFileURL(`${process.cwd()}/`))
+
+/** The installers, `install.ps1` and `install.sh`, which the build copies to the site's root. */
+export const SCRIPTS = new URL('../scripts/', pathToFileURL(`${process.cwd()}/`))
 
 const UNORDERED = 10_000
 
