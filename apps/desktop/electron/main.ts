@@ -72,6 +72,10 @@ const appRoot = path.resolve(here, '..')
 /** The app's icon (`npm run icons` draws it): the window's and the taskbar's, and the Dock's on macOS.
  * On Windows the .ico, whose small sizes are drawn for them rather than scaled down. */
 const icon = path.join(appRoot, 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png')
+/** Who the app is to the Windows taskbar. Opened from its Start Menu shortcut, Windows takes the
+ * shortcut's icon; opened by an update, or by `atlas desktop`, it is Electron's own program with
+ * Electron's icon, unless the window names itself, its icon and how it opens again (`createWindow`). */
+const APP_ID = 'Atlas.Desktop'
 const devServer = process.env.ATLAS_DESKTOP_DEV_SERVER
 /** Started by the end-to-end tests: the window may drop its own connection, and the tests read the
  * servers' PIDs from this process, and name the stand-in of the update's Python
@@ -241,6 +245,10 @@ if (process.platform !== 'darwin') {
   Menu.setApplicationMenu(null)
 }
 
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_ID)
+}
+
 /** Only the system browser opens links, and only web ones. */
 function openOutside(url: string): void {
   try {
@@ -271,6 +279,17 @@ function createWindow(): void {
     },
     width: 1240
   })
+
+  if (process.platform === 'win32') {
+    // The taskbar's icon however the app was opened, and a pin that opens the app, not Electron.
+    window.setAppDetails({
+      appIconIndex: 0,
+      appIconPath: icon,
+      appId: APP_ID,
+      relaunchCommand: `"${process.execPath}" "${appRoot}"`,
+      relaunchDisplayName: 'Atlas'
+    })
+  }
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     openOutside(url)
