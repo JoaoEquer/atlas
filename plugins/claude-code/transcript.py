@@ -113,6 +113,8 @@ def read_transcript(root: Path, session: str, folder: Path) -> Transcript:
             )
         elif _local_command(record):
             entries += _said(str(record.get("content") or ""), "user", record)
+        elif (steered := _steered(record)) is not None:
+            entries += _said(steered, "user", record)
         elif _visible(record):
             entries += _entries(record, questions)
         context = _context(record, context)
@@ -213,6 +215,21 @@ def chain(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen.add(str(said[-1]["uuid"]))
         walked.append(said[-1])
         tail = str(said[-1]["uuid"])
+
+
+def _steered(record: dict[str, Any]) -> str | None:
+    """What the user sent while Claude Code worked: kept as an `attachment` line of type
+    `queued_command`, not as a user line, so it vanished once the session was read again."""
+    if record.get("type") != "attachment":
+        return None
+    attachment: object = record.get("attachment")
+    if not isinstance(attachment, dict):
+        return None
+    queued = cast("dict[str, Any]", attachment)
+    prompt = queued.get("prompt")
+    if queued.get("type") != "queued_command" or not isinstance(prompt, str):
+        return None
+    return prompt if queued.get("commandMode", "prompt") == "prompt" else None
 
 
 def _local_command(record: dict[str, Any]) -> bool:
