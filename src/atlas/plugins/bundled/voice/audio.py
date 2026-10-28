@@ -7,11 +7,17 @@ which plays in the app and arrives on Telegram as a file rather than a voice mes
 
 import asyncio
 import shutil
-import subprocess
 import sys
 
 #: How long ffmpeg may take on one answer.
 ENCODE_SECONDS = 60.0
+
+# No console window flashing on Windows. Imported only there: the flag exists only there, and a
+# check made on Linux would read a module-wide import as unused.
+if sys.platform == "win32":
+    from subprocess import CREATE_NO_WINDOW as NO_WINDOW
+else:
+    NO_WINDOW = 0
 
 
 async def voice_note(wav: bytes) -> tuple[bytes, str]:
@@ -27,8 +33,7 @@ async def voice_note(wav: bytes) -> tuple[bytes, str]:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
-            # No console window flashing on Windows.
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            creationflags=NO_WINDOW,
         )
     except OSError:
         return wav, ".wav"
