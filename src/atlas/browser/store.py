@@ -28,6 +28,9 @@ from atlas.browser.model import DEVTOOLS_FILE, chrome_arguments, devtools_endpoi
 
 #: How long Chrome may take to write its DevTools endpoint.
 START_SECONDS = 30.0
+#: How long a browser whose first process exited cleanly may still take to write its endpoint:
+#: Edge's launcher hands the window to another process and ends (found on 25/10/2026).
+HANDOFF_SECONDS = 5.0
 #: How long a closing Chrome, or a stopped engine, has before it is killed.
 CLOSE_SECONDS = 5.0
 #: How long a check that Chrome still listens may take.
@@ -103,15 +106,18 @@ async def open_chrome(program: Sequence[str], profile: Path, *, headless: bool) 
         raise BrowserError(f"The browser could not start: {error}") from error
     loop = asyncio.get_running_loop()
     deadline = loop.time() + START_SECONDS
+    handed_off: float | None = None
     while loop.time() < deadline:
         endpoint = _endpoint(port_file)
         if endpoint is not None:
             return Chrome(profile, endpoint, process)
         if process.returncode is not None:
-            raise BrowserError(
-                f"The browser ended as it started (exit code {process.returncode}). Is another "
-                f"program using its profile, {profile}?"
-            )
+            handed_off = loop.time() if handed_off is None else handed_off
+            if process.returncode != 0 or loop.time() - handed_off > HANDOFF_SECONDS:
+                raise BrowserError(
+                    f"The browser ended as it started (exit code {process.returncode}). Is "
+                    f"another program using its profile, {profile}?"
+                )
         await asyncio.sleep(0.1)
     await stop_tree(process)
     raise BrowserError(
@@ -147,7 +153,15 @@ async def close_chrome(chrome: Chrome) -> None:
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(process.wait(), CLOSE_SECONDS)
         await stop_tree(process)
-    (chrome.profile / DEVTOOLS_FILE).unlink(missing_ok=True)
+    # A browser whose launcher handed off is not the process waited on: it is gone when it stops
+    # listening, and only then does its profile stop being held. One that still listens keeps its
+    # endpoint, so the next start uses it: a second launcher on the profile would only hand its
+    # window to it and leave.
+    with contextlib.suppress(TimeoutError):
+        async with asyncio.timeout(CLOSE_SECONDS):
+            while await listening(chrome.endpoint):
+                await asyncio.sleep(0.1)
+            (chrome.profile / DEVTOOLS_FILE).unlink(missing_ok=True)
 
 
 @dataclass(frozen=True, slots=True)

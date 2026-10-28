@@ -42,7 +42,7 @@ interface AtlasBridge {
 }
 
 interface TabsBridge {
-  /** On macOS, âW: close the tab on screen. */
+  /** On macOS, ⌘W: close the tab on screen. */
   onClose: (listener: () => void) => () => void
 }
 

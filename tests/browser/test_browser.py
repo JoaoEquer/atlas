@@ -3,8 +3,10 @@ opens a DevTools port as Chrome does, and tests/fake_engine.py, which runs the c
 browser-harness does with helpers that pretend."""
 
 import asyncio
+import contextlib
 import json
 import os
+import signal
 import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -200,7 +202,51 @@ def test_a_chrome_already_open_on_the_profile_is_used(setup: Setup) -> None:
     assert len(setup.chromes()) == 1
 
 
-def test_a_browser_that_cannot_start_says_why(setup: Setup, tmp_path: Path) -> None:
+def test_a_launcher_that_hands_the_browser_off_and_ends_cleanly_is_waited_for(
+    setup: Setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Edge's launcher on Windows ends with code 0 and another process writes the endpoint.
+    monkeypatch.setenv("FAKE_CHROME_HANDOFF", "1")
+
+    async def body(browser: Browser) -> None:
+        result = await browser.run("c-1", "print('here')", BrowserMode.HEADLESS, 30)
+        assert _result(result.text)["output"].strip() == "here"
+
+    _with(setup, body)
+    assert len(setup.chromes()) == 1
+    # Closed, the browser that took over stops and its temporary profile goes with it.
+    assert not (setup.folder / "temporary" / "headless").exists()
+
+
+def test_a_browser_that_outlives_its_close_keeps_its_endpoint_for_the_next_start(
+    setup: Setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The browser that took over ignores Browser.close, and the launcher Atlas waited on is gone.
+    monkeypatch.setenv("FAKE_CHROME_HANDOFF", "1")
+    monkeypatch.setenv("FAKE_CHROME_STUBBORN", "1")
+    monkeypatch.setattr("atlas.browser.store.CLOSE_SECONDS", 0.5)
+
+    async def body(browser: Browser) -> None:
+        result = await browser.run("c-1", "print('here')", BrowserMode.PROFILE, 30)
+        assert _result(result.text)["output"].strip() == "here"
+
+    try:
+        _with(setup, body)
+        assert (setup.folder / "profile" / "DevToolsActivePort").exists()
+        # The next start finds it running and uses it, instead of a second launcher that would fail.
+        _with(setup, body)
+        assert len(setup.chromes()) == 1
+    finally:
+        for chrome in setup.chromes():
+            with contextlib.suppress(OSError):
+                os.kill(chrome["pid"], signal.SIGTERM)
+
+
+def test_a_browser_that_cannot_start_says_why(
+    setup: Setup, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("atlas.browser.store.HANDOFF_SECONDS", 0.2)
+
     async def body() -> None:
         browser = Browser(
             setup.folder,

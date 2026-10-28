@@ -1,11 +1,15 @@
 """A stand-in for Chrome, for the tests: opened as Atlas opens Chrome (`python tests/fake_chrome.py
 <Chrome's own flags>`), it listens for WebSocket connections on a port of the system's choosing,
 writes the profile's `DevToolsActivePort` as Chrome does, and closes on `Browser.close`. Its
-command line is appended to `FAKE_CHROME_LOG`, one JSON line per start."""
+command line is appended to `FAKE_CHROME_LOG`, one JSON line per start. With `FAKE_CHROME_HANDOFF`
+set it starts as Edge's launcher does on Windows: it hands the browser to another process and ends
+with code 0 before the endpoint is written. With `FAKE_CHROME_STUBBORN` set it answers
+`Browser.close` and keeps running."""
 
 import asyncio
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -25,7 +29,9 @@ async def main() -> None:
         async for message in socket:
             request = json.loads(message)
             await socket.send(json.dumps({"id": request.get("id"), "result": {}}))
-            if request.get("method") == "Browser.close":
+            if request.get("method") == "Browser.close" and not os.environ.get(
+                "FAKE_CHROME_STUBBORN"
+            ):
                 closed.set()
 
     async with websockets.serve(handle, "127.0.0.1", 0) as server:
@@ -36,4 +42,9 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    if os.environ.get("FAKE_CHROME_HANDOFF"):
+        environ = {k: v for k, v in os.environ.items() if k != "FAKE_CHROME_HANDOFF"}
+        # This same script, with the arguments it was given.
+        subprocess.Popen([sys.executable, __file__, *sys.argv[1:]], env=environ)  # noqa: S603
+    else:
+        asyncio.run(main())

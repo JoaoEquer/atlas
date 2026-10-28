@@ -296,7 +296,7 @@ function createWindow(): void {
 
     return { action: 'deny' }
   })
-  // âW closes the tab on screen, not the window, which the menu's Close Window would (keys.ts).
+  // ⌘W closes the tab on screen, not the window, which the menu's Close Window would (keys.ts).
   window.webContents.on('before-input-event', (event, input) => {
     if (closesTab(input, process.platform)) {
       event.preventDefault()
