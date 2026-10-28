@@ -137,9 +137,35 @@ export function MessageBox(props: MessageBoxProps) {
   useLayoutEffect(() => {
     const element = box.current
 
-    if (element) {
+    if (!element) {
+      return undefined
+    }
+
+    const fit = () => {
       element.style.height = 'auto'
       element.style.height = `${String(element.scrollHeight + element.offsetHeight - element.clientHeight)}px`
+    }
+
+    fit()
+
+    // Measured while the box was still narrow (or hidden), the placeholder wraps letter by letter and
+    // the height sticks huge: measure again when the width settles or changes.
+    if (typeof ResizeObserver === 'undefined') {
+      return undefined
+    }
+
+    let width = element.clientWidth
+    const watcher = new ResizeObserver(() => {
+      if (element.clientWidth !== width) {
+        width = element.clientWidth
+        fit()
+      }
+    })
+
+    watcher.observe(element)
+
+    return () => {
+      watcher.disconnect()
     }
   }, [text])
 

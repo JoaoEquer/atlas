@@ -106,7 +106,7 @@ describe("the box's plugin buttons (screen version 2)", () => {
     contribute('voice', {
       area: 'box',
       id: 'dictate',
-      render: () => <button type="button">🎤</button>,
+      render: () => <button type="button">??</button>,
       title: 'Dictate'
     })
     render(
@@ -122,7 +122,7 @@ describe("the box's plugin buttons (screen version 2)", () => {
     )
     const text = screen.getByTestId<HTMLTextAreaElement>('box')
 
-    expect(screen.getByTestId('box-actions').textContent).toBe('🎤')
+    expect(screen.getByTestId('box-actions').textContent).toBe('??')
 
     fireEvent.change(text, { target: { value: 'Remind me' } })
     act(() => {
@@ -137,7 +137,7 @@ describe("the box's plugin buttons (screen version 2)", () => {
     $contributions.set([])
   })
 
-  it('leave a box that takes no buttons, an executor session’s, as it is', () => {
+  it('leave a box that takes no buttons, an executor session�s, as it is', () => {
     const text = box()
     act(() => {
       insertIntoBox('dictated elsewhere')
@@ -189,5 +189,41 @@ describe("each conversation's words (the UI review, 25/10/2026)", () => {
     expect(screen.getByTestId<HTMLTextAreaElement>('box').value).toBe('')
     rerender(owned('c-back-a', onSend))
     expect(screen.getByTestId<HTMLTextAreaElement>('box').value).toBe('Lost on the way')
+  })
+})
+
+describe('the box height', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('is measured again when the box changes width, so a placeholder measured too narrow does not leave it huge', () => {
+    const watchers: Array<() => void> = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          watchers.push(callback)
+        }
+        observe() {}
+        disconnect() {}
+      }
+    )
+
+    const text = box()
+    let wide = 100
+    Object.defineProperty(text, 'clientWidth', { configurable: true, get: () => wide })
+    Object.defineProperty(text, 'scrollHeight', { configurable: true, get: () => (wide < 300 ? 900 : 44) })
+
+    watchers.forEach(run => {
+      run()
+    })
+    expect(text.style.height).toBe('900px')
+
+    wide = 600
+    watchers.forEach(run => {
+      run()
+    })
+    expect(text.style.height).toBe('44px')
   })
 })
