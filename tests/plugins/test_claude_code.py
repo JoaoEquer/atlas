@@ -1329,6 +1329,41 @@ def test_a_command_and_its_output_read_back_from_claude_codes_own_lines(tmp_path
     ]
 
 
+def test_a_message_sent_while_claude_code_works_reads_back_where_it_entered(
+    tmp_path: Path,
+) -> None:
+    """As Claude Code keeps a prompt sent mid-turn: an `attachment` line of type `queued_command`
+    in the chain, not a user line. Read again (a tab switched back to), it must stay where it
+    entered, or Claude Code's answer to it reads as an answer to nothing."""
+    transcript = plugin_module("transcript")
+    folder = tmp_path / "projects" / "p"
+    folder.mkdir(parents=True)
+    lines = [
+        {"type": "user", "uuid": "a", "parentUuid": None,
+         "message": {"role": "user", "content": "build it"}},
+        {"type": "assistant", "uuid": "b", "parentUuid": "a",
+         "message": {"role": "assistant", "content": [{"type": "text", "text": "On it."}]}},
+        {"type": "attachment", "uuid": "c", "parentUuid": "b",
+         "attachment": {"type": "queued_command", "prompt": "stuck?", "commandMode": "prompt"}},
+        {"type": "queue-operation", "operation": "remove", "content": "stuck?"},
+        {"type": "attachment", "uuid": "d", "parentUuid": "c",
+         "attachment": {"type": "queued_command", "prompt": "/x", "commandMode": "bash"}},
+        {"type": "assistant", "uuid": "e", "parentUuid": "d",
+         "message": {"role": "assistant", "content": [{"type": "text", "text": "Not stuck."}]}},
+    ]  # fmt: skip
+    file = folder / "s1.jsonl"
+    file.write_text("\n".join(json.dumps(line) for line in lines), encoding="utf-8")
+
+    read = transcript.read_transcript(tmp_path, "s1", Path("p"))
+
+    assert [(e.kind, e.by, e.text) for e in read.entries] == [
+        ("text", "user", "build it"),
+        ("text", "harness", "On it."),
+        ("text", "user", "stuck?"),
+        ("text", "harness", "Not stuck."),
+    ]
+
+
 def test_a_compact_the_user_typed_reads_back_as_its_compaction_where_they_typed_it(
     tmp_path: Path,
 ) -> None:
