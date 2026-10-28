@@ -41,6 +41,7 @@ from atlas.mcp import (
     read_sign_in,
     sign_in,
 )
+from atlas.mcp.oauth import begin_sign_in
 from atlas.secrets import MCP_SIGN_IN_FILE, Vault
 
 SERVER = Path(__file__).parent.parent / "mcp_server.py"
@@ -299,6 +300,32 @@ def test_an_answer_to_another_sign_in_is_refused_and_nothing_is_kept() -> None:
             asyncio.run(scenario())
 
     assert store.kept == {}
+
+
+def test_the_app_s_sign_in_gives_the_page_first_and_keeps_the_sign_in_once_authorized() -> None:
+    erp = FakeErp()
+    store = Store()
+    with serving(erp) as base:
+        url = f"{base}/mcp"
+
+        async def scenario() -> tuple[str, bool]:
+            page, signing = await begin_sign_in("erp", url, store)
+            kept_before = read_sign_in(store, "erp", url) is not None
+            browse(page)  # the app opens it; the user authorizes
+            await signing
+            return page, kept_before
+
+        page, kept_before = asyncio.run(scenario())
+
+    assert "/oauth/authorize?" in page
+    assert kept_before is False
+    assert read_sign_in(store, "erp", f"{base}/mcp") is not None
+
+
+def test_the_app_s_sign_in_fails_before_a_page_when_the_server_cannot_be_signed_in_to() -> None:
+    erp = FakeErp(s256=False)
+    with serving(erp) as base, pytest.raises(McpSignInError, match="S256"):
+        asyncio.run(begin_sign_in("erp", f"{base}/mcp", Store()))
 
 
 def test_an_authorization_server_without_pkce_s256_is_refused() -> None:

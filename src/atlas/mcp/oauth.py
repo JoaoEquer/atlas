@@ -497,6 +497,27 @@ async def sign_in(
     return signed
 
 
+async def begin_sign_in(
+    name: str, url: str, store: SignIns, *, seconds: float = SIGN_IN_SECONDS
+) -> tuple[str, "asyncio.Task[SignIn]"]:
+    """A sign-in the app starts with a button: the page for the app to open in the browser, as
+    soon as Atlas has it, and the sign-in still waiting for the browser to come back, which keeps
+    it. Raises `McpSignInError` when it fails before there is a page (no discovery, a refused
+    registration, no PKCE S256)."""
+    page: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+
+    def show(address: str) -> None:
+        if not page.done():
+            page.set_result(address)
+
+    signing = asyncio.create_task(sign_in(name, url, store, show, seconds=seconds))
+    await asyncio.wait({page, signing}, return_when=asyncio.FIRST_COMPLETED)
+    if page.done():
+        return page.result(), signing
+    signing.result()  # raises what stopped it
+    raise McpSignInError(f"The sign-in to {name} ended before it had a page to open.")
+
+
 # -- the requests ---------------------------------------------------------------------------------
 
 
