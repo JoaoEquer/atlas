@@ -284,7 +284,7 @@ def test_atlas_ships_its_channel_and_executor_plugins_off(home: Home, vault: Vau
     )
     assert claude.manifest is not None
     assert claude.manifest.executors == ("claude-code",)
-    assert claude.settings == {"program": ""}
+    assert claude.settings == {"program": "", "chrome": "off"}
     assert claude.secrets == {}, "it reads no secret: Claude Code keeps its own login"
     assert (codex.name, codex.bundled, codex.enabled, codex.problem) == ("codex", True, False, None)
     assert codex.manifest is not None

@@ -63,6 +63,12 @@ one account to another in a copy: `--resume` takes the path of the other account
 **Detection asks two things at once**, `claude --version` and `claude auth status --json`, so a
 slow first start (an antivirus scanning a new `claude.exe`) costs one wait, not two. The status is
 read whatever the exit code: nobody logged in exits 1, saying so (2.1.296, 18/10/2026).
+
+**Its browser**, Claude in Chrome, is turned on only when the process starts (`--chrome`): its
+`/chrome`, which turns it on in a terminal, is a screen of its own that a session over stdio does
+not have. The plugin's `chrome` setting passes the flag to each session, on every account; Claude
+Code then connects to the extension in the user's own Chrome, its server `claude-in-chrome`
+(proved on 2.1.302, 31/10/2026). A Claude Code started only to say what it has never gets it.
 """
 
 import asyncio
@@ -220,7 +226,8 @@ def _native(path: str) -> bool:
 class ClaudeCode:
     """The executor. `cli` is the program and the arguments before Claude Code's own; `None`
     when there is none on this computer. With `account_folder`, on the account Claude Code keeps
-    there (step 16h); else on the user's own folder (`sessions`, a test's)."""
+    there (step 16h); else on the user's own folder (`sessions`, a test's). With `chrome`, each
+    session starts with Claude in Chrome."""
 
     title = TITLE
 
@@ -231,9 +238,11 @@ class ClaudeCode:
         logger: Logger,
         sessions: Path | None = None,
         account_folder: Path | None = None,
+        chrome: bool = False,
     ) -> None:
         self._cli = None if cli is None else list(cli)
         self._logger = logger
+        self._chrome = chrome
         self._sessions = sessions
         self._account_folder = account_folder
         #: The models the last Claude Code started answered; `None` until one did.
@@ -284,7 +293,9 @@ class ClaudeCode:
         return Path(os.path.normpath(Path.home() / f".claude-{nickname}"))
 
     def for_account(self, folder: Path) -> "ClaudeCode":
-        return ClaudeCode(self._cli, logger=self._logger, account_folder=folder)
+        return ClaudeCode(
+            self._cli, logger=self._logger, account_folder=folder, chrome=self._chrome
+        )
 
     async def delete_session(self, session: str, folder: Path) -> None:
         root = self.account_folder()
@@ -315,7 +326,14 @@ class ClaudeCode:
                 raise ExecutorError("The other account no longer keeps this session.")
             resume = str(found)
         instance = ClaudeCodeInstance(
-            self._cli, spec, host, self._logger, self._known, resume, self._account_folder
+            self._cli,
+            spec,
+            host,
+            self._logger,
+            self._known,
+            resume,
+            self._account_folder,
+            chrome=self._chrome,
         )
         await instance.open()
         return instance
@@ -439,6 +457,8 @@ class ClaudeCodeInstance:
         known: Callable[[tuple[ModelChoice, ...]], None] = lambda _models: None,
         resume: str | None = None,
         account_folder: Path | None = None,
+        *,
+        chrome: bool = False,
     ) -> None:
         self._host = host
         self._known = known
@@ -461,6 +481,7 @@ class ClaudeCodeInstance:
             effort=spec.effort,
             account_folder=account_folder,
             directories=spec.directories,
+            chrome=chrome,
         )
 
     async def open(self) -> None:

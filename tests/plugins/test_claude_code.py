@@ -639,6 +639,37 @@ async def _on(executor: Any, folder: Path) -> Host:
     return host
 
 
+def test_the_chrome_setting_starts_each_session_with_claude_in_chrome(
+    script: Script, tmp_path: Path
+) -> None:
+    """`/chrome` has no screen over stdio, so the browser comes at the start (`--chrome`), on
+    every account; off, Atlas passes nothing and Claude Code's own settings decide."""
+    protocol = plugin_module("protocol")
+    executor = plugin_module("executor")
+    assert "--chrome" not in protocol.command(["claude"])
+    assert "--no-chrome" not in protocol.command(["claude"])
+    assert protocol.command(["claude"], chrome=True)[-3:] == [
+        "--chrome",
+        "--input-format",
+        "stream-json",
+    ]
+    script.write({"result": "Done."})
+    work = tmp_path / "work"
+    work.mkdir()
+    logger = logging.getLogger("atlas.plugins.claude-code")
+
+    async def scenario() -> None:
+        on = executor.ClaudeCode(FAKE, logger=logger, sessions=tmp_path / "claude", chrome=True)
+        for made in (on, on.for_account(tmp_path / "other"), claude_code()):
+            instance = await made.start(ExecutorSpec(work), Host())
+            await instance.stop()
+
+    asyncio.run(scenario())
+
+    started = [r["argv"] for r in script.received() if "argv" in r]
+    assert ["--chrome" in argv for argv in started] == [True, True, False]
+
+
 def test_the_program_setting_is_a_json_list_or_the_claude_on_the_path() -> None:
     executor = plugin_module("executor")  # the package is imported with it
     package = sys.modules["atlas_plugin_claude_code"]
@@ -657,7 +688,7 @@ def test_the_plugin_folder_is_its_name_and_ships_with_atlas() -> None:
     assert manifest["atlas"]["executors"] == ["claude-code"]
     # Version 3 lists sessions, which this plugin does; it stays at 2, the version the user's
     # consent was given for (the fingerprint holds it), since Atlas ships it with itself.
-    assert manifest["atlas"]["api"] == 2
+    assert manifest["atlas"]["api"] == 25  # a setting with choices (Claude in Chrome)
 
 
 # -- its sessions, wherever they began (step 16f) ------------------------------------------------

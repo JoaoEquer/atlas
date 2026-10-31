@@ -14,7 +14,9 @@ from .protocol import CLAUDE_CODE
 
 def register(ctx: PluginContext) -> None:
     def make() -> ClaudeCode:
-        return ClaudeCode(program(ctx.setting("program")), logger=ctx.logger)
+        return ClaudeCode(
+            program(ctx.setting("program")), logger=ctx.logger, chrome=ctx.setting("chrome") == "on"
+        )
 
     ctx.register_executor(CLAUDE_CODE, make)
 

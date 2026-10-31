@@ -76,6 +76,7 @@ class ClaudeCodeProcess:
         effort: str | None = None,
         account_folder: Path | None = None,
         directories: Sequence[Path] = (),
+        chrome: bool = False,
     ) -> None:
         self._cli = cli
         self._folder = folder
@@ -91,6 +92,8 @@ class ClaudeCodeProcess:
         self._account_folder = account_folder
         #: Folders it reads as its own (`--add-dir`): the home's attachments.
         self._directories = tuple(str(directory) for directory in directories)
+        #: Whether it starts with Claude in Chrome (`--chrome`).
+        self._chrome = chrome
         self._process: asyncio.subprocess.Process | None = None
         self._writing = asyncio.Lock()
         self._waiting: dict[str, asyncio.Future[dict[str, Any]]] = {}
@@ -121,6 +124,7 @@ class ClaudeCodeProcess:
                     model=self._model,
                     effort=self._effort,
                     directories=self._directories,
+                    chrome=self._chrome,
                 ),
                 cwd=self._folder,
                 env=environment(os.environ, _named(self._account_folder)),

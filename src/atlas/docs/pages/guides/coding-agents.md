@@ -45,6 +45,14 @@ When an executor asks a question or asks for permission, the request waits for y
 
 Each harness keeps its own permission rules. Atlas decides only who answers what the harness asks.
 
+## Claude Code's browser
+
+Claude Code can drive your own Chrome through Claude's Chrome extension (Claude in Chrome): open tabs, read pages, click, see what is on them. In a terminal you turn it on with `/chrome`; in Atlas that command is not there, because the browser is turned on when the session starts.
+
+To have it, install the extension in Chrome, then open **Settings**, **Extensions**, the **Plugins** tab, and set Claude Code's **chrome** setting to **on** (or run `atlas plugins set claude-code chrome on`). Each Claude Code session started after that, on every account, comes with the browser; one already open takes it when it starts again. The tabs open in your Chrome, in its own window, not inside Atlas.
+
+This is Claude Code's browser. Atlas's own, for its conversations, is another one: [The browser](/docs/guides/browser/).
+
 ## Let Atlas hand out the work
 
 Ask Atlas in plain words, and it delegates to the right executor on the account you name, with a route of its own when you give one, for example `claude-code@company` and then `codex`. It follows along and brings back the result.

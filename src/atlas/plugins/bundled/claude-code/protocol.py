@@ -101,11 +101,13 @@ def command(
     model: str | None = None,
     effort: str | None = None,
     directories: Sequence[str] = (),
+    chrome: bool = False,
 ) -> list[str]:
     """The `claude` command line the Agent SDK builds for a session that talks over stdio, with
     Claude Code's own system prompt and the user's settings. `cli` is the program, and the
     arguments that come before Claude Code's own. Without `model` and `effort`, those of the
-    user's settings. `directories` are read as its own (`--add-dir`)."""
+    user's settings. `directories` are read as its own (`--add-dir`). With `chrome`, it starts
+    with Claude in Chrome (`--chrome`); without, as Claude Code's own settings say."""
     line = [
         *cli,
         "--output-format", "stream-json", "--verbose",
@@ -120,6 +122,8 @@ def command(
         line += ["--effort", effort]
     for directory in directories:
         line += ["--add-dir", directory]
+    if chrome:
+        line.append("--chrome")
     if resume is not None:
         line.append(f"--resume={resume}")
         if fork:
