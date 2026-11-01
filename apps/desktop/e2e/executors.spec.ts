@@ -613,6 +613,9 @@ test('the first run opened again brings the sessions of a window, and archives t
   const scripts = await scriptsFolder()
   desktop = await launch(withClaude(scripts))
   const { claude, folder, page } = desktop
+  // The home's one-time offer of "Bring your work" decided first, with nothing old to offer: the
+  // old folder below would otherwise open it under the test's clicks.
+  await page.waitForFunction(() => localStorage.getItem('atlas.firstRun') !== null, undefined, STARTED)
   keepOldSession(claude, folder)
   // A second folder, last touched two months ago.
   const old = path.join(path.dirname(folder), 'old-shop')
