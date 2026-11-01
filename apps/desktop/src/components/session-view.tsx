@@ -54,6 +54,7 @@ import { type ExecutorCard, ExecutorCardView } from './executor-cards'
 import { baseName, ConsentAgain, TooOld } from './executors-list'
 import { HarnessAutoWarning, useHarnessAuto } from './harness-auto'
 import { MessageBox } from './message-box'
+import { PlanRing } from './plan-ring'
 import { TerminalButton } from './side-panel'
 import { ThreadView } from './thread-view'
 import { ArrowDown, ArrowUp, Close, Route, VsCode } from './ui/icons'
@@ -383,6 +384,9 @@ function SessionComposer({
           />
           <SessionModelPicker instance={instance} open={open} />
           <TerminalButton />
+          <span className="ml-auto">
+            <PlanRing executor={usageKey(executors, instance, open, settings.account)} />
+          </span>
         </>
       }
     />
@@ -820,6 +824,25 @@ interface Switching {
  * the next instance starts on it. Before a pick, a session not started shows its folder's account.
  * `null`, with only one.
  */
+/** Whose plan the session runs on: its instance's account, or the one chosen for its first
+ * prompt, named as its executor row (`claude-code@<id>` for another account). */
+function usageKey(
+  executors: ExecutorRow[],
+  instance: InstanceRow | undefined,
+  open: OpenSession,
+  chosen: null | string | undefined
+): string {
+  if (instance) {
+    return instance.executor
+  }
+
+  const row = executors.find(found => found.name === open.executor)
+  const base = row?.base || open.executor
+  const account = chosen ?? row?.account_id ?? ''
+
+  return executors.find(found => (found.base || found.name) === base && found.account_id === account)?.name ?? base
+}
+
 function useSessionAccounts(
   instance: InstanceRow | undefined,
   open: OpenSession

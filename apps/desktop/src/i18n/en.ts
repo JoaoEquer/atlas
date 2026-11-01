@@ -958,6 +958,9 @@ export const en = {
     up: (name: string) => `${name} sooner`,
     wentOn: (name: string) => `The plan limit was reached: it went on on ${name}.`
   },
+  planRing: {
+    used: (percent: number, window: string) => `${String(percent)}% used · ${window}`
+  },
   executorPanel: {
     active: (on: number, all: number) => (on === all ? String(all) : `${String(on)} of ${String(all)}`),
     empty: 'No MCP servers.',

@@ -943,6 +943,9 @@ export const ptBR: Override<Messages> = {
     up: (name: string) => `${name} antes`,
     wentOn: (name: string) => `O limite do plano chegou: continuou em ${name}.`
   },
+  planRing: {
+    used: (percent: number, window: string) => `${String(percent)}% usado · ${window}`
+  },
   executorPanel: {
     active: (on: number, all: number) => (on === all ? String(all) : `${String(on)} de ${String(all)}`),
     empty: 'Nenhum servidor MCP.',
