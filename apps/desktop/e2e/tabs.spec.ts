@@ -32,7 +32,9 @@ async function threeConversations(page: Page): Promise<void> {
     ['Fix the bike', 'Answer three.']
   ].entries()) {
     if (index > 0) {
+      // A new tab opens on the start screen, where Atlas's card starts the conversation.
       await page.getByTestId('tab-new').click()
+      await page.getByTestId('start-atlas').getByTestId('new-conversation').click()
     }
 
     await say(page, said ?? '')

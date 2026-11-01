@@ -301,8 +301,9 @@ function nearEnd(list: HTMLElement | null): void {
 /** The conversations, the last used first: one whose turn began here goes up at once, before its
  * row is read again. A page at a time (step 9e): the next one is read as the list scrolls near its
  * end. Above it, the search, whose results take its place while its field holds words; under it,
- * the archived ones. */
-function Conversations() {
+ * the archived ones. On the start screen it is `bare`: the button and the list alone, the search
+ * and the archived staying the sidebar's. */
+export function Conversations({ bare = false }: { bare?: boolean }) {
   const used = useStore($used)
   const conversations = byLastUse(useStore($conversations), row => lastUse(row.updated_at, used[row.id]))
   const selected = useStore($selected)
@@ -310,7 +311,7 @@ function Conversations() {
   const read = useStore($read).conversations
   const failed = useStore($readError).conversations
   const more = useStore($listMore)
-  const searching = useStore($search).text.trim() !== ''
+  const searching = useStore($search).text.trim() !== '' && !bare
   const list = useRef<HTMLUListElement>(null)
   const rows = conversations.length
 
@@ -326,6 +327,7 @@ function Conversations() {
       <div className="px-3 pb-2">
         <button
           className="flex w-full items-center gap-2 rounded-md border border-border-strong px-2 py-1.5 text-left text-sm font-medium hover:bg-muted"
+          data-testid="new-conversation"
           onClick={newConversation}
           type="button"
         >
@@ -333,7 +335,7 @@ function Conversations() {
           {t.conversations.new}
         </button>
       </div>
-      <SearchField />
+      {!bare && <SearchField />}
       {searching && <SearchResults />}
       {/* Hidden, not gone, while the search shows: it comes back where it was. */}
       <ul
@@ -379,7 +381,7 @@ function Conversations() {
           </li>
         )}
       </ul>
-      {!searching && <ArchivedConversations />}
+      {!searching && !bare && <ArchivedConversations />}
     </>
   )
 }

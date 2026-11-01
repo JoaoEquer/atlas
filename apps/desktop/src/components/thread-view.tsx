@@ -20,6 +20,7 @@ import { ArrowDown } from './ui/icons'
 import { InlineError } from './ui/inline-error'
 import { SkeletonThread } from './ui/skeleton'
 import { elapsed, useNow } from './use-now'
+import { Wordmark } from './wordmark'
 
 // A code block in a reply only copies: saving a command as `file.ps1` is no use.
 const CONTROLS = { code: { copy: true, download: false } } as const
@@ -40,8 +41,8 @@ const NONE_SENDING: readonly Sending[] = []
 const PLACES = new Map<string, { following: boolean; top: number }>()
 
 /**
- * A conversation's thread. `empty` is what an empty thread shows in place of the invitation (a
- * bot's face and name); `loading`, that it is being read, which shows a skeleton and never the
+ * A conversation's thread. `empty` is what an empty thread shows in place of the invitation, Atlas's
+ * name set in characters as on the website (a bot's face and name); `loading`, that it is being read, which shows a skeleton and never the
  * invitation; `place`, whose thread it is, for where the user was in it; `sending`, the user's
  * messages on their way; `waiting`, the calls the open cards hold, by call id (store/waiting.ts).
  */
@@ -150,11 +151,7 @@ export function ThreadView({
           <div className="mx-auto max-w-3xl space-y-4 px-6 py-6">
             {thread.items.length === 0 &&
               sending.length === 0 &&
-              (loading ? (
-                <SkeletonThread label={t.thread.reading} />
-              ) : (
-                (empty ?? <p className="pt-24 text-center text-muted-foreground">{t.thread.empty}</p>)
-              ))}
+              (loading ? <SkeletonThread label={t.thread.reading} /> : (empty ?? <Invitation />))}
             {segments(thread.items).map(segment =>
               Array.isArray(segment) ? (
                 <Trail key={segment[0]?.key} parts={segment} waiting={waiting} />
@@ -653,6 +650,17 @@ function Working() {
       <span className="h-2 w-2 rounded-full bg-working/70 motion-safe:animate-pulse" />
       <span className="h-2 w-2 rounded-full bg-working/70 motion-safe:animate-pulse motion-safe:[animation-delay:150ms]" />
       <span className="h-2 w-2 rounded-full bg-working/70 motion-safe:animate-pulse motion-safe:[animation-delay:300ms]" />
+    </div>
+  )
+}
+
+/** What a conversation with Atlas opens on: its name set in characters, as the website's, and the
+ * invitation in words (asked for by the user on 01/11/2026). */
+function Invitation() {
+  return (
+    <div className="pt-16 text-center" data-testid="invitation">
+      <Wordmark className="mx-auto max-w-xl" ratio={0.3} word="Atlas" />
+      <p className="mt-4 text-muted-foreground">{t.thread.empty}</p>
     </div>
   )
 }

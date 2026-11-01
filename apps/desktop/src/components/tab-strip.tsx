@@ -15,8 +15,8 @@ import {
   closeTab,
   keepTab,
   moveTab,
-  newConversation,
   openWaiting,
+  showStart,
   showTab
 } from '@/store/app'
 import { away, named, samePlace, screenPlace, type Tab } from '@/store/tabs'
@@ -30,7 +30,8 @@ const DRAGGED = 'application/x-atlas-tab'
 /**
  * The tabs above the central area (store/tabs.ts): each conversation, bot and session open in this
  * home, with its state's dot and its title, in italic for the passing tab and in bold while what
- * it ended with is unseen; a new conversation at the end; and, on the right, how many cards wait
+ * it ended with is unseen; what is not made yet at the end, the start screen a new tab opens on
+ * included; and, on the right, how many cards wait
  * for the user away from the screen. Ctrl+1 to 8 show a tab and Ctrl+9 the last, Ctrl+Tab the next,
  * Ctrl+W closes the one on screen (in the terminal they stay its shell's); a tab is dragged to
  * another place, and a middle click closes it.
@@ -49,7 +50,9 @@ export function TabStrip() {
   // answered: while Atlas opens, the tabs it kept are still on their way.
   const opening = state !== 'open' && !read.conversations
   const draft =
-    !opening && (view === 'conversation' ? selected === null : view === 'session' && open !== null && !named(open))
+    !opening &&
+    (view === 'start' ||
+      (view === 'conversation' ? selected === null : view === 'session' && open !== null && !named(open)))
   const waiting = away(cards, view, selected, open)
   const list = useRef<HTMLDivElement>(null)
   const [dropAt, setDropAt] = useState<null | number>(null)
@@ -172,14 +175,16 @@ export function TabStrip() {
             role="tab"
             tabIndex={-1}
           >
-            <span className="truncate">{view === 'session' ? t.executors.newSession : t.conversations.new}</span>
+            <span className="truncate">
+              {view === 'start' ? t.tabs.new : view === 'session' ? t.executors.newSession : t.conversations.new}
+            </span>
           </div>
         )}
         <button
           aria-label={t.tabs.new}
           className="grid w-9 shrink-0 place-items-center text-muted-foreground hover:bg-hover hover:text-foreground"
           data-testid="tab-new"
-          onClick={newConversation}
+          onClick={showStart}
           title={t.tabs.new}
           type="button"
         >

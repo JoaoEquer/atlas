@@ -233,7 +233,7 @@ export function folderKey(executor: string, folder: string): string {
 
 /** The bot dialog on screen: a new bot, or one being edited, with its definition as read. */
 export type BotDialog = { definition: BotDefinition | null; mode: 'create' | 'edit' }
-type View = 'conversation' | 'marketplace' | 'plugin' | 'proposals' | 'routines' | 'session'
+type View = 'conversation' | 'marketplace' | 'plugin' | 'proposals' | 'routines' | 'session' | 'start'
 
 /**
  * What the user chose for a session open in another program (decided with the user on 15/10/2026):
@@ -3271,6 +3271,15 @@ export function selectConversation(conversationId: string): Promise<void> {
 
 export function newConversation(): void {
   current().newConversation()
+}
+
+/** The start screen a new tab opens on (components/start-screen.tsx): Atlas, the bots and the
+ *  executors side by side, each with its list, read again. */
+export function showStart(): void {
+  const session = current()
+  session.$view.set('start')
+  void session.refreshBots().catch(() => undefined)
+  void session.refreshWorkbench().catch(() => undefined)
 }
 
 /** The plugin guide, on GitHub: what a plugin may hold and every part of the SDK. */

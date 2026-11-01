@@ -43,6 +43,8 @@
   --ring: oklch(55.6% 0 0);
   /* Behind a dialog. */
   --scrim: oklch(0% 0 0 / 0.4);
+  /* Atlas's own orange, the website's: the light that sweeps the wordmark, never a state. */
+  --brand: oklch(67.5% 0.215 38);
 
   /* The states, one meaning each: at work (blue, pulsing), waiting for the user (amber), done
      (green), failed (red). The `-text` ones are the same color dark enough, or light enough, to be
@@ -80,6 +82,7 @@
   --primary-foreground: oklch(20.5% 0 0);
   --ring: oklch(70.8% 0 0);
   --scrim: oklch(0% 0 0 / 0.4);
+  --brand: oklch(70.5% 0.2 40);
   --working: oklch(70.7% 0.165 254.624);
   --waiting: oklch(76.9% 0.188 70.08);
   --waiting-text: oklch(82.8% 0.189 84.429);
@@ -111,6 +114,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-ring: var(--ring);
   --color-scrim: var(--scrim);
+  --color-brand: var(--brand);
   --color-working: var(--working);
   --color-waiting: var(--waiting);
   --color-waiting-text: var(--waiting-text);

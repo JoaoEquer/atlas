@@ -45,6 +45,7 @@ import { SessionView } from './session-view'
 import { SettingsView } from './settings-view'
 import { SidePanel } from './side-panel'
 import { Sidebar } from './sidebar'
+import { StartScreen } from './start-screen'
 import { TabStrip } from './tab-strip'
 import { ThreadView } from './thread-view'
 
@@ -149,6 +150,8 @@ export function App() {
           <PluginPage />
         ) : view === 'session' ? (
           <SessionView />
+        ) : view === 'start' ? (
+          <StartScreen />
         ) : (
           <>
             {bot && <BotHeader bot={bot} />}

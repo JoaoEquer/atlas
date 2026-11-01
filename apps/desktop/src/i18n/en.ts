@@ -266,10 +266,17 @@ export const en = {
     via: (source: string) => `via ${source}`
   },
   /** The tabs above the central area. */
+  /** The start screen a new tab opens on: what each of its cards is for. */
+  start: {
+    atlas: 'Talk to Atlas: a new conversation, or one you had.',
+    bots: 'Agents with their own mission, memory and conversation.',
+    executors: 'Coding agents working in your folders, one session at a time.'
+  },
   tabs: {
     close: (title: string) => `Close ${title}`,
     label: 'Open conversations and sessions',
-    /** The button after the tabs: a new conversation, in a tab of its own once it is made. */
+    /** The button after the tabs: the start screen, where a new conversation, bot or session is
+     * chosen, in a tab of its own once it is made. */
     new: 'New tab',
     waiting: (count: number) => (count === 1 ? '1 waiting for you' : `${count} waiting for you`)
   },

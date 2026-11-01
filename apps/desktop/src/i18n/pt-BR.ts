@@ -247,6 +247,11 @@ export const ptBR: Override<Messages> = {
     untitled: 'Nova conversa',
     via: (source: string) => `pelo ${source}`
   },
+  start: {
+    atlas: 'Fale com o Atlas: uma conversa nova, ou uma que você já teve.',
+    bots: 'Agentes com missão, memória e conversa próprias.',
+    executors: 'Agentes de código trabalhando nas suas pastas, uma sessão de cada vez.'
+  },
   tabs: {
     close: (title: string) => `Fechar ${title}`,
     label: 'Conversas e sessões abertas',
