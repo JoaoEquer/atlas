@@ -4,11 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EventParams } from '@/protocol/channel'
 import type { AtlasClient } from '@/protocol/client'
 import type { McpList, McpServerRow, PluginRow, SkillRow } from '@/protocol/protocol.generated'
-import { openHome, startApp } from '@/store/app'
+import { $extensionsTab, $view, openHome, showExtensions, startApp } from '@/store/app'
 import { matches, pluginSignIns } from '@/store/extensions'
-import { $extensionsTab, $settingsSection, closeSettings, openSettings, SECTIONS } from '@/store/settings'
+import { SECTIONS } from '@/store/settings'
 
-import { ExtensionsSection } from './extensions-view'
+import { ExtensionsView } from './extensions-view'
 
 const plugin = (name: string, change: Partial<PluginRow> = {}): PluginRow => ({
   author: 'someone',
@@ -122,7 +122,7 @@ function client(home: Home, calls: string[]): AtlasClient {
   } as unknown as AtlasClient
 }
 
-async function open(home: Home = HOME, tab?: Parameters<typeof openSettings>[1], remote = false): Promise<string[]> {
+async function open(home: Home = HOME, tab?: Parameters<typeof showExtensions>[0], remote = false): Promise<string[]> {
   const calls: string[] = []
   stop = startApp({
     client: () => client(home, calls),
@@ -130,9 +130,9 @@ async function open(home: Home = HOME, tab?: Parameters<typeof openSettings>[1],
     shell: { focus: () => undefined, notify: () => undefined }
   })
   await openHome('work')
-  render(<ExtensionsSection />)
+  render(<ExtensionsView />)
   await act(async () => {
-    openSettings('extensions', tab)
+    showExtensions(tab)
     await new Promise(resolve => setTimeout(resolve, 0))
   })
 
@@ -141,7 +141,6 @@ async function open(home: Home = HOME, tab?: Parameters<typeof openSettings>[1],
 
 afterEach(() => {
   cleanup()
-  closeSettings()
   $extensionsTab.set('plugin')
   stop()
 })
@@ -158,9 +157,9 @@ function at<T>(items: readonly T[], index: number): T {
 
 const tab = (kind: string) => screen.getByTestId(`extensions-tab-${kind}`)
 
-describe('the settings screen has one Extensions section, in the place of Plugins and Executors', () => {
-  it('lists Extensions among its sections, and no Plugins or Executors of their own', () => {
-    expect(SECTIONS).toContain('extensions')
+describe('Extensions is a screen of its own, out of the settings', () => {
+  it('leaves the settings without Extensions, Plugins or Executors sections', () => {
+    expect(SECTIONS).not.toContain('extensions')
     expect(SECTIONS).not.toContain('plugins')
     expect(SECTIONS).not.toContain('executors')
   })
@@ -170,7 +169,7 @@ describe('Extensions shows a tab per kind, as the marketplace does', () => {
   it('opens on the plugins, each tab with its count, and reads every list once', async () => {
     const calls = await open()
 
-    expect($settingsSection.get()).toBe('extensions')
+    expect($view.get()).toBe('extensions')
     expect(tab('plugin').getAttribute('aria-selected')).toBe('true')
     expect(tab('plugin').textContent).toBe('Plugins2')
     expect(tab('skill').textContent).toBe('Skills3')

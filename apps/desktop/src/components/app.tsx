@@ -37,6 +37,7 @@ import { AskCard } from './ask-card'
 import { BotDialogHost } from './bot-dialog'
 import { BotEmpty, BotHeader } from './bot-header'
 import { Composer } from './composer'
+import { ExtensionsView } from './extensions-view'
 import { FirstRun } from './first-run'
 import { HomeDialogHost } from './home-dialog'
 import { KeyBand } from './key-screen'
@@ -172,6 +173,8 @@ export function App() {
           <RoutinesView />
         ) : view === 'marketplace' ? (
           <MarketplaceView />
+        ) : view === 'extensions' ? (
+          <ExtensionsView />
         ) : view === 'plugin' ? (
           <PluginPage />
         ) : view === 'session' ? (

@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process'
 
 import { expect, test } from '@playwright/test'
 
-import { atlas, cleanEnvironment, type Desktop, type FakeModel, launch, openSettings, ROOT } from './harness'
+import { atlas, cleanEnvironment, type Desktop, type FakeModel, launch, openExtensions, ROOT } from './harness'
 
 let desktop: Desktop | undefined
 
@@ -156,7 +156,7 @@ test("the voice's settings are picked from lists, which follow the provider", as
   desktop = await launch({ setup: voiceOn })
   const { page } = desktop
 
-  await openSettings(page, 'extensions')
+  await openExtensions(page)
   const row = page.locator('[data-testid="plugin-row"][data-plugin="voice"]')
   await row.locator('summary').click()
   const provider = row.getByLabel('provider', { exact: true })

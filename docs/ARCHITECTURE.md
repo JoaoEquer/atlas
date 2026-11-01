@@ -1745,17 +1745,15 @@ order:
    the snapshot frozen as one starts. The memory proposals stay where they are, with a shortcut.
 4. **Safety:** `[trust] deny`, `ask` and `ask_skip`, one per line, and `approval_timeout`.
 5. **Workspace:** `[workspace] folder` and `[time] zone`.
-6. **Extensions** (since 28/10/2026, in the place of Plugins and Executors; below): the plugins,
-   the skills, the MCP servers and the executors, a tab each. Someone waiting with a code still
-   shows in the sidebar, as the proposals do, and opens its Plugins tab. The executors are out of
-   the sidebar since 22/10/2026: the sidebar shows only the executors turned on, and with none on,
-   a link to the Executors tab.
-7. **Machines** (Several machines, below).
+6. **Machines** (Several machines, below).
 
-The sidebar keeps Conversations, Bots, Executors and Routines, and the proposals when there are
-some. A search over the settings waits for use to ask for it: there are some fifteen settings.
+Extensions was a section here from 28/10/2026 to 01/11/2026; it is a screen of its own now
+(below). The sidebar keeps Conversations, Bots and Executors, then Routines, Marketplace and
+Extensions, and the proposals when there are some. The executors are out of the settings and
+in the sidebar only turned on, since 22/10/2026; with none on, the sidebar links to Extensions'
+Executors tab. A search over the settings waits for use to ask for it: there are some fifteen settings.
 
-### Extensions on the settings screen — decided 2026-10-28
+### Extensions — decided 2026-10-28, a screen of its own since 2026-11-01
 
 Asked for by the user on 28/10/2026: the Plugins section stacked its plugins one under the other,
 each with its whole description, its state, its button and its settings, and read as a muddle.
@@ -1782,6 +1780,14 @@ name, its mark, a summary cut to two lines and its action.
 - **Proved** by the MCP client's status against real servers (one that signs in, through the fake
   authorization server), the server's methods and event over its WebSocket, the screen's tests,
   and end to end in the real app after the marketplace installed a skill, a server and a plugin.
+
+Out of the settings since 01/11/2026, asked for by the user: Extensions is a catalog managed
+often, not a setting, and the marketplace, where more is found, was already a screen of its own.
+It is a page of the main area, as the routines and the marketplace are (`PageHeader`, its search
+and "Read again" on the right), with its entry in the sidebar below the marketplace's. Someone
+waiting with a code shows on that entry, which then opens the Plugins tab; the marketplace's
+"Turn on" and the executors' link open it on their tab. Merging it with the marketplace, a screen
+with Installed and Marketplace tabs, waits for the sidebar to need the room.
 
 ## The installer — decided 2026-10-13
 

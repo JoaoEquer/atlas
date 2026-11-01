@@ -379,7 +379,7 @@ does not load: copy its address from the address bar and paste it into the termi
 among your secrets, renews it on its own and connects the server within a few seconds, without a
 restart. A server whose sign-in has ended says so and names the command again.
 
-The app lists every server under **Settings**, **Extensions**, on the **MCPs** tab: connecting,
+The app lists every server under **Extensions**, on the **MCPs** tab: connecting,
 connected with its number of tools, or left out with why. One that signs in with OAuth has a
 **Sign in** button: its page opens in your browser, you authorize Atlas there, and the server
 connects. A plugin's server that waits for a sign-in shows the same button on the plugin's card,

@@ -41,8 +41,8 @@ what causes each and the way out. Each guide also has a section of its own for i
 
 ## Coding agents
 
-- **A harness shows "not found on this computer"**: install it as its line in **Settings**, then
-  **Executors** says, then **Look again**.
+- **A harness shows "not found on this computer"**: install it as its card on the **Executors** tab of
+  **Extensions** says, then **Look again**.
 - **"Not logged in"**: choose **Log in**, which opens the harness's own login in your browser.
 - **"This session is open in a terminal"**: the same session is still open in another program.
   **Continue in a copy** is the safe choice; two programs writing one session mix up its messages.

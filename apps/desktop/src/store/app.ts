@@ -80,6 +80,7 @@ import type {
 } from '@/protocol/protocol.generated'
 
 import { applyCommand } from './commands'
+import type { ExtensionKind } from './extensions'
 import { guarded } from './guarded'
 import { EMPTY_MARKET, type Market, type MarketKind, withRow } from './marketplace'
 import { closePreview, openPreview, targetOf } from './previews'
@@ -233,7 +234,7 @@ export function folderKey(executor: string, folder: string): string {
 
 /** The bot dialog on screen: a new bot, or one being edited, with its definition as read. */
 export type BotDialog = { definition: BotDefinition | null; mode: 'create' | 'edit' }
-type View = 'conversation' | 'marketplace' | 'plugin' | 'proposals' | 'routines' | 'session' | 'start'
+type View = 'conversation' | 'extensions' | 'marketplace' | 'plugin' | 'proposals' | 'routines' | 'session' | 'start'
 
 /**
  * What the user chose for a session open in another program (decided with the user on 15/10/2026):
@@ -2579,7 +2580,7 @@ export class HomeSession {
       // the instances are kept by their own events.
       void this.refreshExecutors().catch(() => undefined)
 
-      // And what the marketplace's card says of it, when the Plugins screen opened over that card.
+      // And what the marketplace's card says of it, when the marketplace is on screen.
       if (this.$view.get() === 'marketplace') {
         void this.refreshMarketplace()
       }
@@ -3309,6 +3310,31 @@ export function showRoutines(): void {
   const session = current()
   session.$view.set('routines')
   void session.refreshRoutines().catch(() => undefined)
+}
+
+/** The Extensions screen's tab: its plugins, skills, MCP servers or executors. */
+export const $extensionsTab = atom<ExtensionKind>('plugin')
+
+/** Open Extensions, on `tab` when one is given, every tab's list read again for its count. */
+export function showExtensions(tab?: ExtensionKind): void {
+  current().$view.set('extensions')
+  if (tab) {
+    $extensionsTab.set(tab)
+  }
+
+  refreshPlugins()
+  refreshExtensions()
+  if ($extensionsTab.get() === 'executor') {
+    void detectExecutors()
+  }
+}
+
+/** Show one of Extensions' tabs; the harnesses are looked for on theirs. */
+export function showExtensionsTab(tab: ExtensionKind): void {
+  $extensionsTab.set(tab)
+  if (tab === 'executor') {
+    void detectExecutors()
+  }
 }
 
 /** Open the marketplace (step 16s) on its list, read again. */

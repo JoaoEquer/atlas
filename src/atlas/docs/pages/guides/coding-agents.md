@@ -9,7 +9,7 @@ Atlas runs the coding agents you already use, Claude Code, Codex, the Gemini CLI
 
 ## Turn them on
 
-Open **Settings**, then **Extensions**, and on its **Executors** tab turn on the harnesses you use; one that is not installed shows the command that installs it. Each one you turn on appears in the **Executors** tab of the sidebar with its project folders, its sessions and its plan's usage: the five-hour window, the week and each model's quota, read the way the harness's own `/usage` shows them, without spending a token.
+Open **Extensions**, in the sidebar, and on its **Executors** tab turn on the harnesses you use; one that is not installed shows the command that installs it. Each one you turn on appears in the **Executors** tab of the sidebar with its project folders, its sessions and its plan's usage: the five-hour window, the week and each model's quota, read the way the harness's own `/usage` shows them, without spending a token.
 
 A folder or a session you archive leaves the list, and comes back by itself as soon as it changes again, in Atlas or in a terminal. To keep only what you have been working on, run **Bring your work** again (**Settings**, then **General**, then **Open the first run again**): what has not changed within the days you choose is archived, and nothing is copied or touched.
 
@@ -51,7 +51,7 @@ Each harness keeps its own permission rules. Atlas decides only who answers what
 
 Claude Code can drive your own Chrome through Claude's Chrome extension (Claude in Chrome): open tabs, read pages, click, see what is on them. In a terminal you turn it on with `/chrome`; in Atlas that command is not there, because the browser is turned on when the session starts.
 
-To have it, install the extension in Chrome, then open **Settings**, **Extensions**, the **Plugins** tab, and set Claude Code's **chrome** setting to **on** (or run `atlas plugins set claude-code chrome on`). Each Claude Code session started after that, on every account, comes with the browser; one already open takes it when it starts again. The tabs open in your Chrome, in its own window, not inside Atlas.
+To have it, install the extension in Chrome, then open **Extensions**, the **Plugins** tab, and set Claude Code's **chrome** setting to **on** (or run `atlas plugins set claude-code chrome on`). Each Claude Code session started after that, on every account, comes with the browser; one already open takes it when it starts again. The tabs open in your Chrome, in its own window, not inside Atlas.
 
 This is Claude Code's browser. Atlas's own, for its conversations, is another one: [The browser](/docs/guides/browser/).
 

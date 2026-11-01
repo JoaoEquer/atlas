@@ -4,8 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EventParams } from '@/protocol/channel'
 import type { AtlasClient } from '@/protocol/client'
 import type { MarketplaceDone, MarketplaceList, MarketplacePage, MarketplaceRow } from '@/protocol/protocol.generated'
-import { $restored, $view, DRAFT, openHome, showMarketplace, startApp } from '@/store/app'
-import { $extensionsTab, $settings, $settingsSection } from '@/store/settings'
+import { $extensionsTab, $restored, $view, DRAFT, openHome, showMarketplace, startApp } from '@/store/app'
 
 import { MarketplaceView } from './marketplace-view'
 
@@ -240,14 +239,13 @@ describe('an item installs from its card, and its page shows what it is and need
     expect(screen.queryByTestId('marketplace-confirm')).toBeNull()
   })
 
-  it("turns a plugin on through the Plugins screen's consent", async () => {
+  it("turns a plugin on through the consent on Extensions' Plugins tab", async () => {
     await open(method =>
       method === 'marketplace.list' ? listing([row('video', { kind: 'plugin', state: 'off' })]) : {}
     )
     fireEvent.click(within(screen.getByTestId('marketplace-card')).getByTestId('marketplace-action'))
 
-    expect($settings.get()).toBe(true)
-    expect($settingsSection.get()).toBe('extensions')
+    expect($view.get()).toBe('extensions')
     expect($extensionsTab.get()).toBe('plugin')
   })
 

@@ -442,6 +442,7 @@ export const ptBR: Override<Messages> = {
       source === 'atlas' ? 'Vem com o Atlas' : source === 'plugin' ? `Do plugin ${plugin}` : 'Desta casa',
     skillsIntro:
       'Procedimentos que o modelo carrega pelo nome quando precisa; os que você pode chamar mostram o /comando.',
+    title: 'Extensões',
     yours: 'Desta casa'
   },
   plugins: {
@@ -647,7 +648,6 @@ export const ptBR: Override<Messages> = {
     saved: 'Salvo',
     saving: 'Salvando…',
     sections: {
-      extensions: 'Extensões',
       general: 'Geral',
       machines: 'Máquinas',
       model: 'Modelo',
@@ -778,7 +778,7 @@ export const ptBR: Override<Messages> = {
     newSessionIn: (folder: string) => `Nova sessão em ${folder}`,
     noneOn: 'Nenhum harness ligado ainda.',
     reading: 'Lendo os harnesses…',
-    openSettings: 'Ligar em Configurações',
+    openExtensions: 'Ligar em Extensões',
     notFound: 'não encontrado neste computador',
     notLoggedIn: 'sem login',
     on: 'ligado',

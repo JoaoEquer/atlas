@@ -13,7 +13,7 @@ too, and goes on in either place.
 
 1. **Make a bot.** In Telegram, talk to [@BotFather](https://t.me/BotFather), send `/newbot`,
    choose a name and a username, and copy the token it gives you.
-2. **Turn the plugin on.** In the app, open **Settings**, then **Extensions**, and on the **Plugins**
+2. **Turn the plugin on.** In the app, open **Extensions**, in the sidebar, and on the **Plugins**
    tab choose **Turn on…** on Telegram's card. Atlas shows what the plugin may do (reach `api.telegram.org`,
    read the secret `TELEGRAM_BOT_TOKEN`) and turns it on once you agree.
 3. **Paste the token** in the plugin's `TELEGRAM_BOT_TOKEN` field. It goes to the vault, encrypted.
@@ -58,7 +58,7 @@ open. The first answer, on the phone or in the app, takes it, and the others are
 ## Who you let in
 
 Everyone you let in may answer the requests above, so let in only yourself and people you trust
-with your machine. **People**, on the Plugins tab of Settings, Extensions, lists them; `atlas pairing list` too, and
+with your machine. **People**, on the Plugins tab of Extensions, lists them; `atlas pairing list` too, and
 `atlas pairing forget telegram USER` removes someone.
 
 ## When something is off

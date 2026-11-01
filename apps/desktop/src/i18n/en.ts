@@ -460,6 +460,7 @@ export const en = {
     skillSource: (source: string, plugin: string): string =>
       source === 'atlas' ? 'Ships with Atlas' : source === 'plugin' ? `From the plugin ${plugin}` : "This home's own",
     skillsIntro: 'Procedures the model loads by name when it needs them; the ones you may call show their /command.',
+    title: 'Extensions',
     yours: "This home's own"
   },
   plugins: {
@@ -663,7 +664,6 @@ export const en = {
     saved: 'Saved',
     saving: 'Saving…',
     sections: {
-      extensions: 'Extensions',
       general: 'General',
       machines: 'Machines',
       model: 'Model',
@@ -791,7 +791,7 @@ export const en = {
     newSessionIn: (folder: string) => `New session in ${folder}`,
     noneOn: 'No harness is turned on yet.',
     reading: 'Reading the harnesses…',
-    openSettings: 'Turn one on in Settings',
+    openExtensions: 'Turn one on in Extensions',
     notFound: 'not found on this computer',
     notLoggedIn: 'not logged in',
     on: 'on',

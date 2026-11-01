@@ -25,6 +25,7 @@ import {
   openSession,
   refreshFolders,
   refreshSessions,
+  showExtensions,
   toggleExecutor,
   toggleFolder
 } from '@/store/app'
@@ -39,7 +40,6 @@ import {
   setShowArchived
 } from '@/store/archive'
 import { $executorOrder, inOrder, moveBlock, setExecutorOrder } from '@/store/order'
-import { openSettings } from '@/store/settings'
 import { byLastUse, instanceKey, lastUse } from '@/store/status'
 
 import { AddAccount, FolderAccount, LoginForm, RemoveAccount } from './executor-accounts'
@@ -122,13 +122,13 @@ export function ExecutorsList() {
             <p>{t.executors.noneOn}</p>
             <button
               className="link"
-              data-testid="executors-open-settings"
+              data-testid="executors-open-extensions"
               onClick={() => {
-                openSettings('extensions', 'executor')
+                showExtensions('executor')
               }}
               type="button"
             >
-              {t.executors.openSettings}
+              {t.executors.openExtensions}
             </button>
           </div>
         )}

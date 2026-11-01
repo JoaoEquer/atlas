@@ -46,6 +46,7 @@ export {
   IconPlugConnected as Reachable,
   IconPlus as Plus,
   IconPrompt as Codex,
+  IconPuzzle as Puzzle,
   IconRefresh as Refresh,
   IconRobot as Robot,
   IconSearch as Search,

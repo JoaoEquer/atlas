@@ -483,8 +483,7 @@ export function homeButton(page: Page): Locator {
   return page.getByTestId('home-button')
 }
 
-/** Open the settings screen from the gear, on one of its sections (step 15b); Extensions on its
- *  plugins' tab. */
+/** Open the settings screen from the gear, on one of its sections (step 15b). */
 export async function openSettings(page: Page, section: string): Promise<Locator> {
   const settings = page.getByTestId('settings')
   if (!(await settings.isVisible())) {
@@ -492,11 +491,18 @@ export async function openSettings(page: Page, section: string): Promise<Locator
   }
   await settings.getByTestId(`settings-nav-${section}`).click()
   await expect(settings.getByTestId('settings-section')).toHaveAttribute('data-section', section)
-  if (section === 'extensions') {
-    await settings.getByTestId('extensions-tab-plugin').click()
-  }
 
   return settings
+}
+
+/** Open Extensions from the sidebar, on its plugins' tab. */
+export async function openExtensions(page: Page): Promise<Locator> {
+  await page.getByTestId('extensions-entry').click()
+  const extensions = page.getByTestId('extensions-view')
+  await expect(extensions).toBeVisible()
+  await extensions.getByTestId('extensions-tab-plugin').click()
+
+  return extensions
 }
 
 /** Open the home's menu: the homes, a new one, the home's dialog. */

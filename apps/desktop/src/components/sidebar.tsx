@@ -23,6 +23,7 @@ import {
   $workbench,
   moreConversations,
   newConversation,
+  showExtensions,
   showMarketplace,
   showProposals,
   showRoutines,
@@ -30,7 +31,6 @@ import {
   type SidebarTab
 } from '@/store/app'
 import { $sidebarOpen, toggleSidebar } from '@/store/layout'
-import { openSettings } from '@/store/settings'
 import { byLastUse, type Dot, lastUse, worst } from '@/store/status'
 
 import { ArchivedConversations } from './archived-list'
@@ -42,7 +42,18 @@ import { SearchField, SearchResults } from './list-search'
 import { RailEdge } from './rail-edge'
 import { ReadFailed } from './read-failed'
 import { StatusDot, useConversationsDot, useInstancesDot } from './status-dot'
-import { Bulb, CalendarTime, LayoutSidebar, MessagePlus, Messages, Plug, Robot, Store, Terminal } from './ui/icons'
+import {
+  Bulb,
+  CalendarTime,
+  LayoutSidebar,
+  MessagePlus,
+  Messages,
+  Plug,
+  Puzzle,
+  Robot,
+  Store,
+  Terminal
+} from './ui/icons'
 import { SkeletonRows } from './ui/skeleton'
 import { IconButton, Tip } from './ui/tip'
 import { UpdateBar, UpdateStrip } from './update-bar'
@@ -62,7 +73,7 @@ import { UpdateBar, UpdateStrip } from './update-bar'
 export function Sidebar() {
   const proposals = useStore($proposals)
   const view = useStore($view)
-  // The plugins' pages (step 16m), each an entry below the routines.
+  // The plugins' pages (step 16m), each an entry below Extensions.
   const pages = inArea(useStore($contributions), 'page')
   const pluginPage = useStore($pluginPage)
   const tab = useStore($sidebarTab)
@@ -145,6 +156,26 @@ export function Sidebar() {
           onClick={showMarketplace}
           testId="marketplace-entry"
         />
+        {/* What the home has, beside where more is found (01/11/2026); someone waiting with a code
+        shows on it and opens its Plugins tab. */}
+        <Entry
+          current={view === 'extensions'}
+          icon={Puzzle}
+          label={t.extensions.title}
+          onClick={() => {
+            showExtensions(waiting > 0 ? 'plugin' : undefined)
+          }}
+          testId="extensions-entry"
+        >
+          {waiting > 0 && (
+            <span
+              className="rounded-full bg-waiting px-2 text-xs leading-5 font-medium text-waiting-foreground"
+              data-testid="plugins-waiting"
+            >
+              {t.plugins.waiting(waiting)}
+            </span>
+          )}
+        </Entry>
         {pages.map(page => (
           <Entry
             current={view === 'plugin' && pluginPage === page.key}
@@ -157,26 +188,6 @@ export function Sidebar() {
             testId={`plugin-page-${page.key}`}
           />
         ))}
-        {waiting > 0 && (
-          // The soul and the plugins live on the settings screen (step 15b); someone waiting with a
-          // code still shows here, as the proposals do, and opens them there.
-          <Entry
-            current={false}
-            icon={Plug}
-            label={t.plugins.title}
-            onClick={() => {
-              openSettings('extensions', 'plugin')
-            }}
-            testId="plugins-entry"
-          >
-            <span
-              className="rounded-full bg-waiting px-2 text-xs leading-5 font-medium text-waiting-foreground"
-              data-testid="plugins-waiting"
-            >
-              {t.plugins.waiting(waiting)}
-            </span>
-          </Entry>
-        )}
         {proposals.length > 0 && (
           <Entry
             current={view === 'proposals'}

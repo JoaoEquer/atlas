@@ -14,11 +14,11 @@ import {
   refreshMarketplace,
   setMarketKind,
   setMarketQuery,
+  showExtensions,
   storeMarketSecret,
   writePlugin
 } from '@/store/app'
 import { actionOf, counts, resolved, shown } from '@/store/marketplace'
-import { openSettings } from '@/store/settings'
 
 import { Badge, KindPicture, KindTabs } from './extension-card'
 import { PageHeader } from './page-header'
@@ -456,7 +456,7 @@ function Action({ row }: { row: MarketplaceRow }) {
         data-action={action}
         data-testid="marketplace-action"
         onClick={act(() => {
-          openSettings('extensions', 'plugin')
+          showExtensions('plugin')
         })}
         type="button"
       >

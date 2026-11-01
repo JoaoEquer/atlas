@@ -114,9 +114,8 @@ test('each section opens from the left, a variable locks its setting, and the la
     'Set by ATLAS_TIME_ZONE, which wins over config.toml.'
   )
 
-  // Extensions and Machines are sections too; Extensions opens on its plugins.
-  await openSettings(page, 'extensions')
-  await expect(settings.getByTestId('plugins-view')).toBeVisible()
+  // Machines is a section too; Extensions is not, it is in the sidebar.
+  await expect(settings.getByTestId('settings-nav-extensions')).toHaveCount(0)
   await openSettings(page, 'machines')
   await expect(settings.getByTestId('this-machine')).toBeVisible()
 
