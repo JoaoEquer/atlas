@@ -51,8 +51,9 @@ const PLUGIN_TAB = 'plugin:'
  * workbench's place on the right, now the terminals, where the ▶ and the `!` run, and the previews
  * of what is on screen, a tab each; and, while an executor is open in the sidebar, what it has
  * (asked for by the user on 16/10/2026). It opens when asked, when a command runs or when a preview
- * opens, and stays open or hidden from screen to screen; hidden, a strip on the edge of every
- * screen brings it back, wherever it has something to offer (asked for by the user on 17/10/2026).
+ * opens, and stays open or hidden from screen to screen; hidden, a button at the tab strip's end
+ * brings it back, wherever it has something to offer (asked for by the user on 17/10/2026, on the
+ * strip since the window lost its title bar on 01/11/2026).
  * It opens as wide as the sidebar, and its edge toward the conversation drags it wider or narrower
  * (store/layout.ts).
  */
@@ -78,7 +79,7 @@ export function SidePanel() {
     showsExecutor || preview || panel ? null : tabs.some(tab => tab.id === panelTab) ? panelTab : terminal
 
   if (!open) {
-    return available || tabs.length + previews.length + panels.length > 0 || executor ? <PanelStrip /> : null
+    return null
   }
 
   return (
@@ -88,7 +89,10 @@ export function SidePanel() {
       data-testid="side-panel"
     >
       <RailEdge rail="panel" />
-      <div className="flex items-center gap-1 border-b border-border px-2 py-1.5 text-xs" role="tablist">
+      <div
+        className="title-bar title-bar-end flex h-9 shrink-0 items-center gap-1 border-b border-border px-2 text-xs"
+        role="tablist"
+      >
         {executor && (
           <button
             aria-selected={showsExecutor}
@@ -207,20 +211,39 @@ function useOpenExecutor() {
   return sidebarTab === 'executors' ? executors.find(row => row.name === open && row.enabled) : undefined
 }
 
-/** The hidden panel's strip on the right edge, which brings it back. */
-function PanelStrip() {
+/** The panel open, hidden with something to offer, or with nothing to offer. */
+export function usePanelState(): 'hidden' | 'offered' | 'open' {
+  const open = useStore($panelOpen)
+  const tabs = useStore($terminals)
+  const available = useStore($terminalAvailable)
+  useStore($selected)
+  useStore($view)
+  useStore($openSession)
+  const owner = currentOwner()
+  const previews = useStore($previews).filter(tab => tab.owner === owner)
+  const executor = useOpenExecutor()
+  const panels = inArea(useStore($contributions), 'panel')
+
+  if (open) {
+    return 'open'
+  }
+
+  return available || tabs.length + previews.length + panels.length > 0 || executor ? 'offered' : 'hidden'
+}
+
+/** The hidden panel's switch, at the tab strip's end, which brings it back. */
+export function PanelShow() {
   return (
-    <div className="flex w-9 shrink-0 flex-col items-center border-l border-border bg-subtle py-1.5">
-      <IconButton
-        icon={LayoutSidebarRight}
-        label={t.layout.showPanel}
-        onClick={() => {
-          togglePanel(true)
-        }}
-        side="left"
-        testId="panel-show"
-      />
-    </div>
+    <IconButton
+      className="mx-1.5 my-auto"
+      icon={LayoutSidebarRight}
+      label={t.layout.showPanel}
+      onClick={() => {
+        togglePanel(true)
+      }}
+      side="bottom"
+      testId="panel-show"
+    />
   )
 }
 

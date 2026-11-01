@@ -269,6 +269,22 @@ details[open]::details-content {
   }
 }
 
+/* The window's top row where it has no title bar (Windows, electron/main.ts): the sidebar's head,
+   the tab strip and the side panel's head move the window, what is clicked in them does not; and
+   the row on the right edge keeps clear of the window's buttons, which the system draws over it
+   (`titlebar-area-*` is zero where it does not). */
+.title-bar {
+  app-region: drag;
+}
+
+.title-bar :is(button, a, input, [role='tab'], [draggable='true']) {
+  app-region: no-drag;
+}
+
+.title-bar-end {
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+}
+
 /* While an edge is dragged, a frame or the terminal under the pointer does not take it away. */
 .rail-resizing,
 .rail-resizing * {

@@ -31,6 +31,8 @@ interface AtlasBridge {
   remote: boolean
   /** Only under the end-to-end tests: how long a command runs before it is "still running". */
   terminalWait: null | number
+  /** The colors of the window's own buttons, as hex, where it has no title bar (Windows). */
+  titleBar?: (color: string, symbolColor: string) => void
   /** The window's tabs, as the main process tells of them (electron/keys.ts). */
   tabs?: TabsBridge
   /** The app's update (electron/updates.ts). */

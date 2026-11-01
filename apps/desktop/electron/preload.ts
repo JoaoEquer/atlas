@@ -39,6 +39,10 @@ contextBridge.exposeInMainWorld('atlas', {
       }
     }
   },
+  /** The colors of the window's own buttons, which Windows draws over the tab strip's corner. */
+  titleBar: (color: string, symbolColor: string): void => {
+    ipcRenderer.send('atlas:title-bar', color, symbolColor)
+  },
   /** A folder, from the system's open dialog: where a new executor session works (step 16f). */
   chooseFolder: (): Promise<null | string> => ipcRenderer.invoke('atlas:choose-folder'),
   /** A home's server, started if needed; `null` is the home that opens first. */

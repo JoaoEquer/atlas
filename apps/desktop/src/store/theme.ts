@@ -125,6 +125,32 @@ function paint(theme: Theme, row: PluginThemeRow | undefined): void {
       painted.push(`--${token}`)
     }
   }
+  paintTitleBar()
+}
+
+/**
+ * The window's own buttons, which Windows draws over the tab strip's corner where the window has no
+ * title bar (electron/main.ts), take the strip's ground and the text's color; as hex, which is what
+ * the system reads, through a canvas, which turns any CSS color into one.
+ */
+function paintTitleBar(): void {
+  const bridge = (window as { atlas?: AtlasBridge }).atlas
+  const context = bridge?.titleBar && document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+
+  if (!bridge?.titleBar || !context) {
+    return
+  }
+
+  const style = getComputedStyle(document.documentElement)
+  const hex = (token: string) => {
+    context.clearRect(0, 0, 1, 1)
+    context.fillStyle = style.getPropertyValue(`--${token}`).trim()
+    context.fillRect(0, 0, 1, 1)
+    const [red = 0, green = 0, blue = 0] = context.getImageData(0, 0, 1, 1).data
+
+    return `#${[red, green, blue].map(value => value.toString(16).padStart(2, '0')).join('')}`
+  }
+  bridge.titleBar(hex('subtle'), hex('foreground'))
 }
 
 function show(): void {

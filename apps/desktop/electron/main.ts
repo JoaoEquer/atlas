@@ -35,6 +35,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  nativeTheme,
   protocol,
   safeStorage,
   screen,
@@ -249,6 +250,14 @@ if (process.platform === 'win32') {
   app.setAppUserModelId(APP_ID)
 }
 
+// No title bar on Windows (asked for by the user on 01/11/2026): the tab strip's row is the top of
+// the window and moves it, and the system draws its minimize, maximize and close buttons over the
+// row's right end, in the colors the page sends (store/theme.ts). One pixel shorter than the row, so
+// the row's bottom line runs under them.
+const OWN_TITLE_BAR = process.platform === 'win32'
+const TITLE_BAR_HEIGHT = 35
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
 /** Only the system browser opens links, and only web ones. */
 function openOutside(url: string): void {
   try {
@@ -270,6 +279,12 @@ function createWindow(): void {
     minWidth: 720,
     show: false,
     title: 'Atlas',
+    ...(OWN_TITLE_BAR && {
+      titleBarOverlay: nativeTheme.shouldUseDarkColors
+        ? { color: '#171717', height: TITLE_BAR_HEIGHT, symbolColor: '#fafafa' }
+        : { color: '#fafafa', height: TITLE_BAR_HEIGHT, symbolColor: '#171717' },
+      titleBarStyle: 'hidden' as const
+    }),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -543,6 +558,13 @@ if (e2e) {
   Object.defineProperty(globalThis, 'atlasServer', { get: () => owned.get(null) ?? null })
   Object.defineProperty(globalThis, 'atlasServers', { get: () => owned })
 }
+ipcMain.on('atlas:title-bar', (_event, color: unknown, symbolColor: unknown) => {
+  if (OWN_TITLE_BAR && window && typeof color === 'string' && typeof symbolColor === 'string') {
+    if (HEX_COLOR.test(color) && HEX_COLOR.test(symbolColor)) {
+      window.setTitleBarOverlay({ color, height: TITLE_BAR_HEIGHT, symbolColor })
+    }
+  }
+})
 ipcMain.on('atlas:focus', () => {
   if (window) {
     if (window.isMinimized()) {

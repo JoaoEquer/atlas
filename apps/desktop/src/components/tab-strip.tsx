@@ -21,6 +21,7 @@ import {
 } from '@/store/app'
 import { away, named, samePlace, screenPlace, type Tab } from '@/store/tabs'
 
+import { PanelShow, usePanelState } from './side-panel'
 import { rowDot, StatusDot, useConversationDot, useSessionDot } from './status-dot'
 import { Close, Plus, Robot, Terminal } from './ui/icons'
 
@@ -32,7 +33,8 @@ const DRAGGED = 'application/x-atlas-tab'
  * home, with its state's dot and its title, in italic for the passing tab and in bold while what
  * it ended with is unseen; what is not made yet at the end, the start screen a new tab opens on
  * included; and, on the right, how many cards wait
- * for the user away from the screen. Ctrl+1 to 8 show a tab and Ctrl+9 the last, Ctrl+Tab the next,
+ * for the user away from the screen and the hidden side panel's switch. Where the window has no
+ * title bar (Windows), the strip is its top and moves it (styles.css). Ctrl+1 to 8 show a tab and Ctrl+9 the last, Ctrl+Tab the next,
  * Ctrl+W closes the one on screen (in the terminal they stay its shell's); a tab is dragged to
  * another place, and a middle click closes it.
  */
@@ -56,6 +58,7 @@ export function TabStrip() {
   const waiting = away(cards, view, selected, open)
   const list = useRef<HTMLDivElement>(null)
   const [dropAt, setDropAt] = useState<null | number>(null)
+  const panel = usePanelState()
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -132,7 +135,12 @@ export function TabStrip() {
   }
 
   return (
-    <div className="flex h-9 shrink-0 items-stretch border-b border-border bg-subtle" data-testid="tab-strip">
+    <div
+      className={`title-bar flex h-9 shrink-0 items-stretch border-b border-border bg-subtle ${
+        panel === 'open' ? '' : 'title-bar-end'
+      }`}
+      data-testid="tab-strip"
+    >
       <div
         aria-label={t.tabs.label}
         className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none]"
@@ -202,6 +210,7 @@ export function TabStrip() {
           {t.tabs.waiting(waiting.length)}
         </button>
       )}
+      {panel === 'offered' && <PanelShow />}
     </div>
   )
 }

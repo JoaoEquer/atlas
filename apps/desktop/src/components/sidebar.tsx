@@ -93,17 +93,20 @@ export function Sidebar() {
     return (
       <nav
         aria-label="Conversations"
-        className="flex w-9 shrink-0 flex-col items-center gap-2 border-r border-border bg-subtle py-3"
+        className="flex w-9 shrink-0 flex-col items-center gap-2 border-r border-border bg-subtle pb-3"
       >
-        <IconButton
-          icon={LayoutSidebar}
-          label={t.layout.showSidebar(shortcut('B'))}
-          onClick={() => {
-            toggleSidebar(true)
-          }}
-          side="right"
-          testId="sidebar-show"
-        />
+        {/* The window's top row, beside the tab strip (styles.css). */}
+        <div className="title-bar grid h-9 w-full shrink-0 place-items-center">
+          <IconButton
+            icon={LayoutSidebar}
+            label={t.layout.showSidebar(shortcut('B'))}
+            onClick={() => {
+              toggleSidebar(true)
+            }}
+            side="right"
+            testId="sidebar-show"
+          />
+        </div>
         {asking > 0 ? (
           <span className="rounded-full bg-waiting px-1.5 text-xs leading-4 font-medium text-waiting-foreground">
             {asking}
@@ -118,8 +121,9 @@ export function Sidebar() {
 
   return (
     <nav aria-label="Conversations" className="sidebar-open flex flex-col border-r border-border bg-subtle">
-      <div className="space-y-1 p-3">
-        <div className="flex items-center gap-1 pb-1">
+      <div className="space-y-1 px-3 pb-3">
+        {/* The window's top row, beside the tab strip (styles.css). */}
+        <div className="title-bar -mx-3 mb-2 flex h-9 items-center gap-1 px-3">
           <IconButton
             icon={LayoutSidebar}
             label={t.layout.hideSidebar(shortcut('B'))}
