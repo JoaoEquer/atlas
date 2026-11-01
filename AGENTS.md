@@ -52,6 +52,14 @@ npm run test:e2e           # build, then the real app, atlas serve and the fake 
 npm run dev                # run the app from source
 ```
 
+The Setup, in `apps/setup/` (Node 24), the file that installs Atlas without a terminal:
+
+```bash
+npm ci                     # install
+npm run check              # tsc, eslint, prettier, vitest
+npm run package            # build this system's Setup into dist/ (CI builds all three)
+```
+
 The website, in `site/` (Node 24):
 
 ```bash

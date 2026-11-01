@@ -180,6 +180,7 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `event number` | número do evento | The place of an event in its conversation's stream (`seq`), which a client that comes back asks to resume after |
 | `server token` | senha do servidor | What a client presents to be let in: `ATLAS_SERVER_TOKEN`, given by whoever starts the server; in a container, when none is given, the one kept in the vault, which `atlas server token` shows |
 | `desktop app` | app desktop | The Electron app in `apps/desktop/`: it starts the server, or reaches a running one, and shows the conversations |
+| `Setup` | Setup | The file to download and open that installs Atlas without a terminal, `apps/setup/`: it runs the one-line installer it carries and shows each step (step 18b); not the app packaged |
 | `ready line` | linha de pronto | `ATLAS_SERVER_READY port=<n>`, which `atlas serve` writes on standard output once it listens, so whoever started it learns the port |
 | `parent watchdog` | vigia do app | The server's check, every 2 seconds, that the process which started it (`--parent-pid`) is alive; the server stops when it is gone |
 | `card` | cartão | What the screen shows for a server request: `ask_user`'s questions, an approval, a key, or an executor's permission or question, taken down on `request.cancel`; answered, it says the answer is on its way until then. Every one has the same frame (`CardFrame`): its question as the title, exactly what it is about, its choices in order under their number keys |

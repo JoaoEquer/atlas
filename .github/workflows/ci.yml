@@ -117,6 +117,29 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # The Setup (docs/ARCHITECTURE.md, The Setup): its types, lint, format and tests, which run a
+  # stand-in installer through PowerShell on Windows and bash on Linux. Its files are built and
+  # proved by setup.yml.
+  setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/setup/package-lock.json
+      - run: npm ci
+      - name: Checks
+        run: npm run check
+
   # The website (ROADMAP, step 19): its types, lint, format and tests, then a build that checks
   # every page and file agents read. The whole history, because the changelog page is main's log.
   site:

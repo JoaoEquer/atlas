@@ -1619,7 +1619,7 @@ Step 11, the first switch: the user moves to Atlas for every day.
   terminal. Each run writes the shortcut: a Start Menu link on Windows,
   a `.desktop` entry on Linux, opening the built app directly. Both show the app's icon, which the
   window, the taskbar and the Dock show too: `apps/desktop/resources/`, drawn from `icon.svg` by
-  `npm run icons`, with bolder lines at the small sizes. The packaged app is step 18b.
+  `npm run icons`, with bolder lines at the small sizes. The Setup that installs it is step 18b.
 - **`atlas update`**: `git pull --ff-only` of `main`, `uv sync` of the
   dependencies only (reinstalling Atlas would replace the `atlas.exe` the update runs from, which
   Windows refuses; Atlas is installed editable, and the app's next server reinstalls it), never
@@ -1682,7 +1682,7 @@ Step 11, the first switch: the user moves to Atlas for every day.
     lets users make namespaces, the result says the two commands and the app waits for the user.
   - **Left out**: a progress window during the update (a page in the system's
     browser, its own "decoration"), update channels (`stable`, `canary`), the update of a packaged
-    or store app (step 18b), and a bridge of markers between several desktops.
+    or store app (the Setup of step 18b installs the same checkout), and a bridge of markers between several desktops.
   - **A server's update**, a Compose host's, goes through the same button and the same `atlas
     update`: The update of a Compose host (Container, above).
 - **A conversation's model** is chosen in the app, in the model and effort pills of the
@@ -1786,7 +1786,7 @@ name, its mark, a summary cut to two lines and its action.
 
 Step 18: one line in a terminal gives a machine with nothing on it the installation of Daily use,
 the app built and opened, with the defects such installers are known to meet as our tests. The
-packaged, signed app is step 18b.
+Setup, a file that runs it, is step 18b (The Setup, below); signing is 18c.
 
 - **Two scripts, `scripts/install.ps1` and `scripts/install.sh`**, run as `irm <url> | iex` and
   `curl -fsSL <url> | bash`. The site serves them, `atlasv4.com/install.ps1` and
@@ -1796,7 +1796,7 @@ packaged, signed app is step 18b.
   `main` serves `main`'s, and its Worker answers them as UTF-8 text, never cached. A file handed
   over instead would
   need `-ExecutionPolicy Bypass` (Windows refuses an unsigned script downloaded from the internet),
-  and an `.exe` or `.cmd` the SmartScreen warning, which only signing (18b) removes.
+  and an `.exe` or `.cmd` the SmartScreen warning, which only signing (18c) removes.
 - **Each download is counted** (asked for by the user on 28/10/2026: how many installs began). The
   Worker writes one data point to Cloudflare's Analytics Engine (`atlas_installs`,
   `site/worker/installs.ts`): the system (`windows` for the `.ps1`, `unix` for the `.sh`), the
@@ -1907,6 +1907,41 @@ packaged, signed app is step 18b.
   installer or what it installs changes, or when asked; by the app's e2e of the key
   screen against the fake model; and by an install in Windows Sandbox (a clean machine under the
   Restricted policy) and one by a tester.
+
+### The Setup — decided 2026-11-01
+
+Step 18b, redone with the user on 01/11/2026: a file to download and open, for whoever does not
+open a terminal, that does what the line does. It is not the app packaged. Since 18/10 the app
+updates by its own button (`git` and `uv sync`, several times a day); a packaged app would bring a
+second updater, a version for each push, and a window on another protocol than its server.
+
+- **`apps/setup/`, a small Electron app of its own**, with its own `package.json` and lock: the
+  users' install runs `npm ci` in `apps/desktop`, and electron-builder and its tree never reach
+  it. One window: what it will do and where, a button, then the step running, the installer's
+  lines below it, and an error with what to do. In English, or Portuguese when the system is.
+- **It carries the installer and runs it**, the `install.ps1` or `install.sh` of the commit it was
+  built from (`extraResources`): the same file, the same rules, nothing in between. On Windows
+  through `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command`, which sets
+  the console's output to UTF-8 first (a user folder with an accent comes through) and runs the
+  file with `&`, so the script owns its exit code; elsewhere through `/bin/bash`. It reads the
+  installer's own marks (`->` a step, `[OK]`, `[!]`, `[X]`), and keeps every `[!]` for the end: on
+  Linux, the two `sudo` commands of Electron's sandbox, since there is no terminal to ask in. The
+  installer opens Atlas itself when it ends, detached, and the Setup says so and may be closed.
+- **An Atlas already installed** (its checkout in the installer's folder, `ATLAS_INSTALL_DIR`
+  heeded) is opened, or repaired and updated by running the installer again.
+- **`--auto`** installs with no click and exits with the installer's code: CI proves the packaged
+  Setup with it.
+- **Three files, unsigned**: `Atlas-Setup.exe` (electron-builder's portable target: it unpacks and
+  runs, and installs nothing of its own, so there is nothing of it to uninstall), the DMG for each
+  Mac (`arm64`, `x64`) signed ad-hoc, which Apple Silicon needs to run at all, and the `x86_64`
+  AppImage, which runs Chromium without its sandbox (AppImage cannot carry a setuid helper, and
+  Ubuntu 24.04 refuses the unprivileged one); its window loads only its own page. Windows'
+  SmartScreen and the Mac's "Open anyway" are met once, by the Setup: the app is built on the
+  machine and carries no quarantine mark.
+- **CI builds them** (`.github/workflows/setup.yml`) when the Setup or the installer changes, or
+  when asked: each on its own system, then `--auto` into a temporary folder from the commit under
+  test, then, on `main`, puts the files in the release `setup`, whose download addresses never
+  change, and the site links them.
 
 ## Routines and loop guards — decided 2026-10-11
 

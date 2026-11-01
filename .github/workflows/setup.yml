@@ -1,0 +1,144 @@
+name: Setup
+
+# The Setup's three files (docs/ARCHITECTURE.md, The Setup): each built on its own system, then
+# run with --auto on a clean runner from the commit under test, the way a click on Install runs
+# it, and the installation checked; on main, put in the release `setup`, whose download addresses
+# never change. Only when the Setup or the installer it carries changes, or when asked.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/setup/**"
+      - "scripts/install.ps1"
+      - "scripts/install.sh"
+      - "scripts/install_pins.toml"
+      - ".github/workflows/setup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            files: apps/setup/dist/Atlas-Setup.exe
+          - os: macos-latest
+            files: apps/setup/dist/Atlas-Setup-*.dmg
+          - os: ubuntu-latest
+            files: apps/setup/dist/Atlas-Setup-*.AppImage
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      # The installer clones this checkout, on the branch under test, instead of GitHub's copy.
+      ATLAS_REPO_URL: ${{ github.workspace }}
+      ATLAS_BRANCH: ${{ github.ref_name }}
+      ATLAS_NO_LAUNCH: "1"
+    defaults:
+      run:
+        working-directory: apps/setup
+    steps:
+      # Every commit, and the branch as a local one, as a clone from GitHub has them.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/setup/package-lock.json
+      - run: npm ci
+      - name: Package
+        run: npm run package
+        env:
+          # Unsigned (step 18c signs): no certificate is looked for on the runner.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Signed ad-hoc (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          for app in dist/mac*/"Atlas Setup.app"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -dv "$app" 2>&1 | grep -F 'Signature=adhoc'
+          done
+
+      - name: Install with --auto (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Start-Process -FilePath dist\Atlas-Setup.exe -ArgumentList '--auto' -Wait -PassThru
+          Get-Content "$env:APPDATA\Atlas Setup\logs\setup.log"
+          if ($setup.ExitCode -ne 0) { throw "The Setup ended with $($setup.ExitCode)." }
+      - name: Install with --auto (macOS, from the DMG)
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          hdiutil attach dist/Atlas-Setup-arm64.dmg -nobrowse -mountpoint "$RUNNER_TEMP/setup"
+          status=0
+          "$RUNNER_TEMP/setup/Atlas Setup.app/Contents/MacOS/Atlas Setup" --auto || status=$?
+          cat "$HOME/Library/Logs/Atlas Setup/setup.log"
+          exit "$status"
+      - name: Install with --auto (Linux, the AppImage)
+        if: runner.os == 'Linux'
+        env:
+          # The runner has no FUSE to mount it.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          set -eu
+          chmod +x dist/Atlas-Setup-x86_64.AppImage
+          status=0
+          xvfb-run -a dist/Atlas-Setup-x86_64.AppImage --auto || status=$?
+          cat "$HOME/.config/Atlas Setup/logs/setup.log"
+          exit "$status"
+
+      - name: The installation works
+        shell: bash
+        run: |
+          set -eu
+          if [ "$RUNNER_OS" = Windows ]; then
+            root="$(cygpath -u "$LOCALAPPDATA")/atlas"
+            atlas="$root/bin/atlas.cmd"
+          else
+            root="$HOME/.local/share/atlas"
+            atlas="$HOME/.local/bin/atlas"
+          fi
+          test -f "$root/tools/toolchain.json"
+          test -f "$root/atlas/apps/desktop/out/main.mjs"
+          "$atlas" version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setup-${{ runner.os }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Put them in the release `setup`
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          notes="The Atlas Setup, built from ${GITHUB_SHA}. Download the file for your system and open it: it installs Atlas as the one-line installer does, and opens it.
+
+          - Windows: Atlas-Setup.exe. Windows warns about an unknown publisher the first time: More info, then Run anyway.
+          - Mac: Atlas-Setup-arm64.dmg (Apple Silicon) or Atlas-Setup-x64.dmg (Intel). The first time, System Settings, Privacy & Security, Open Anyway.
+          - Linux: Atlas-Setup-x86_64.AppImage, made executable first."
+          if ! gh release view setup -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create setup -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Atlas Setup" --notes "$notes"
+          fi
+          gh release upload setup files/* -R "$GITHUB_REPOSITORY" --clobber
+          gh release edit setup -R "$GITHUB_REPOSITORY" --notes "$notes"

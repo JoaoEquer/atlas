@@ -28,6 +28,7 @@ apps/desktop/release/
 apps/desktop/test-results/
 apps/desktop/playwright-report/
 apps/desktop/.atlas-build.lock
+apps/setup/out/
 
 # Editors and OS
 .vscode/

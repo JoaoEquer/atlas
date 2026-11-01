@@ -25,6 +25,16 @@ curl -fsSL https://atlasv4.com/install.sh | bash
 
 The site counts each download of the installer by system and country, to know how many installs began; it keeps nothing that tells who you are (see [Privacy](/docs/guides/privacy/)).
 
+## Without a terminal
+
+The Atlas Setup does the same as the line: download the file for your system, open it and click **Install**. It shows each step, and opens Atlas when it ends. Opened again where Atlas is installed, it opens Atlas, or repairs and updates it.
+
+- **Windows:** [Atlas-Setup.exe](https://github.com/marqueskaio/atlas/releases/download/setup/Atlas-Setup.exe). It is not signed yet, so the first time Windows warns about an unknown publisher: click **More info**, then **Run anyway**.
+- **Mac:** [Apple Silicon](https://github.com/marqueskaio/atlas/releases/download/setup/Atlas-Setup-arm64.dmg) or [Intel](https://github.com/marqueskaio/atlas/releases/download/setup/Atlas-Setup-x64.dmg). Open the disk image and the Setup in it; the first time, macOS refuses it, so open **System Settings**, **Privacy & Security**, and click **Open Anyway** beside Atlas Setup.
+- **Linux:** [Atlas-Setup-x86_64.AppImage](https://github.com/marqueskaio/atlas/releases/download/setup/Atlas-Setup-x86_64.AppImage). Make it executable (`chmod +x`) and open it. With no terminal to ask in, the Setup cannot run `sudo`; when the app's sandbox needs it, the Setup ends with the two commands to run.
+
+The warning comes only once, for the Setup: the app it installs is built on your computer.
+
 ## The first time it opens
 
 1. The app asks for an API key from a model provider: OpenAI, Anthropic, Google Gemini or OpenRouter. Atlas checks the key without spending anything and keeps it in its encrypted vault.
@@ -33,7 +43,7 @@ The site counts each download of the installer by system and country, to know ho
 
 ## Updating
 
-Run the same line again, or type:
+The app shows an update button when there is something new. Or run the same line again, or the Setup, or type:
 
 ```bash
 atlas update
