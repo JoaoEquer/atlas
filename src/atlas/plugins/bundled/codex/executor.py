@@ -26,6 +26,9 @@ proved on 20/10/2026), and Homebrew's on a Mac.
 beside the user's own, logged in by `codex login` on the user's browser. A session goes on from
 one account to another in a copy: `thread/fork` takes the path of the other account's session
 file, which that account's Codex names.
+
+**Its newest version** (SDK version 27) is npm's, for an install npm keeps in a folder the user may
+write to: the user's npm updates it when they ask. Any other install is left to its own updater.
 """
 
 import asyncio
@@ -57,6 +60,7 @@ from atlas.plugins.sdk import (
     SessionInfo,
     Started,
     Transcript,
+    UpdateSource,
 )
 
 from .protocol import (
@@ -190,6 +194,21 @@ def not_found() -> str:
     )
 
 
+#: The npm package it comes in.
+PACKAGE = "@openai/codex"
+
+
+def update_source(program: str) -> UpdateSource | None:
+    """npm's newest version, when the program found is in npm's package, in a folder the user may
+    write to; else `None`: another install updates some other way."""
+    path = str(Path(program).resolve()).replace("\\", "/")
+    at = path.find(f"/node_modules/{PACKAGE}/")
+    if at < 0:
+        return None
+    package = Path(path[: at + len(f"/node_modules/{PACKAGE}")])
+    return UpdateSource(npm=PACKAGE) if os.access(package, os.W_OK) else None
+
+
 def too_old(version: str, program: str) -> str:
     """Why this version is not driven, and how its install updates."""
     how = "update the Codex app in the Microsoft Store" if "WindowsApps" in program else INSTALL
@@ -210,9 +229,17 @@ class Codex:
     title = TITLE
 
     def __init__(
-        self, cli: Sequence[str] | None, *, logger: Logger, home: Path | None = None
+        self,
+        cli: Sequence[str] | None,
+        *,
+        logger: Logger,
+        home: Path | None = None,
+        found: bool = False,
     ) -> None:
         self._cli = None if cli is None else list(cli)
+        #: Found where its installers put it, not named by the `program` setting: only then
+        #: Atlas knows how it updates.
+        self._found = found
         self._logger = logger
         self._home = home
         #: The models the last Codex started answered; `None` until one did.
@@ -252,7 +279,11 @@ class Codex:
             account_folders=True,
             delete_sessions=True,
             files=True,
+            updates=True,
         )
+
+    def update_source(self) -> UpdateSource | None:
+        return None if self._cli is None or not self._found else update_source(self._cli[-1])
 
     def account_folder(self) -> Path:
         return self._home or codex_home()

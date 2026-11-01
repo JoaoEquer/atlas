@@ -20,6 +20,7 @@ const EXECUTOR: ExecutorRow = {
   declaration: [],
   enabled: true,
   installed: true,
+  latest: '',
   logged_in: true,
   minimum: '',
   name: 'claude-code',
@@ -29,6 +30,8 @@ const EXECUTOR: ExecutorRow = {
   problem: '',
   supported: true,
   title: 'Claude Code',
+  update: '',
+  updating: false,
   version: '2.1.296'
 }
 

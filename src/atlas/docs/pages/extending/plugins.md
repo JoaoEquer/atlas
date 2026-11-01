@@ -426,7 +426,14 @@ def register(ctx: PluginContext) -> None:
   | `account_folders` | `Executor.account_folder`, `new_account_folder`, `for_account`; `ExecutorSpec.resume_from` | 12 |
   | `delete_sessions` | `Executor.delete_session` | 12 |
   | `files` | `ExecutorInstance.prompt(files=)`, `ExecutorFile`, `ExecutorSpec.directories` | 13 |
+  | `updates` | `Executor.update_source`, `UpdateSource` | 27 |
 
+- **`update_source`** says where the harness's newest version is published (an npm package and
+  its dist-tag, a WinGet package, or an https address that answers the version as text) and the
+  command that updates the install it found, or `None` when that install updates some other way.
+  Atlas reads the version itself, at most once a day, so the plugin declares no host for it; the
+  app shows "Update available" on the executor's row, and the command runs only when the user
+  clicks **Update**.
 - **`ExecutorInstance`** is one running harness: `prompt` runs a turn until its `Finished` (Atlas
   never calls it while a turn runs), and `stop` ends it with every process it started.
 - **What happens is an event, handed to `host.event`:** `Started` (the session's id), `Said`,
@@ -689,7 +696,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 ## What the SDK offers
 
-Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 26), and the ACP
+Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 27), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
 (`SCREEN_API` 3). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
@@ -724,7 +731,7 @@ SDK adds and the guide does not name fails it.
   that starts an `ExecutorInstance`, with `ExecutorSpec`, `Capabilities`, `Detection`, `Account`,
   `Question`, `Option`, `Permission`, `Verdict`, `Transcript`, `TranscriptEntry`, `SessionInfo`,
   `SessionFolder`, `ModelChoice`, `Connector`, `SlashCommand`, `PlanUsage`, `UsageWindow`,
-  `ExecutorFile` and `ExecutorError`; its events are `Started`, `Said`, `Thought`, `Called`,
+  `ExecutorFile`, `UpdateSource` and `ExecutorError`; its events are `Started`, `Said`, `Thought`, `Called`,
   `Returned`, `LimitReached`, `Compacted`, `Finished`, `UsageChanged` and `CommandsChanged`.
 
 **A screen's `register(ctx)` gets:** `ctx.plugin`, `ctx.register`, `ctx.call`, `ctx.onEvent`,

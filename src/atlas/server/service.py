@@ -40,6 +40,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import httpx2
+
 from atlas import __version__
 from atlas.agent import (
     Compacted,
@@ -65,6 +67,7 @@ from atlas.assistant import (
     FileSent,
     InstanceActivity,
     InstanceChanged,
+    InstanceState,
     PreviewAsked,
     Reviewed,
     RouteView,
@@ -157,6 +160,7 @@ from atlas.plugins import (
     PluginError,
     Plugins,
     PluginView,
+    UpdateSource,
 )
 from atlas.plugins import Permission as ExecutorPermission
 from atlas.plugins import Question as ExecutorQuestion
@@ -243,6 +247,7 @@ from atlas.server.protocol import (
     ExecutorQuestionRow,
     ExecutorRef,
     ExecutorRow,
+    ExecutorUpdated,
     ExecutorUsageRow,
     HomeBackupParams,
     HomeCreateParams,
@@ -400,6 +405,10 @@ from atlas.server.protocol import (
     read,
 )
 from atlas.server.replay import Replay
+from atlas.server.updates import LOOK_SECONDS, Newest, UpdateError, newer, newest
+from atlas.server.updates import command as update_command
+from atlas.server.updates import run as run_update
+from atlas.server.updates import shown as shown_command
 from atlas.skills import SkillLibrary, SkillUsage, changed, read_manifest
 from atlas.terminals import TerminalError, Terminals
 from atlas.tools import (
@@ -492,8 +501,18 @@ class Gateway:
         terminals: Terminals | None = None,
         environ: Mapping[str, str] | None = None,
         host_updater: HostChannel | None = None,
+        update_transport: httpx2.AsyncBaseTransport | None = None,
     ) -> None:
         self.replay = Replay()
+        #: Where each executor's newest version is published and how its install updates, as
+        #: its plugin says; the newest version of each, read at most once a day; the transport
+        #: those reads take (a test's own).
+        self._update_sources: dict[str, UpdateSource] = {}
+        self._newest = Newest()
+        self._update_transport = update_transport
+        self._looking: asyncio.Task[None] | None = None
+        #: The executors updating now, at the user's click.
+        self._updating: set[str] = set()
         #: The way to a Compose host's updater, for the update button of a remote app; `None` on
         #: a native installation, whose app updates it on its own machine.
         self._host_updater = host_updater
@@ -692,6 +711,7 @@ class Gateway:
             "workbench.account_switch": self._workbench_account_switch,
             "workbench.stop": self._workbench_stop,
             "executor.detect": self._executor_detect,
+            "executor.update": self._executor_update,
             "executor.folders": self._executor_folders,
             "executor.sessions": self._executor_sessions,
             "executor.models": self._executor_models,
@@ -846,17 +866,25 @@ class Gateway:
                         self.detections[name] = await self._look(given)
                         self._executor_names[name] = ("", given.title)
                         self.detections.update(await self._account_detections(name, given))
+                        source = _update_source(given)
+                        if source is not None:
+                            self._update_sources[name] = source
+            self._look_for_updates()
             return
         async with self._executors_lock:
             found: dict[str, Executor] = {}
             detections: dict[str, Detection] = {}
             plugins: set[str] = set()
             offered: set[str] = set()
+            sources: dict[str, UpdateSource] = {}
             self._executors_seen = await asyncio.to_thread(_executor_states, self.plugins)
             for loaded in await self.plugins.executors():
                 executor, detection = await self._detect(loaded)
                 plugins.add(loaded.plugin)
                 detections[loaded.name] = detection
+                source = None if executor is None else _update_source(executor)
+                if source is not None and detection.installed:
+                    sources[loaded.name] = source
                 if executor is not None and detection.installed and detection.supported:
                     # Found as before: the executor already made stays, with what it read since
                     # (its models), so a look from the screen starts no harness for nothing.
@@ -873,6 +901,8 @@ class Gateway:
                 detections.update(await self._account_detections(name, executor))
             self.detections, self._executor_plugins = detections, plugins
             self._offered = offered
+            self._update_sources = sources
+        self._look_for_updates()
         # Only a change is told: each telling reads the plugins and the executors again on every
         # screen, and the executors tab now looks whenever it shows.
         if before != (detections, plugins, offered):
@@ -926,8 +956,43 @@ class Gateway:
             _logger.exception("An executor could not be looked at.")
             return Detection(False, problem=f"Its detection failed: {error!r}")
 
+    def _look_for_updates(self) -> None:
+        """Read, in the background, the newest version of each executor whose last read is a day
+        old: never on the way to a start, and one read at a time."""
+        now = self._clock()
+        due = [s for s in self._update_sources.values() if self._newest.due(s, now)]
+        if due and (self._looking is None or self._looking.done()):
+            self._looking = asyncio.create_task(self._read_newest(due))
+
+    async def _read_newest(self, sources: Sequence[UpdateSource]) -> None:
+        changed = False
+        async with httpx2.AsyncClient(
+            timeout=LOOK_SECONDS, transport=self._update_transport, follow_redirects=True
+        ) as client:
+            for source in sources:
+                try:
+                    found = await newest(source, client)
+                except UpdateError as error:
+                    # Read again a day later, not at every minute's housekeeping.
+                    _logger.info("A harness's newest version was not read: %s", error)
+                    found = self._newest.get(source)
+                changed = changed or found != self._newest.get(source)
+                self._newest.keep(source, found, self._clock())
+        if changed:
+            self.plugins_changed()
+
+    def _update_of(self, name: str) -> tuple[str, tuple[str, ...]] | None:
+        """The newer version of `name` and the command that installs it, when there is one."""
+        source = self._update_sources.get(name)
+        found = self.detections.get(name)
+        if source is None or found is None:
+            return None
+        version = self._newest.get(source)
+        argv = update_command(source, version) if newer(version, found.version) else None
+        return None if argv is None else (version, argv)
+
     async def close(self) -> None:
-        for task in (self._housekeeping, self._plugin_watch, self._update_news):
+        for task in (self._housekeeping, self._plugin_watch, self._update_news, self._looking):
             if task is not None:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
@@ -2480,6 +2545,10 @@ class Gateway:
                 )
             if on is not None:
                 row = dataclasses.replace(row, base=on[0], account_id=on[1], nickname=on[2])
+            update = self._update_of(name)
+            if update is not None:
+                row = dataclasses.replace(row, latest=update[0], update=shown_command(update[1]))
+            row = dataclasses.replace(row, updating=name in self._updating)
             view = views.get(plugin)
             manifest = view.manifest if view is not None else None
             if name in self._offered and view is not None and manifest is not None:
@@ -2722,6 +2791,42 @@ class Gateway:
         await self.load_executors()
         return ExecutorList(await self._executor_rows())
 
+    async def _executor_update(
+        self, connection: Connection, params: ExecutorRef
+    ) -> ExecutorUpdated:
+        """Run the update its row shows, then look for the harnesses again: the version found
+        then is the one the screen shows, whatever the command said."""
+        self._owner(connection)
+        name = params.executor
+        update = self._update_of(name)
+        if update is None:
+            raise ProtocolError(INVALID_PARAMS, f"{name} has no update to install.")
+        if name in self._updating:
+            raise ProtocolError(INVALID_PARAMS, f"{name} is updating already.")
+        running = [
+            run
+            for run in self.assistant.workbench.runs()
+            if run.name.split("@")[0] == name
+            and run.state not in (InstanceState.ENDED, InstanceState.FAILED)
+        ]
+        if running:
+            raise ProtocolError(
+                INVALID_PARAMS, "Stop its sessions that run first: a harness in use cannot update."
+            )
+        _logger.warning(
+            "The owner's app asked to update an executor.",
+            extra={"executor": name, "version": update[0]},
+        )
+        self._updating.add(name)
+        self.plugins_changed()
+        try:
+            updated, output = await run_update(update[1])
+        finally:
+            self._updating.discard(name)
+        await self.load_executors()
+        self.plugins_changed()
+        return ExecutorUpdated(updated, "" if updated else output)
+
     async def _executor_folders(
         self, connection: Connection, params: ExecutorRef
     ) -> SessionFolderList:
@@ -2848,6 +2953,8 @@ class Gateway:
                 await self.channels.check()
                 if self._executors_seen != await asyncio.to_thread(_executor_states, self.plugins):
                     await self.load_executors()
+                else:
+                    self._look_for_updates()
             except Exception:  # the server's edge: housekeeping must not stop, logged
                 _logger.exception("The plugins could not be checked.")
             try:
@@ -3265,6 +3372,15 @@ def _executor_row(name: str, found: Detection, plugin: str, title: str) -> Execu
 
 
 type _ExecutorState = tuple[bool, str | None, tuple[tuple[str, str], ...]]
+
+
+def _update_source(executor: Executor) -> UpdateSource | None:
+    """Where the executor's newest version is published, when its plugin says (version 27)."""
+    try:
+        return executor.update_source() if executor.capabilities().updates else None
+    except Exception:  # a plugin's own code: its failure is logged, and nothing is offered
+        _logger.exception("An executor could not say how it updates.")
+        return None
 
 
 def _executor_states(plugins: Plugins) -> dict[str, _ExecutorState]:

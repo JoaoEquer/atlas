@@ -14,7 +14,8 @@ from .protocol import CODEX
 
 def register(ctx: PluginContext) -> None:
     def make() -> Codex:
-        return Codex(program(ctx.setting("program")), logger=ctx.logger)
+        named = ctx.setting("program")
+        return Codex(program(named), logger=ctx.logger, found=not named.strip())
 
     ctx.register_executor(CODEX, make)
 

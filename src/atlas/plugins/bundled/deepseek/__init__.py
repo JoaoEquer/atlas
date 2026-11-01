@@ -15,8 +15,10 @@ from .protocol import DEEPSEEK, KEY_SECRET
 
 def register(ctx: PluginContext) -> None:
     def make() -> DeepSeek:
+        named = ctx.setting("program")
         return DeepSeek(
-            program(ctx.setting("program")),
+            program(named),
+            found=not named.strip(),
             logger=ctx.logger,
             data=ctx.data_folder,
             api_key=ctx.secret(KEY_SECRET),

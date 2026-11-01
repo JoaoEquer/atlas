@@ -32,6 +32,9 @@ beside it, or the one on the PATH.
 
 **Its other accounts** are homes of their own (`DSH_HOME`, `~/.dsh-<nickname>`), each with its
 key. Its ACP has no fork and no copy, so a session goes on only in the account that has it.
+
+**Its newest version** (SDK version 27) is npm's, for an install npm keeps in a folder the user may
+write to: the user's npm updates it when they ask. Any other install is left to its own updater.
 """
 
 import asyncio
@@ -78,6 +81,7 @@ from atlas.plugins.sdk import (
     SlashCommand,
     Started,
     Transcript,
+    UpdateSource,
 )
 
 from .home import DshHome
@@ -164,6 +168,21 @@ def not_found() -> str:
     return f"DeepSeek's harness (dsh) is not installed. Install it, in a terminal: {INSTALL}"
 
 
+#: The npm package it comes in.
+PACKAGE = "@deepseek-ai/dsh"
+
+
+def update_source(script: str) -> UpdateSource | None:
+    """npm's newest version, when the script found is in npm's package, in a folder the user may
+    write to; else `None`: another install updates some other way."""
+    path = str(Path(script).resolve()).replace("\\", "/")
+    at = path.find(f"/node_modules/{PACKAGE}/")
+    if at < 0:
+        return None
+    package = Path(path[: at + len(f"/node_modules/{PACKAGE}")])
+    return UpdateSource(npm=PACKAGE) if os.access(package, os.W_OK) else None
+
+
 def too_old(version: str) -> str:
     return (
         f"dsh {version} is older than {MINIMUM_VERSION}, the oldest this plugin drives. Update it, "
@@ -202,8 +221,12 @@ class DeepSeek:
         api_key: str | None = None,
         session_logs: bool = False,
         transport: httpx2.AsyncBaseTransport | None = None,
+        found: bool = False,
     ) -> None:
         self._cli = None if cli is None else list(cli)
+        #: Found where its installers put it, not named by the `program` setting: only then
+        #: Atlas knows how it updates.
+        self._found = found
         self._logger = logger
         self._data = data
         self._home = home
@@ -248,7 +271,11 @@ class DeepSeek:
             account_folders=True,
             delete_sessions=False,
             files=True,
+            updates=True,
         )
+
+    def update_source(self) -> UpdateSource | None:
+        return None if self._cli is None or not self._found else update_source(self._cli[-1])
 
     def account_folder(self) -> Path:
         return self._home or own_home()

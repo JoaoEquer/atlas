@@ -102,8 +102,9 @@ from typing import Any, Literal, Protocol
 #: a tool sends the user, and a channel that sends them; 23, a screen's desktop powers (a global
 #: shortcut, pasting into the program in focus); 24, themes; 25, a setting's choices, listed by
 #: the app (fixed, Atlas's models, or the plugin's call `setting_choices`); 26, the memory's
-#: limits, read only.
-API_VERSION = 26
+#: limits, read only; 27, where a harness's newest version is published and how its install
+#: updates.
+API_VERSION = 27
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +250,27 @@ class Detection:
 
 
 @dataclass(frozen=True, slots=True)
+class UpdateSource:
+    """Where a harness's newest version is published, and the command that updates this install
+    (`Executor.update_source`, version 27). Atlas reads the version itself, once a day, so the
+    plugin reaches no host for it; the command runs only when the user asks, from the app."""
+
+    #: The command that updates this install, the program first (`claude update`); empty with
+    #: `npm`, the user's npm installs the package's newest version globally.
+    command: tuple[str, ...] = ()
+    #: The npm package whose dist-tag holds the newest version (`@google/gemini-cli`).
+    npm: str = ""
+    #: The dist-tag read (`latest`).
+    tag: str = "latest"
+    #: Or a WinGet package (`Anthropic.ClaudeCode`): its newest version in WinGet's catalog,
+    #: which may lag behind its makers'.
+    winget: str = ""
+    #: Or an https address whose answer is the version alone, as text (Claude Code's own
+    #: releases).
+    url: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class Capabilities:
     """What a harness does over its channel; the screen offers only what is true here."""
 
@@ -292,6 +314,9 @@ class Capabilities:
     #: It takes the files the user attaches to a prompt (`ExecutorInstance.prompt(files=)`),
     #: and reads them from `ExecutorSpec.directories` with no permission asked, version 13.
     files: bool = False
+    #: It says where its newest version is published and how its install updates
+    #: (`Executor.update_source`), version 27.
+    updates: bool = False
 
 
 #: A connector's state, in Claude Code's words: up with its tools; waiting for the user's own
@@ -778,6 +803,13 @@ class Executor(Protocol):
         """Delete a session it keeps, and what the harness keeps of it alone, in this account's
         folder only; never one that runs. Only where `Capabilities.delete_sessions` (version
         12). Raises `ExecutorError`."""
+        ...
+
+    def update_source(self) -> UpdateSource | None:
+        """Where its newest version is published, and the command that updates the install
+        found, read with no effect on it; `None` when that install updates some other way (a
+        store, a system package that needs an administrator). Only where `Capabilities.updates`
+        (version 27)."""
         ...
 
 

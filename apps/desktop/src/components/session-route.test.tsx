@@ -21,6 +21,7 @@ const ROW: ExecutorRow = {
   enabled: true,
   files: false,
   installed: true,
+  latest: '',
   logged_in: true,
   minimum: '',
   name: 'claude-code',
@@ -30,6 +31,8 @@ const ROW: ExecutorRow = {
   problem: '',
   supported: true,
   title: 'Claude Code',
+  update: '',
+  updating: false,
   version: '2.1.140'
 }
 const WORK: ExecutorRow = {

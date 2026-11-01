@@ -28,7 +28,8 @@ import {
   showExtensions,
   showPluginConsent,
   toggleExecutor,
-  toggleFolder
+  toggleFolder,
+  updateExecutor
 } from '@/store/app'
 import {
   $archived,
@@ -97,6 +98,8 @@ export function ExecutorsList() {
     order
   )
   const waiting = executors.filter(row => row.consent_again && !row.base)
+  // Turned on and found, but older than its plugin drives: said, with its update when there is one.
+  const old = executors.filter(row => row.enabled && row.installed && !row.supported && !row.base)
   const takeAccounts = on.filter(row => row.account_folders && !row.base)
   const harnesses = [...new Set(on.map(harnessOf))].map(name => on.filter(row => harnessOf(row) === name))
   const reorder = useReorder(home, harnesses)
@@ -117,6 +120,9 @@ export function ExecutorsList() {
         {waiting.map(row => (
           <ConsentAgain key={row.name} row={row} />
         ))}
+        {old.map(row => (
+          <TooOld key={row.name} row={row} />
+        ))}
         {!read &&
           on.length === 0 &&
           (failed ? (
@@ -124,7 +130,7 @@ export function ExecutorsList() {
           ) : (
             <SkeletonRows count={2} label={t.executors.reading} />
           ))}
-        {read && on.length === 0 && waiting.length === 0 && (
+        {read && on.length === 0 && waiting.length === 0 && old.length === 0 && (
           <div className="space-y-1 px-2 py-1 text-sm text-muted-foreground">
             <p>{t.executors.noneOn}</p>
             <button
@@ -169,6 +175,83 @@ export function ConsentAgain({ row }: { row: ExecutorRow }) {
       >
         {t.executors.reviewConsent}
       </button>
+    </div>
+  )
+}
+
+/** An executor turned on and found, but older than its plugin drives: it does not run until it is
+ * updated, so the sidebar says why, and offers its update when Atlas knows how it updates. */
+export function TooOld({ row }: { row: ExecutorRow }) {
+  return (
+    <div
+      className="space-y-1 rounded-md bg-subtle px-2 py-1.5 text-sm"
+      data-executor={row.name}
+      data-testid="executor-too-old"
+    >
+      <div className="flex items-center gap-2">
+        <ExecutorAvatar row={row} />
+        <p className="min-w-0 flex-1 font-medium text-waiting-text">{t.executors.tooOld(row.title, row.version)}</p>
+      </div>
+      <p className="text-xs break-words text-muted-foreground select-text">{row.problem}</p>
+      <ExecutorUpdate row={row} />
+    </div>
+  )
+}
+
+/** A newer version of an executor's harness than the one installed, where its install updates
+ * from, and its update at the user's click (asked for by the user on 01/11/2026): the command runs
+ * on this computer, so only the user's click runs it, never the agent. While it runs the row says
+ * so; once it ends the harness is looked for again, and a failure shows the end of its output. */
+export function ExecutorUpdate({ className = '', row }: { className?: string; row: ExecutorRow }) {
+  const failed = useStore($workbenchError)[`update:${row.name}`]
+  const [running, setRunning] = useState(false)
+  const [updated, setUpdated] = useState(false)
+  const updating = running || row.updating
+
+  if (!row.latest && !failed && !updated) {
+    return null
+  }
+
+  return (
+    <div className={`space-y-1 text-xs ${className}`} data-executor={row.name} data-testid="executor-update">
+      {row.latest ? (
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 text-soft" data-testid="executor-update-version">
+            {updating ? t.executors.updating(row.latest) : t.executors.updateAvailable(row.version, row.latest)}
+          </span>
+          <button
+            className="link shrink-0"
+            data-testid="executor-update-run"
+            disabled={updating}
+            onClick={() => {
+              setRunning(true)
+              setUpdated(false)
+              void updateExecutor(row.name).then(done => {
+                setRunning(false)
+                setUpdated(done)
+              })
+            }}
+            title={t.executors.updateHint(row.update)}
+            type="button"
+          >
+            {t.executors.update}
+          </button>
+        </div>
+      ) : (
+        updated && (
+          <p className="text-muted-foreground" data-testid="executor-updated">
+            {t.executors.updated(row.version)}
+          </p>
+        )
+      )}
+      {failed && (
+        <pre
+          className="max-h-32 overflow-auto font-mono break-words whitespace-pre-wrap text-failed-text select-text"
+          role="alert"
+        >
+          {failed}
+        </pre>
+      )}
     </div>
   )
 }
@@ -398,6 +481,7 @@ function ExecutorNode({
       </div>
       {/* Not logged in (never, or its login expired): the way to log in is on the row, not only in
           its menu, since until then a turn fails. */}
+      {!row.base && <ExecutorUpdate className="pb-1 pl-14 pr-2" row={row} />}
       {!row.logged_in && doing === '' && (
         <div className="pb-1 pl-14">
           <button

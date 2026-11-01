@@ -17,6 +17,12 @@ A session you started elsewhere shows up in the list too. If it is still open th
 
 When an update of Atlas changes what an executor's plugin may do, the plugin waits for your consent again before it runs, and so does the executor. Its place in the sidebar says so ("Claude Code waits for your consent again after an update"), and so does a tab of one of its sessions; **Review and turn on** opens the plugin in **Extensions**, on the **Plugins** tab, with what it now declares. Once you turn it on, its sessions come back as they were. One that is not logged in, never or no longer, says **not logged in** on its row, with a **Log in** button that opens the harness's own login in your browser.
 
+## Updates
+
+When a newer version of a coding agent is out, its row says **Update available** with both versions, and **Update** installs it the way it was installed: `claude update`, `winget upgrade`, `brew upgrade` or your npm. Hover the button to see the command it runs. Atlas looks at most once a day, in the background. Updating needs that agent's sessions stopped, since a program in use cannot be replaced; when it ends, Atlas looks for the agent again and shows the version it finds. One installed some other way, such as from the Microsoft Store, updates there as before.
+
+An agent older than the oldest version Atlas drives stays in the list, saying it is too old, with the same **Update** button when Atlas knows how it updates, and does not run until it is updated.
+
 ## Several accounts
 
 Each account is its own executor, such as **Claude Code · personal** and **Claude Code · company B**, and keeps its own world: its own folder, login, settings, MCP servers, plugins and history. Accounts run at the same time, and each project folder starts its new sessions on the account you chose for it.

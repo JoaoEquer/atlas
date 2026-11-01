@@ -20,6 +20,7 @@ const ROW: ExecutorRow = {
   declaration: ['Adds the executor claude-code'],
   enabled: true,
   installed: false,
+  latest: '',
   logged_in: false,
   minimum: '2.1.140',
   name: 'claude-code',
@@ -29,6 +30,8 @@ const ROW: ExecutorRow = {
   problem: 'Claude Code is not installed. Install it, in PowerShell: irm https://claude.ai/install.ps1 | iex',
   supported: false,
   title: 'Claude Code',
+  update: '',
+  updating: false,
   version: ''
 }
 

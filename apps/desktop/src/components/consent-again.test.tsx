@@ -20,6 +20,7 @@ const RUNNING: ExecutorRow = {
   enabled: true,
   files: false,
   installed: true,
+  latest: '',
   logged_in: true,
   minimum: '',
   name: 'claude-code',
@@ -29,6 +30,8 @@ const RUNNING: ExecutorRow = {
   problem: '',
   supported: true,
   title: 'Claude Code',
+  update: '',
+  updating: false,
   version: '2.1.296'
 }
 /** Its plugin was on, and an update changed what it declares: offered again, off, waiting. */
@@ -163,5 +166,90 @@ describe('an executor whose plugin waits for the consent again (found on 01/11/2
     })
     expect($view.get()).toBe('extensions')
     expect($extensionsTab.get()).toBe('executor')
+  })
+})
+
+describe("an executor's update (asked for by the user on 01/11/2026)", () => {
+  /** The app on a client whose `executor.update` answers `ended`, the rest unanswered. */
+  async function updating(executors: ExecutorRow[], ended: { output: string; updated: boolean }): Promise<string[]> {
+    const calls: string[] = []
+    const none = () => () => undefined
+    const client = {
+      call: (method: string) => {
+        calls.push(method)
+
+        return method === 'executor.update' ? Promise.resolve(ended) : new Promise(() => undefined)
+      },
+      onError: none,
+      onEvent: none,
+      onRequest: none,
+      onResync: none,
+      onState: none,
+      start: vi.fn(),
+      stop: vi.fn(),
+      watch: vi.fn()
+    } as unknown as AtlasClient
+    stop = startApp({ client: () => client, shell: { focus: () => undefined, notify: () => undefined } })
+    await openHome('work')
+    current().$workbench.set({ executors, instances: [] })
+    current().$read.setKey('workbench', true)
+
+    return calls
+  }
+
+  const NEWER: ExecutorRow = { ...RUNNING, latest: '2.1.316', update: 'claude update', version: '2.1.140' }
+
+  it('offers a newer version on its row, and runs its update only on the click', async () => {
+    const calls = await updating([NEWER], { output: '', updated: true })
+    render(<ExecutorsList />)
+
+    expect(screen.getByTestId('executor-update-version').textContent).toBe('Update available: 2.1.140 → 2.1.316')
+    expect(screen.getByTestId('executor-update-run').getAttribute('title')).toBe('Runs: claude update')
+    expect(calls).not.toContain('executor.update')
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('executor-update-run'))
+      await Promise.resolve()
+    })
+    expect(calls).toContain('executor.update')
+  })
+
+  it('shows the end of the output of an update that failed', async () => {
+    await updating([NEWER], { output: 'npm ERR! EBUSY: resource busy', updated: false })
+    render(<ExecutorsList />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('executor-update-run'))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(screen.getByRole('alert').textContent).toContain('EBUSY')
+  })
+
+  it('says one too old for Atlas apart, in the sidebar and in its session, with its update', async () => {
+    const old: ExecutorRow = {
+      ...NEWER,
+      problem: 'Claude Code 2.0.1 is older than 2.1.140. Update it: claude update',
+      supported: false,
+      version: '2.0.1'
+    }
+    await updating([old], { output: '', updated: true })
+    render(<ExecutorsList />)
+
+    const notice = screen.getByTestId('executor-too-old')
+    expect(notice.textContent).toContain('Claude Code 2.0.1 is too old for Atlas')
+    expect(notice.textContent).toContain('Update available: 2.0.1 → 2.1.316')
+    expect(screen.queryByTestId('executor-node')).toBeNull()
+    cleanup()
+
+    openSession()
+    render(<SessionView />)
+    expect(screen.getByTestId('session-not-running').textContent).toContain('too old for Atlas')
+  })
+
+  it('says nothing of an update when there is none', async () => {
+    await updating([RUNNING], { output: '', updated: true })
+    render(<ExecutorsList />)
+
+    expect(screen.queryByTestId('executor-update')).toBeNull()
   })
 })

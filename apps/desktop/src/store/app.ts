@@ -3996,6 +3996,24 @@ export function answerExecutor(id: string, result: Record<string, unknown>): voi
 
 /** Turn an executor's plugin on from the onboarding, with the consent to what the user just
  * read it declare; the server looks for it again, and the workbench offers it to start. */
+/** Update an executor's harness with the command its row shows, at the user's click, then read the
+ * executors again: true once it updated. Why it did not, with the end of its output, is kept under
+ * `update:<name>` in `$workbenchError`. */
+export async function updateExecutor(name: string): Promise<boolean> {
+  const session = current()
+  const ended = await session.onWorkbench(`update:${name}`, client =>
+    client.call('executor.update', { executor: name })
+  )
+
+  if (ended && !ended.updated) {
+    session.$workbenchError.setKey(`update:${name}`, ended.output || t.executors.updateFailed)
+  }
+
+  await session.refreshExecutors().catch(() => undefined)
+
+  return ended?.updated ?? false
+}
+
 export async function turnOnExecutor(row: ExecutorRow): Promise<void> {
   const session = current()
   await session.onWorkbench('offer', client => client.call('plugin.enable', { consent: row.consent, name: row.plugin }))

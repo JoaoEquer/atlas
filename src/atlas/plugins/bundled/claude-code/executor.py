@@ -69,17 +69,24 @@ read whatever the exit code: nobody logged in exits 1, saying so (2.1.296, 18/10
 not have. The plugin's `chrome` setting passes the flag to each session, on every account; Claude
 Code then connects to the extension in the user's own Chrome, its server `claude-in-chrome`
 (proved on 2.1.302, 31/10/2026). A Claude Code started only to say what it has never gets it.
+
+**Its newest version** (SDK version 27) is where its install updates from: Claude Code's own
+releases for the native program and for npm's (`claude update` updates both), the channel the
+user chose (`autoUpdatesChannel`, `latest` unless `stable`); WinGet's catalog for a WinGet install,
+which lags behind them and updates through `winget upgrade`; the stable channel for Homebrew's
+cask. A program installed some other way (a system package) is left to its own updater.
 """
 
 import asyncio
 import contextlib
+import json
 import os
 import shutil
 import sys
 from collections.abc import Callable, Sequence
 from logging import Logger
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from atlas.plugins.sdk import (
     Account,
@@ -99,6 +106,7 @@ from atlas.plugins.sdk import (
     SlashCommand,
     Started,
     Transcript,
+    UpdateSource,
 )
 
 from .live import open_elsewhere
@@ -210,6 +218,40 @@ def not_found() -> str:
     return f"Claude Code is not installed. Install it, in a terminal: {INSTALL_ELSEWHERE}"
 
 
+#: Where Claude Code publishes its newest version, a channel each: the version alone, as text.
+RELEASES = "https://downloads.claude.ai/claude-code-releases/{channel}"
+WINGET_ID = "Anthropic.ClaudeCode"
+
+
+def update_source(program: str, folder: Path) -> UpdateSource | None:
+    """Where the newest version of the Claude Code at `program` is published, and how it
+    updates, by where it was installed."""
+    path = str(Path(program).resolve()).replace("\\", "/").lower()
+    if "/winget/" in path:
+        quiet = ("--silent", "--accept-source-agreements", "--accept-package-agreements")
+        upgrade = ("winget", "upgrade", "--id", WINGET_ID, "--exact", *quiet)
+        return UpdateSource(upgrade, winget=WINGET_ID)
+    if "/caskroom/" in path or "/homebrew/" in path:
+        stable = RELEASES.format(channel="stable")
+        return UpdateSource(("brew", "upgrade", "--cask", "claude-code"), url=stable)
+    if path.startswith(("/usr/bin/", "/bin/")):
+        return None
+    return UpdateSource((program, "update"), url=RELEASES.format(channel=_channel(folder)))
+
+
+def _channel(folder: Path) -> str:
+    """The release channel the user chose in Claude Code's settings: `latest` unless `stable`."""
+    try:
+        settings: object = json.loads((folder / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "latest"
+    stable = (
+        isinstance(settings, dict)
+        and cast(dict[str, object], settings).get("autoUpdatesChannel") == "stable"
+    )
+    return "stable" if stable else "latest"
+
+
 def too_old(version: str, program: str) -> str:
     """Why this version is not driven, and how its install updates."""
     how = "winget upgrade Anthropic.ClaudeCode" if "winget" in program.lower() else "claude update"
@@ -239,8 +281,12 @@ class ClaudeCode:
         sessions: Path | None = None,
         account_folder: Path | None = None,
         chrome: bool = False,
+        found: bool = False,
     ) -> None:
         self._cli = None if cli is None else list(cli)
+        #: Found where its installers put it, not named by the `program` setting: only then
+        #: Atlas knows how it updates.
+        self._found = found
         self._logger = logger
         self._chrome = chrome
         self._sessions = sessions
@@ -284,7 +330,13 @@ class ClaudeCode:
             account_folders=True,
             delete_sessions=True,
             files=True,
+            updates=True,
         )
+
+    def update_source(self) -> UpdateSource | None:
+        if self._cli is None or not self._found:
+            return None
+        return update_source(self._cli[0], self.account_folder())
 
     def account_folder(self) -> Path:
         return self._account_folder or self._sessions or claude_folder()

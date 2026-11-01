@@ -29,6 +29,9 @@ the Node beside it, or the one on the PATH.
 `~/.gemini-<nickname>` beside the user's own `~/.gemini`, logged in through ACP's `authenticate`
 on the user's browser. A session goes on in another account, or in a fork, as a copy of its file
 with an id of its own, which the Gemini CLI then loads.
+
+**Its newest version** (SDK version 27) is npm's, for an install npm keeps in a folder the user may
+write to: the user's npm updates it when they ask. Any other install is left to its own updater.
 """
 
 import asyncio
@@ -79,6 +82,7 @@ from atlas.plugins.sdk import (
     SlashCommand,
     Started,
     Transcript,
+    UpdateSource,
     UsageChanged,
 )
 
@@ -177,6 +181,21 @@ def not_found() -> str:
     return f"The Gemini CLI is not installed. Install it, in a terminal: {INSTALL}"
 
 
+#: The npm package it comes in.
+PACKAGE = "@google/gemini-cli"
+
+
+def update_source(script: str) -> UpdateSource | None:
+    """npm's newest version, when the script found is in npm's package, in a folder the user may
+    write to; else `None`: another install updates some other way."""
+    path = str(Path(script).resolve()).replace("\\", "/")
+    at = path.find(f"/node_modules/{PACKAGE}/")
+    if at < 0:
+        return None
+    package = Path(path[: at + len(f"/node_modules/{PACKAGE}")])
+    return UpdateSource(npm=PACKAGE) if os.access(package, os.W_OK) else None
+
+
 def too_old(version: str) -> str:
     return (
         f"Gemini CLI {version} is older than {MINIMUM_VERSION}, the oldest this plugin drives. "
@@ -216,8 +235,12 @@ class GeminiCli:
         home: Path | None = None,
         transport: httpx2.AsyncBaseTransport | None = None,
         api_key: str | None = None,
+        found: bool = False,
     ) -> None:
         self._cli = None if cli is None else list(cli)
+        #: Found where its installers put it, not named by the `program` setting: only then
+        #: Atlas knows how it updates.
+        self._found = found
         #: The plugin's secret: the API key a personal account logs in with.
         self._api_key = api_key or None
         self._logger = logger
@@ -263,7 +286,11 @@ class GeminiCli:
             account_folders=True,
             delete_sessions=True,
             files=True,
+            updates=True,
         )
+
+    def update_source(self) -> UpdateSource | None:
+        return None if self._cli is None or not self._found else update_source(self._cli[-1])
 
     def account_folder(self) -> Path:
         return self._home or own_state()

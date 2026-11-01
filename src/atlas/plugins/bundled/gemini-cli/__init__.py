@@ -15,10 +15,12 @@ from .protocol import GEMINI, KEY_SECRET
 
 def register(ctx: PluginContext) -> None:
     def make() -> GeminiCli:
+        named = ctx.setting("program")
         return GeminiCli(
-            program(ctx.setting("program")),
+            program(named),
             logger=ctx.logger,
             api_key=ctx.secret(KEY_SECRET),
+            found=not named.strip(),
         )
 
     ctx.register_executor(GEMINI, make)

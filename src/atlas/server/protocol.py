@@ -1471,6 +1471,13 @@ class ExecutorRow:
     nickname: str = ""
     #: Its prompts take files (`workbench.prompt`'s `attachments`, step 16i).
     files: bool = False
+    #: A newer version than `version`, where its install updates from, and the command that
+    #: installs it, as the user would type it (`executor.update`); empty when there is none, or
+    #: Atlas does not know how this install updates. Only on the executor's own row.
+    latest: str = ""
+    update: str = ""
+    #: Its update runs now, at the user's click.
+    updating: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1857,6 +1864,14 @@ class InstanceActivityPayload:
 class ExecutorRef:
     #: The executor's name (`claude-code`).
     executor: str
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutorUpdated:
+    """How an executor's update ended: its output's end, to show when it failed."""
+
+    updated: bool
+    output: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -2725,6 +2740,14 @@ METHODS: Mapping[str, Method] = {
             ExecutorList,
             "Look for the harnesses again, as at a start (installed, which version, which "
             'account): the executors tab asks when it shows, and on its "Look again".',
+        ),
+        Method(
+            "executor.update",
+            ExecutorRef,
+            ExecutorUpdated,
+            "Update an executor's harness to its newest version with the command its row shows, "
+            "then look for it again: only the owner's click in the app, never the agent. Refused "
+            "while one of its sessions runs, since a harness in use cannot be replaced.",
         ),
         Method(
             "executor.folders",

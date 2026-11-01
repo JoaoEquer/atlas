@@ -2640,6 +2640,35 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
     SDK passes it on. It was left out with the credentials, while the executors tab read the
     sessions from it, so a user who keeps Claude Code there had their runs in one folder, logged
     in elsewhere, and their sessions listed from the other.
+- **Updates of the harnesses** (asked for by the user on 01/11/2026; SDK version 27): an
+  executor's row says when a newer version than the installed one is out, and updates it from
+  inside Atlas.
+  - **The plugin says where, Atlas reads**: `Executor.update_source` (behind
+    `Capabilities.updates`) names where the install it found updates from (an npm package and its
+    dist-tag, a WinGet package, or an https address that answers the version as text) and the
+    command that updates it. Atlas reads the version itself (`atlas.server.updates`), so no
+    plugin reaches a new host: a host added to a manifest's `network` would change its consent's
+    fingerprint and ask every user to consent again. Each source is read at most once every 20
+    hours (Codex's own check waits as long), in the background, after a look and at the
+    housekeeping, never on the way to a start; a read that fails waits as long.
+  - **Each install as its makers update it**: Claude Code native or npm's, `claude update` and
+    its own releases (`downloads.claude.ai`, the channel the user chose, `latest` unless
+    `stable`); WinGet's, `winget upgrade` and WinGet's catalog, which lags behind the makers', so
+    the version offered is one WinGet installs; Homebrew's cask, `brew upgrade --cask` and the
+    stable channel. Codex, the Gemini CLI and DeepSeek's `dsh` in npm's package, in a folder the
+    user may write to, update with the user's npm (`cmd /c npm` on Windows, whose npm is a
+    `.cmd`). Anything else (the Microsoft Store, a system package that needs an administrator, a
+    program the `program` setting names by hand) is left to its own updater: no button.
+  - **Too old blocks, newer only suggests**: below the plugin's minimum the executor does not run,
+    and the sidebar says so in its place (`TooOld`), with its update when there is one; above it,
+    "Update available X → Y" sits under its row (`ExecutorRow.latest`, `update`). A version is
+    compared whole, a prerelease before its release (`0.2.1-rc.4` < `0.2.1-rc.5` < `0.2.1`).
+  - **Only the user's click updates** (`executor.update`, owner only): it runs a program on the
+    user's computer, as consenting to a plugin does, so neither the agent nor a bot can. It is
+    refused while one of the harness's sessions runs (Windows locks a program in use), shows
+    "Updating…" meanwhile (`ExecutorRow.updating`), and looks for the harnesses again after: the
+    version found then is the one shown, whatever the command said. A failure shows the end of
+    its output.
 - **Left out of version 1:** groups, photos, voice and files, the reply streaming as it is written,
   the questions an outside executor asks (they stay with the app), a plugin's skills, MCP servers
   and hooks, a plugin's own screen, and installing a plugin from a URL.

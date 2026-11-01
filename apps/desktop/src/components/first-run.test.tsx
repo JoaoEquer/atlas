@@ -62,6 +62,7 @@ const CLAUDE: ExecutorRow = {
   enabled: true,
   files: false,
   installed: true,
+  latest: '',
   logged_in: true,
   minimum: '2.1.140',
   name: 'claude-code',
@@ -71,6 +72,8 @@ const CLAUDE: ExecutorRow = {
   problem: '',
   supported: true,
   title: 'Claude Code',
+  update: '',
+  updating: false,
   version: '2.1.296'
 }
 

@@ -1082,6 +1082,11 @@ export interface ExecutorRow {
   nickname: string
   /** Its prompts take files (`workbench.prompt`'s `attachments`, step 16i). */
   files: boolean
+  /** A newer version than `version`, where its install updates from, and the command that installs it, as the user would type it (`executor.update`); empty when there is none, or Atlas does not know how this install updates. Only on the executor's own row. */
+  latest: string
+  update: string
+  /** Its update runs now, at the user's click. */
+  updating: boolean
 }
 export interface WorkbenchStartParams {
   executor: string
@@ -1195,6 +1200,11 @@ export interface ExecutorList {
 export interface ExecutorRef {
   /** The executor's name (`claude-code`). */
   executor: string
+}
+/** How an executor's update ended: its output's end, to show when it failed. */
+export interface ExecutorUpdated {
+  updated: boolean
+  output: string
 }
 export interface SessionFolderList {
   /** The folders of instances not kept yet first, then the one changed last first. */
@@ -1742,6 +1752,8 @@ export interface RpcMethods {
   'executor.session': { params: SessionReadParams; result: SessionRead }
   /** Every session of an executor, or of one of its folders, wherever it began, read by its plugin with no effect on it, each with the instance working on it here (step 16f, the executors tab). */
   'executor.sessions': { params: SessionListParams; result: SessionList }
+  /** Update an executor's harness to its newest version with the command its row shows, then look for it again: only the owner's click in the app, never the agent. Refused while one of its sessions runs, since a harness in use cannot be replaced. */
+  'executor.update': { params: ExecutorRef; result: ExecutorUpdated }
   /** How much of its plan's limits the account an executor is logged in as has used, read by its plugin with no prompt, for the side panel; also told as `executor.usage` while its instances work. It takes seconds. */
   'executor.usage': { params: ExecutorRef; result: ExecutorUsageRow }
   /** Write this home's backup, checked, at a path on the server's machine: the zip of `atlas backup`, never the vault. */
@@ -1946,6 +1958,7 @@ export const RPC_METHODS = [
   'executor.remove_account',
   'executor.session',
   'executor.sessions',
+  'executor.update',
   'executor.usage',
   'home.backup',
   'home.backup_download',
