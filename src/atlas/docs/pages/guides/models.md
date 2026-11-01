@@ -46,7 +46,10 @@ written in `config.toml`, never in a backup, and the commands the agent runs nev
 
 ## Choose the model
 
-- **Each conversation** has its model and effort, in the pills of the message box. A pick is for
+- **Each conversation** has its model and effort, in the pill under the message box, which says
+  both. Its menu lists the models of the conversation's provider, numbered: press 1 to 9 to pick
+  one. **Effort** and the other providers with a key open beside it, and with many models a search
+  sits on top. A pick is for
   that conversation only, and it is kept with it, across restarts. Switching in the middle of a
   conversation applies from the next turn.
 - **The default model**, under **Settings**, then **Model**, is what a new conversation starts on.
@@ -55,8 +58,7 @@ written in `config.toml`, never in a backup, and the commands the agent runs nev
 - **The effort** says how hard a reasoning model thinks. Unset, it is `medium`, for everything Atlas
   calls: conversations, bots, routines and subagents. A model that does not reason shows none.
 
-Each provider's picker offers a short list of current models, and the default one is marked
-`· default`. The same settings are in `config.toml`, under `[model]`
+Each provider offers a short list of current models, and the default one is marked **Default**. The same settings are in `config.toml`, under `[model]`
 ([Settings](/docs/reference/settings/)).
 
 OpenRouter's list ends with free models, the ones whose name ends in `(free)`, and the **Free Models

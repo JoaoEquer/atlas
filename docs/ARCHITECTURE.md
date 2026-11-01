@@ -1686,8 +1686,12 @@ Step 11, the first switch: the user moves to Atlas for every day.
     or store app (the Setup of step 18b installs the same checkout), and a bridge of markers between several desktops.
   - **A server's update**, a Compose host's, goes through the same button and the same `atlas
     update`: The update of a Compose host (Container, above).
-- **A conversation's model** is chosen in the app, in the model and effort pills of the
-  composer, and kept with the conversation, so it survives a restart:
+- **A conversation's model** is chosen in the app, in the composer's model pill, which says the
+  model and the effort it runs on, and kept with the conversation, so it survives a restart. Its
+  menu (step 18f, drawn with the user on 01/11/2026) lists the conversation's provider first,
+  numbered for the keys 1 to 9, the default marked and the current one checked; then the effort
+  and each other provider with a key, each in a menu of its own; and a search across all of them
+  on top once there are nine models or more:
   - the picker lists the providers with a key in the vault, each with its
     short list of models in `providers.toml` (`models`) plus those the user's `models.toml`
     declares; crossing OpenAI's list with what the key may reach, a network call per opening, is

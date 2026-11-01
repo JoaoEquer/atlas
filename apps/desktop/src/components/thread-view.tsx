@@ -13,6 +13,7 @@ import type { Waiting } from '@/store/waiting'
 
 import { ARTIFACT_LANGUAGES, ArtifactBlock } from './artifact-block'
 import { AttachmentChip, useThumbnail } from './attachment-chip'
+import { $modelMenu } from './model-picker'
 import { ReviewRow } from './review-row'
 import { AnswerStreaming, SHELL_RENDERERS } from './shell-block'
 import { ToolRow } from './tool-row'
@@ -514,14 +515,7 @@ function TurnFailed({
           <TurnAction
             label={t.thread.changeModel}
             onClick={() => {
-              const select = document.querySelector<HTMLSelectElement>('[data-testid="model-select"]')
-              select?.focus()
-
-              try {
-                select?.showPicker()
-              } catch {
-                // A list that does not open on demand stays focused: the arrows choose.
-              }
+              $modelMenu.set(true)
             }}
             testId="turn-change-model"
           />
