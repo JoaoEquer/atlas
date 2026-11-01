@@ -1,6 +1,8 @@
 // How Atlas is installed, for the home, the install page and their Markdown twins.
 import { INSTALLERS, REPOSITORY } from '../../site.config.mjs'
 
+import type { Lang } from './i18n'
+
 export interface InstallWay {
   id: 'windows' | 'macos' | 'linux' | 'docker'
   label: string
@@ -63,3 +65,21 @@ export const installWays: InstallWay[] = [
 
 /** The ways shown beside the hero's line, before the full install section. */
 export const quickWays = installWays.filter(way => way.id !== 'docker')
+
+/** What each way says in Portuguese; the lines and the files are the same. */
+const PORTUGUESE: Record<InstallWay['id'], Pick<InstallWay, 'where' | 'after'>> = {
+  windows: { where: 'No PowerShell' },
+  macos: { where: 'Num terminal' },
+  linux: { where: 'Num terminal' },
+  docker: {
+    where: 'Num terminal, com o Docker rodando',
+    after:
+      'A última linha mostra o token de que o app precisa. Abra o app com ATLAS_DESKTOP_URL=ws://127.0.0.1:18790/ws e ATLAS_DESKTOP_TOKEN com esse token.'
+  }
+}
+
+/** The ways in a language; `quick` leaves Docker out, as beside the hero's line. */
+export function installWaysOf(lang: Lang, quick = false): InstallWay[] {
+  const ways = quick ? quickWays : installWays
+  return lang === 'en' ? ways : ways.map(way => ({ ...way, ...PORTUGUESE[way.id] }))
+}

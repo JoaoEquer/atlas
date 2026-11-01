@@ -52,18 +52,20 @@ function folder(name) {
 export const SIDEBAR = [
   {
     label: 'Start here',
+    translations: { 'pt-BR': 'Comece aqui' },
     items: [
-      { label: 'What Atlas is', slug: 'docs' },
-      { label: 'Install', slug: 'docs/install' },
+      { label: 'What Atlas is', translations: { 'pt-BR': 'O que é o Atlas' }, slug: 'docs' },
+      { label: 'Install', translations: { 'pt-BR': 'Instalar' }, slug: 'docs/install' },
       { label: 'Troubleshooting', slug: 'docs/troubleshooting' },
       { label: 'Questions and answers', slug: 'docs/faq' }
     ]
   },
-  { label: 'Guides', items: folder('guides') },
-  { label: 'Reference', items: folder('reference') },
-  { label: 'Extending Atlas', items: folder('extending') },
+  { label: 'Guides', translations: { 'pt-BR': 'Guias' }, items: folder('guides') },
+  { label: 'Reference', translations: { 'pt-BR': 'Referência' }, items: folder('reference') },
+  { label: 'Extending Atlas', translations: { 'pt-BR': 'Estender o Atlas' }, items: folder('extending') },
   {
     label: 'For contributors',
+    translations: { 'pt-BR': 'Para quem contribui' },
     items: [
       { label: 'How to work on Atlas', link: `${REPOSITORY}/blob/main/AGENTS.md` },
       { label: 'Architecture', link: `${REPOSITORY}/blob/main/docs/ARCHITECTURE.md` },

@@ -1,15 +1,18 @@
 ---
-// The mark leads home; "Docs" leads to the documentation's start.
+// The mark leads home; "Docs" leads to the documentation's start, each in the page's language.
 import Mark from '../../assets/atlas-mark.svg'
+import { localized, WORDS } from '../../lib/i18n'
+
+const lang = Astro.locals.starlightRoute.locale === 'pt-br' ? 'pt-br' : 'en'
 ---
 
 <span class="site-title">
-  <a class="home" href="/">
+  <a class="home" href={localized('/', lang)}>
     <Mark class="mark" aria-hidden="true" />
     <span>Atlas</span>
   </a>
-  <a class="section" href="/docs/">
-    Docs
+  <a class="section" href={localized('/docs/', lang)}>
+    {WORDS[lang].nav.docs}
   </a>
 </span>
 

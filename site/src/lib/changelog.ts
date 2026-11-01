@@ -55,10 +55,11 @@ export function byDay(list: Change[]): { date: string; changes: Change[] }[] {
   return Array.from(days, ([date, items]) => ({ date, changes: items }))
 }
 
-export function formatDay(date: string): string {
+/** A day as people read it, in English (the default) or another locale, such as `pt-BR`. */
+export function formatDay(date: string, locale = 'en-GB'): string {
   const parsed = new Date(`${date}T12:00:00Z`)
   if (Number.isNaN(parsed.getTime())) {
     return date
   }
-  return parsed.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+  return parsed.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 }

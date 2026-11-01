@@ -6,7 +6,7 @@ import { docMarkdown, type DocPage } from '../lib/agents'
 import { docPages } from '../lib/docs'
 
 export const getStaticPaths = (async () =>
-  (await docPages()).map(page => ({ params: { slug: page.id }, props: { ...page } }))) satisfies GetStaticPaths
+  (await docPages(true)).map(page => ({ params: { slug: page.id }, props: { ...page } }))) satisfies GetStaticPaths
 
 export const GET: APIRoute = ({ props, site }) =>
   new Response(docMarkdown(props as DocPage, site ?? new URL(SITE_URL)), {

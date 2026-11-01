@@ -106,6 +106,15 @@ export const systems: RemoteSystem[] = [
   { key: 'office', label: 'Office PC', offset: [0.8, 1.7, -14.5], scale: 0.5, phase: 4.3 }
 ]
 
+/** The labels the scene draws, in Portuguese, by their key; the names of products stay as they are. */
+export const PORTUGUESE_LABELS: Record<string, string> = {
+  laptop: 'Este notebook',
+  personal: 'pessoal',
+  company: 'empresa',
+  homelab: 'Homelab',
+  office: 'PC do escritório'
+}
+
 export type StopState = 'idle' | 'running' | 'limit'
 
 export interface RouteMoment {

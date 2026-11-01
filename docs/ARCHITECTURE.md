@@ -3901,6 +3901,19 @@ training.
   and the settings page from the settings' dataclasses and the `#:` comment above each field, which
   every setting must have (the generator refuses one without). `tests/docs/test_reference.py`
   fails when a committed page differs from what the code renders.
+- **Portuguese, from 01/11/2026**, starting with the home and the documentation's start (ROADMAP,
+  step 19). The site serves it under `/pt-br/`: the home is one component (`site/src/components/
+  Home.astro`) in each language, its words in `site/src/lib/home.ts` and `home.pt-br.ts`, the
+  second typed as the first, and the frame's in `site/src/lib/i18n.ts`; the documentation is
+  Starlight's `pt-br` locale. A translated page lives in the site, `site/src/translations/pt-br/`,
+  not in the package: `atlas docs` and the agent read English. `sources.json` there holds the
+  SHA-256 of the English page each translation was made from, and `site/tests/translations.test.ts`
+  fails when an English page changes and its translation does not; the rest of `/pt-br/docs/`
+  shows the English page with Starlight's notice. The terms are the glossary's Portuguese column
+  (`casa`, `loja`); a screen of the app is named as the app in Portuguese names it. Each page says
+  its other language with `hreflang` and a link in the menu, and nothing redirects by the
+  browser's language, which search engines read as a moving page. The home's count stays on `/`
+  (The installer), so the Portuguese home does not mix into its copies. `llms.txt` lists English.
 - **What proves it:** every page reads, sits in a group and links only to pages that are there
   (`tests/docs`); the site's build checks every internal link and every `#` section of the built
   pages (`site/scripts/check-dist.mjs`); every command the skill gives runs, and a page reaches the

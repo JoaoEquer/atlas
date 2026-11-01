@@ -6,8 +6,9 @@ import { REPOSITORY, SIDEBAR } from '../../site.config.mjs'
 import { CONTENT_SIGNAL } from '../../worker/routing'
 
 import type { Change } from './changelog'
-import { catalogue, chapters, compare, faq, gate, hero, install, memory, proof, route } from './home'
-import { installWays } from './install'
+import { HOMES } from './homes'
+import type { Lang } from './i18n'
+import { installWaysOf } from './install'
 
 export interface DocPage {
   id: string
@@ -61,7 +62,34 @@ export function docMarkdown(page: DocPage, site: URL): string {
   return `# ${page.title}\n\n> ${page.description}\n\n${linkTwins(page.body, site).trim()}\n`
 }
 
-export function homeMarkdown(site: URL): string {
+/** The few words of the home's twin that are not the home's own. */
+const TWIN_WORDS: Record<
+  Lang,
+  { example: string; setup: string; more: string; docs: string; news: string; changelog: string; source: string }
+> = {
+  en: {
+    example: 'For example',
+    setup: 'Or download the Setup',
+    more: 'More',
+    docs: 'Documentation',
+    news: 'News',
+    changelog: 'Changelog',
+    source: 'Source code'
+  },
+  'pt-br': {
+    example: 'Por exemplo',
+    setup: 'Ou baixe o Setup',
+    more: 'Mais',
+    docs: 'Documentação',
+    news: 'Notícias (em inglês)',
+    changelog: 'Mudanças (em inglês)',
+    source: 'Código-fonte'
+  }
+}
+
+export function homeMarkdown(site: URL, lang: Lang = 'en'): string {
+  const { catalogue, chapters, compare, faq, gate, hero, install, memory, proof, route } = HOMES[lang]
+  const words = TWIN_WORDS[lang]
   const link = (path: string) => new URL(path, site).toString()
   const lines: string[] = [
     '# Atlas',
@@ -77,14 +105,14 @@ export function homeMarkdown(site: URL): string {
     lines.push(`## ${chapter.title}`, '', ...chapter.body.flatMap(text => [text, '']))
     if (chapter.id === 'route') {
       lines.push(
-        `For example: ${route.stops.map(stop => `${stop.name} · ${stop.account}`).join(' → ')}.`,
+        `${words.example}: ${route.stops.map(stop => `${stop.name} · ${stop.account}`).join(' → ')}.`,
         '',
         route.handoff,
         ''
       )
     }
     if (chapter.id === 'memory') {
-      lines.push(...memory.entries.map(entry => `- ${entry.kind}: ${entry.text}`), '', memory.caption, '')
+      lines.push(...memory.entries.map(entry => `- ${memory.kinds[entry.kind]}: ${entry.text}`), '', memory.caption, '')
     }
   }
   lines.push(`## ${compare.title}`, '', compare.body, '')
@@ -98,18 +126,20 @@ export function homeMarkdown(site: URL): string {
   lines.push(catalogue.body, '')
   lines.push(
     ...catalogue.items.map(
-      item => `- **[${item.name}](${link(twinOf(item.href.replace(/^\/|\/$/g, '')))})**: ${item.text}`
+      // The guides' twins are English, the language their pages are written in.
+      item =>
+        `- **[${item.name}](${link(twinOf(item.href.replace(/^\/pt-br/, '').replace(/^\/|\/$/g, '')))})**: ${item.text}`
     ),
     ''
   )
   lines.push(`## ${install.title}`, '')
-  for (const way of installWays) {
+  for (const way of installWaysOf(lang)) {
     lines.push(`${way.label}, ${way.where.toLowerCase()}:`, '', '```', ...way.lines, '```', '')
     if (way.after) {
       lines.push(way.after, '')
     }
     if (way.downloads) {
-      lines.push(`Or download the Setup: ${way.downloads.map(d => `[${d.label}](${d.href})`).join(', ')}.`, '')
+      lines.push(`${words.setup}: ${way.downloads.map(d => `[${d.label}](${d.href})`).join(', ')}.`, '')
     }
   }
   lines.push(...install.steps.map((step, k) => `${String(k + 1)}. ${step}`), '', install.update, '')
@@ -119,12 +149,12 @@ export function homeMarkdown(site: URL): string {
     lines.push(`### ${item.question}`, '', item.answer, '')
   }
   lines.push(
-    '## More',
+    `## ${words.more}`,
     '',
-    `- [Documentation](${link('/docs.md')})`,
-    `- [News](${link('/news.md')})`,
-    `- [Changelog](${link('/changelog.md')})`,
-    `- [Source code](${REPOSITORY})`,
+    `- [${words.docs}](${link(lang === 'en' ? '/docs.md' : '/pt-br/docs.md')})`,
+    `- [${words.news}](${link('/news.md')})`,
+    `- [${words.changelog}](${link('/changelog.md')})`,
+    `- [${words.source}](${REPOSITORY})`,
     ''
   )
   return lines.join('\n')
@@ -174,7 +204,7 @@ export function llmsTxt(pages: DocPage[], site: URL): string {
   return [
     '# Atlas',
     '',
-    `> ${hero.lede}`,
+    `> ${HOMES.en.hero.lede}`,
     '',
     'Every page of this site is also served as Markdown: add `.md` to its path, or send `Accept: text/markdown`. The documentation follows the latest Atlas on the main branch.',
     '',
