@@ -1068,6 +1068,8 @@ export interface ExecutorRow {
   enabled: boolean
   declaration: string[]
   consent: string
+  /** Its plugin was turned on, but an update changed what it declares, so it waits, off, for the user's consent again (`consent again`): the sidebar and its sessions' tabs say so. */
+  consent_again: boolean
   /** It switches accounts (`executor.account`), from its place in the sidebar. */
   accounts: boolean
   /** Someone is logged in to its harness: until then a turn fails, so the screen asks for a login first. */

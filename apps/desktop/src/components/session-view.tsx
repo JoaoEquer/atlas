@@ -18,6 +18,7 @@ import {
   $executorModels,
   $executorUsage,
   $openSession,
+  $read,
   $remote,
   $sessionError,
   $sessionFolders,
@@ -39,6 +40,7 @@ import {
   setSessionModel,
   setSessionRoute,
   setSessionSwitch,
+  showExtensions,
   slashKey,
   stopSession,
   switchSessionAccount
@@ -49,7 +51,7 @@ import type { UsageRead } from '@/store/usage'
 import { waitingCalls } from '@/store/waiting'
 
 import { type ExecutorCard, ExecutorCardView } from './executor-cards'
-import { baseName } from './executors-list'
+import { baseName, ConsentAgain } from './executors-list'
 import { HarnessAutoWarning, useHarnessAuto } from './harness-auto'
 import { MessageBox } from './message-box'
 import { TerminalButton } from './side-panel'
@@ -67,7 +69,9 @@ import { IconButton } from './ui/tip'
  * "Atlas answers" left the screen); what it asks shows in the conversation; it stops from the box,
  * in send's place while it works. Its account is a pill beside its model (step 16h): switching goes
  * on with the conversation in a copy on the other account, after the user read what changes; each
- * account's login switches from its row in the sidebar.
+ * account's login switches from its row in the sidebar. Its executor not running, the tab says why
+ * and where to turn it on, where its session used to be read forever (found on 01/11/2026, when an
+ * update left Claude Code waiting for the user's consent again).
  */
 export function SessionView() {
   const open = useStore($openSession)
@@ -75,15 +79,20 @@ export function SessionView() {
   const cards = useStore($cards)
   const { executors, instances } = useStore($workbench)
   const error = useStore($sessionError)
+  const read = useStore($read).workbench
+  const instance = open?.instanceId ? instances.find(row => row.instance_id === open.instanceId) : undefined
+  const live = instance !== undefined && instance.state !== 'ended'
+  const executor = open ? executors.find(row => row.name === open.executor) : undefined
+  // An executor on another account is its harness's: it waits when its harness does.
+  const harness = open ? (open.executor.split('@')[0] ?? open.executor) : ''
+  const waiting = executors.find(row => row.name === harness && row.consent_again && !row.base)
+  const stopped = read && !live && !(executor?.enabled && executor.installed && executor.supported)
 
   if (!open) {
     return null
   }
 
-  const instance = open.instanceId ? instances.find(row => row.instance_id === open.instanceId) : undefined
-  const live = instance !== undefined && instance.state !== 'ended'
-  const executor = executors.find(row => row.name === open.executor)
-  const title = executor?.title ?? open.executor
+  const title = executor?.title ?? waiting?.title ?? open.executor
   const asked = cards.filter(
     (card): card is ExecutorCard =>
       (card.kind === 'executor-approval' || card.kind === 'executor-question') &&
@@ -92,6 +101,15 @@ export function SessionView() {
   )
   const elsewhere = !live && open.elsewhere !== '' && open.choice === null
   const readOnly = open.expired || open.choice === 'read'
+
+  if (stopped) {
+    return (
+      <>
+        <SessionHeader account={executor?.account ?? ''} open={open} title={title} />
+        <NotRunning title={title} waiting={waiting} />
+      </>
+    )
+  }
 
   return (
     <>
@@ -132,6 +150,39 @@ export function SessionView() {
         !elsewhere && <SessionComposer instance={live ? instance : undefined} open={open} title={title} />
       )}
     </>
+  )
+}
+
+/** Why the session's executor is not running, in the conversation's place: waiting for the user's
+ * consent again after an update, the sidebar's own notice; otherwise turned off or not found, with
+ * the way to Extensions. */
+function NotRunning({ title, waiting }: { title: string; waiting: ExecutorRow | undefined }) {
+  return (
+    <div
+      className="flex flex-1 items-start justify-center overflow-y-auto px-6 pt-24"
+      data-testid="session-not-running"
+    >
+      <div className="w-full max-w-md">
+        {waiting ? (
+          <ConsentAgain row={waiting} />
+        ) : (
+          <div className="space-y-1 text-center text-sm">
+            <p className="font-medium">{t.executors.notRunning(title)}</p>
+            <p className="text-muted-foreground">{t.executors.notRunningBody}</p>
+            <button
+              className="link"
+              data-testid="session-open-extensions"
+              onClick={() => {
+                showExtensions('executor')
+              }}
+              type="button"
+            >
+              {t.executors.toExtensions}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 

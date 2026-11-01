@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { t } from '@/i18n'
 import { $screenErrors } from '@/plugins/registry'
@@ -8,6 +8,7 @@ import {
   $mcpServers,
   $pairings,
   $pluginError,
+  $pluginFocus,
   $plugins,
   approvePairing,
   disablePlugin,
@@ -104,6 +105,26 @@ export function PluginsTab({ query }: { query: string }) {
 function Plugin({ plugin }: { plugin: PluginRow }) {
   const [asking, setAsking] = useState(false)
   const on = plugin.enabled && plugin.consented
+  // Turned on, but an update changed what it declares: it waits for the consent again.
+  const again = plugin.enabled && !plugin.consented && plugin.problem === null
+  // Opened from an executor that waits for it (showPluginConsent): its consent shows, scrolled to.
+  const focused = useStore($pluginFocus) === plugin.name
+  const consent = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!focused) {
+      return
+    }
+
+    $pluginFocus.set(null)
+    if (!on) {
+      setAsking(true)
+    }
+  }, [focused, on])
+  useEffect(() => {
+    if (asking) {
+      consent.current?.scrollIntoView({ block: 'center' })
+    }
+  }, [asking])
   const state = plugin.running ? t.plugins.running : on ? t.plugins.on : t.plugins.off
   // Its screen loads in the app (step 16m), so why it did not is the app's to say.
   const screenError = useStore($screenErrors)[plugin.name]
@@ -165,8 +186,13 @@ function Plugin({ plugin }: { plugin: PluginRow }) {
           {t.plugins.screenNotLoaded(screenError)}
         </p>
       )}
+      {again && (
+        <p className="text-sm text-waiting-text" data-testid="plugin-consent-again">
+          {t.plugins.consentAgain}
+        </p>
+      )}
       {asking && !on && (
-        <div className="rounded-md bg-subtle p-3 text-sm" data-testid="plugin-consent">
+        <div className="rounded-md bg-subtle p-3 text-sm" data-testid="plugin-consent" ref={consent}>
           <p className="font-medium">{t.plugins.consentIntro}</p>
           <ul className="mt-1 list-disc space-y-1 pl-5">
             {plugin.declaration.map(line => (

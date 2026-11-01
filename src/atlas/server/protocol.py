@@ -1454,6 +1454,9 @@ class ExecutorRow:
     enabled: bool = True
     declaration: list[str] = field(default_factory=list[str])
     consent: str = ""
+    #: Its plugin was turned on, but an update changed what it declares, so it waits, off, for
+    #: the user's consent again (`consent again`): the sidebar and its sessions' tabs say so.
+    consent_again: bool = False
     #: It switches accounts (`executor.account`), from its place in the sidebar.
     accounts: bool = False
     #: Someone is logged in to its harness: until then a turn fails, so the screen asks for a

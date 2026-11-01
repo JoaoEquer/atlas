@@ -452,6 +452,8 @@ export class HomeSession {
   /** The trail of each session shown before, by `sessionOwner`: shown again at once as its tab
    * comes back, while it is read anew. */
   private readonly sessionThreads = new Map<string, Thread>()
+  /** Whether the session on screen's executor ran at the last look, `null` with none open. */
+  private openRuns: boolean | null = null
   /** Each executor's models and their efforts, as its plugin read them: read when one of its
    * sessions opens, and again after its account changes. */
   readonly $executorModels = map<Record<string, ExecutorModel[] | undefined>>({})
@@ -568,13 +570,27 @@ export class HomeSession {
     const retitle = () => {
       this.tabs.retitle(place => this.titleOf(place))
     }
+    // The session on screen is read again once its executor runs, having not been readable before
+    // (its plugin waiting for the consent again after an update, found on 01/11/2026).
+    const runs = () => {
+      const now = this.openExecutorRuns()
+      if (now && this.openRuns === false) {
+        void this.readSession().catch(() => undefined)
+      }
+
+      this.openRuns = now
+    }
     this.stops.push(
       this.tabs.$tabs.listen(save),
       this.$selected.listen(save),
       this.$view.listen(save),
       this.$openSession.listen(save),
       this.$conversations.listen(retitle),
-      this.$bots.listen(retitle)
+      this.$bots.listen(retitle),
+      this.$workbench.listen(runs),
+      this.$openSession.listen(() => {
+        this.openRuns = this.openExecutorRuns()
+      })
     )
     atlas.start()
   }
@@ -1582,6 +1598,18 @@ export class HomeSession {
     }
 
     this.readUsageIfStale(executor)
+  }
+
+  /** Whether the session on screen's executor is on and found; `null` with none open. */
+  private openExecutorRuns(): boolean | null {
+    const open = this.$openSession.get()
+    if (!open) {
+      return null
+    }
+
+    const row = this.$workbench.get().executors.find(found => found.name === open.executor)
+
+    return row !== undefined && row.enabled && row.installed && row.supported
   }
 
   /** A new session of `executor` in `folder`, not started yet: its first prompt starts it. */
@@ -3327,6 +3355,16 @@ export function showExtensions(tab?: ExtensionKind): void {
   if ($extensionsTab.get() === 'executor') {
     void detectExecutors()
   }
+}
+
+/** The plugin whose consent card Extensions opens on, scrolled to; cleared once shown. */
+export const $pluginFocus = atom<null | string>(null)
+
+/** Open Extensions on the Plugins tab at `plugin`'s consent card: what the sidebar and a session's
+ * tab offer for an executor whose plugin waits for the user's consent again after an update. */
+export function showPluginConsent(plugin: string): void {
+  $pluginFocus.set(plugin)
+  showExtensions('plugin')
 }
 
 /** Show one of Extensions' tabs; the harnesses are looked for on theirs. */

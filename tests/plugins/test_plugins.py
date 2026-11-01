@@ -262,6 +262,38 @@ def test_a_user_plugin_named_as_a_shipped_one_is_refused(
     ]
 
 
+#: What each plugin Atlas ships declares, as its consent's fingerprint. A user who turned one on
+#: consented to this; a manifest that declares anything else turns the plugin off for them at the
+#: update, until they consent again (`consent again`). Changing a value here is that decision,
+#: made on purpose: the commit's message says users will be asked to consent again. Found on
+#: 01/11/2026, when Claude Code's `atlas.api` moved from 2 to 25 and nothing said so.
+BUNDLED_CONSENTS = {
+    "claude-code": "35414510c384728fbb4b07323160448e898a29b50cfb90595e3e07e2721f00e9",
+    "codex": "693d68ea873b613f5d88b99ac5857c884e6da3038e79347efea6430db863703c",
+    "deepseek": "4ff0b8f41f12fccd1b19a74dc37c164b1c8328da5bdfaa2f9353689ed3f70154",
+    "gemini-cli": "f55aa0469062ac5b19b23f140e261a3126c327f53799daff15e3170e5ce36337",
+    "telegram": "bc11fc8c276abf0e4bcbdce1282af46458728404923f1de826e4e4f1f723578f",
+    "voice": "82baa2909c9036c844ba79a196d8807aa03c5ddd3902f2151123d190a785dc66",
+}
+
+
+def test_a_shipped_plugin_asks_for_consent_again_only_on_purpose(home: Home, vault: Vault) -> None:
+    """A change to what a shipped plugin declares (its `atlas.api` included, which the fingerprint
+    holds) turns it off for everyone who had it on: this pins each one, so it never ships
+    unnoticed. A bundled plugin keeps the `api` its consent was given for unless it must move."""
+    database = Database(home.database_file)
+    migrate(database, (SCHEMA,))
+    found = {
+        view.name: view.manifest.fingerprint()
+        for view in Plugins(home, database, vault).all()
+        if view.bundled and view.manifest is not None
+    }
+    assert found == BUNDLED_CONSENTS, (
+        "A shipped plugin's declaration changed: users who turned it on will be asked to consent "
+        "again. Update BUNDLED_CONSENTS only if that is meant, and say so in the commit message."
+    )
+
+
 def test_atlas_ships_its_channel_and_executor_plugins_off(home: Home, vault: Vault) -> None:
     database = Database(home.database_file)
     migrate(database, (SCHEMA,))

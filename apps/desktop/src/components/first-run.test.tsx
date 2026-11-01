@@ -57,6 +57,7 @@ const CLAUDE: ExecutorRow = {
   accounts: true,
   base: '',
   consent: 'fingerprint',
+  consent_again: false,
   declaration: ['Adds the executor claude-code'],
   enabled: true,
   files: false,

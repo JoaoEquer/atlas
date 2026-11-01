@@ -24,7 +24,8 @@ as Atlas does, in a home of its own that is thrown away after, and says what it 
 is wrong. Then turn it on in the app, under **Extensions**, in the sidebar, on its **Plugins** tab (or
 `atlas plugins enable my-plugin`): Atlas
 shows what it declares, and it runs only once you consent. A plugin that declares something new
-after an update is turned off until you consent again.
+after an update is turned off until you consent again: its card says so, and an executor it brings
+says so in the sidebar.
 
 A plugin's Python runs inside Atlas with your permissions. There is no sandbox.
 

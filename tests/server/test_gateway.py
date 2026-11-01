@@ -1369,6 +1369,36 @@ def test_an_installed_harness_is_offered_while_its_plugin_is_off_and_turned_on_w
         assert missing["problem"].startswith("Claude Code could not start"), "it says why"
 
 
+@pytest.mark.offered_executors
+def test_a_harness_whose_plugin_waits_for_consent_again_says_so(
+    serve: Serve, home: Home, vault: Vault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A plugin turned on whose declaration an update changed waits, off, for the user's consent
+    again (docs/ARCHITECTURE.md, Off until the user consents). Its executor is no longer running,
+    and its row says why, so the app tells the user instead of dropping it: found on 01/11/2026,
+    when an update changed Claude Code's and every one of its sessions vanished."""
+    monkeypatch.setenv("FAKE_CLAUDE_AUTH", str(tmp_path / "auth.json"))
+    plugins = Plugins(home, Database(home.database_file), vault)
+    plugins.set_setting("claude-code", "program", json.dumps(FAKE))
+    for other in ("codex", "gemini-cli", "deepseek"):
+        plugins.set_setting(other, "program", '["no-such-program"]')
+    # The consent given to what an earlier version declared.
+    plugins.store.decide(
+        "claude-code", enabled=True, consent="an earlier declaration", now=utc_now()
+    )
+    server = serve()
+    with server.client() as client:
+        rows = {row["name"]: row for row in client.result("workbench.list")["executors"]}
+        waiting = rows["claude-code"]
+        assert (waiting["enabled"], waiting["consent_again"]) == (False, True)
+        assert server.gateway.assistant.executors() == [], "not running before the consent"
+        assert rows["codex"]["consent_again"] is False, "never turned on: offered, not waiting"
+
+        client.result("plugin.enable", {"name": "claude-code", "consent": waiting["consent"]})
+        [running] = [row for row in client.result("workbench.list")["executors"] if row["enabled"]]
+        assert (running["name"], running["consent_again"]) == ("claude-code", False)
+
+
 def test_the_screen_looks_again_and_finds_a_harness_updated_while_atlas_runs(
     serve: Serve, home: Home, vault: Vault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

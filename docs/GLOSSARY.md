@@ -266,6 +266,7 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `manifest` | manifesto | A plugin's `.claude-plugin/plugin.json`, in Claude Code's format, with what only Atlas reads under `atlas` |
 | `declaration` | declaração | What a plugin's manifest says it does (its Python, channels, secrets, hosts), shown before the user turns it on |
 | `consent` | consentimento | The user's yes to a plugin's declaration, kept as its fingerprint; a declaration that changes asks again |
+| `consent again` | consentir de novo | A plugin the user turned on whose declaration an update changed: it waits, off, until the user consents to what it declares now (`ExecutorRow.consent_again`). The app says so on its card, on its executor's place in the sidebar and on a tab of one of its sessions |
 | `channel` | canal | A way to talk to Atlas from elsewhere (Telegram), registered by a plugin and run as one more client of the gateway |
 | `bridge` | ponte | The gateway's side of a running channel: a connection attached to its chats' conversations |
 | `pairing` | pareamento | Letting someone talk through a channel: they get a code, the user approves it |

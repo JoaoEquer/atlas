@@ -26,6 +26,7 @@ import {
   refreshFolders,
   refreshSessions,
   showExtensions,
+  showPluginConsent,
   toggleExecutor,
   toggleFolder
 } from '@/store/app'
@@ -80,7 +81,9 @@ import { when } from './when'
  * user on 22/10/2026, where any work moved every level). A folder archived leaves the
  * list for the executor's "Archived" (store/archive.ts), and a session for its folder's. Each other
  * account is a row of its own (step 16h), with its own folders and sessions; a session is deleted
- * there, on that account alone, after a yes (asked for by the user on 19/10/2026).
+ * there, on that account alone, after a yes (asked for by the user on 19/10/2026). One whose plugin
+ * waits for the user's consent again after an update stays in the list, saying so, with the way to
+ * that consent (found on 01/11/2026, when an update dropped Claude Code from it with no word).
  */
 export function ExecutorsList() {
   const { executors } = useStore($workbench)
@@ -93,6 +96,7 @@ export function ExecutorsList() {
     row => row.name,
     order
   )
+  const waiting = executors.filter(row => row.consent_again && !row.base)
   const takeAccounts = on.filter(row => row.account_folders && !row.base)
   const harnesses = [...new Set(on.map(harnessOf))].map(name => on.filter(row => harnessOf(row) === name))
   const reorder = useReorder(home, harnesses)
@@ -110,6 +114,9 @@ export function ExecutorsList() {
         {harnesses.map(rows => (
           <Harness key={rows[0] ? harnessOf(rows[0]) : ''} reorder={reorder} rows={rows} />
         ))}
+        {waiting.map(row => (
+          <ConsentAgain key={row.name} row={row} />
+        ))}
         {!read &&
           on.length === 0 &&
           (failed ? (
@@ -117,7 +124,7 @@ export function ExecutorsList() {
           ) : (
             <SkeletonRows count={2} label={t.executors.reading} />
           ))}
-        {read && on.length === 0 && (
+        {read && on.length === 0 && waiting.length === 0 && (
           <div className="space-y-1 px-2 py-1 text-sm text-muted-foreground">
             <p>{t.executors.noneOn}</p>
             <button
@@ -134,6 +141,35 @@ export function ExecutorsList() {
         )}
       </div>
     </>
+  )
+}
+
+/** An executor whose plugin was on and waits for the user's consent again, an update having changed
+ * what it declares (`consent again`): why it is not running, and the way to its plugin's consent in
+ * Extensions. The sidebar shows it in its place, and so does a tab of one of its sessions. */
+export function ConsentAgain({ row }: { row: ExecutorRow }) {
+  return (
+    <div
+      className="space-y-1 rounded-md bg-subtle px-2 py-1.5 text-sm"
+      data-executor={row.name}
+      data-testid="executor-consent-again"
+    >
+      <div className="flex items-center gap-2">
+        <ExecutorAvatar row={row} />
+        <p className="min-w-0 flex-1 font-medium text-waiting-text">{t.executors.consentAgain(row.title)}</p>
+      </div>
+      <p className="text-xs text-muted-foreground">{t.executors.consentAgainBody}</p>
+      <button
+        className="link text-xs"
+        data-testid="executor-review-consent"
+        onClick={() => {
+          showPluginConsent(row.plugin)
+        }}
+        type="button"
+      >
+        {t.executors.reviewConsent}
+      </button>
+    </div>
   )
 }
 

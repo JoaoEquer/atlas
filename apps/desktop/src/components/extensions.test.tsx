@@ -1,10 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { EventParams } from '@/protocol/channel'
 import type { AtlasClient } from '@/protocol/client'
 import type { McpList, McpServerRow, PluginRow, SkillRow } from '@/protocol/protocol.generated'
-import { $extensionsTab, $view, openHome, showExtensions, startApp } from '@/store/app'
+import { $extensionsTab, $pluginFocus, $view, openHome, showExtensions, showPluginConsent, startApp } from '@/store/app'
 import { matches, pluginSignIns } from '@/store/extensions'
 import { SECTIONS } from '@/store/settings'
 
@@ -139,6 +139,11 @@ async function open(home: Home = HOME, tab?: Parameters<typeof showExtensions>[0
   return calls
 }
 
+beforeAll(() => {
+  // jsdom lays nothing out, so it has no scrollIntoView.
+  Element.prototype.scrollIntoView = () => undefined
+})
+
 afterEach(() => {
   cleanup()
   $extensionsTab.set('plugin')
@@ -195,6 +200,36 @@ describe('Extensions shows a tab per kind, as the marketplace does', () => {
       await Promise.resolve()
     })
     expect(calls).toContain('plugin.enable')
+  })
+
+  it('says a plugin turned on waits for the consent again, and opens at its consent when asked', async () => {
+    const waiting = plugin('claude-code', {
+      bundled: true,
+      declaration: ['Adds the executor claude-code'],
+      enabled: true
+    })
+    const home = { ...HOME, plugins: [waiting, ...HOME.plugins.slice(1)] }
+    await open(home, 'skill')
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView')
+
+    await act(async () => {
+      showPluginConsent('claude-code')
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    expect($extensionsTab.get()).toBe('plugin')
+    const row = screen.getAllByTestId('plugin-row').find(found => found.dataset.plugin === 'claude-code')
+    if (!row) {
+      throw new Error('No row of claude-code.')
+    }
+
+    expect(within(row).getByTestId('plugin-consent-again').textContent).toContain('waits for your consent again')
+    expect(within(row).getByTestId('plugin-consent').textContent).toContain('Adds the executor claude-code')
+    expect(scrolled).toHaveBeenCalled()
+    expect($pluginFocus.get()).toBeNull()
+    // Another plugin, off and never turned on, says nothing of it.
+    const other = screen.getAllByTestId('plugin-row').find(found => found.dataset.plugin === 'video')
+    expect(other && within(other).queryByTestId('plugin-consent-again')).toBeNull()
   })
 
   it('says where each skill came from, on its shelf', async () => {

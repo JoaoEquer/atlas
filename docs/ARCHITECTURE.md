@@ -2491,6 +2491,15 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
   (its Python, with no sandbox; its channels; the secrets it reads; the hosts it reaches), and the
   consent is kept as the declaration's fingerprint. An update that declares anything else, not
   only a new capability, turns it off until the user consents again.
+- **Waiting for the consent again is said, never silent** (found on 01/11/2026, when an update
+  moved Claude Code's `atlas.api` from 2 to 25 and every one of its executors left the sidebar,
+  a tab of one of its sessions read forever): an executor whose plugin is on but no longer
+  consented to comes as `ExecutorRow.consent_again`, and the app keeps it in the sidebar saying
+  so, with the way to the plugin's consent in Extensions (`showPluginConsent`); a session's tab
+  whose executor is not running says why in the conversation's place, and reads the session once
+  it runs. Each shipped plugin's fingerprint is pinned by a test (`BUNDLED_CONSENTS`), so a
+  change to one is a decision: its commit updates the value and says that users will be asked to
+  consent again.
 - **The agent cannot consent for the user** (found on 14/10/2026, before the step closed): the
   gate treats `atlas plugins enable|disable|secret|set|new`, `atlas plugins
   install|update|remove` (step 16n), `atlas pairing approve|forget`,

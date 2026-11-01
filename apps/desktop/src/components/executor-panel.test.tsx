@@ -16,6 +16,7 @@ const EXECUTOR: ExecutorRow = {
   accounts: true,
   base: '',
   consent: '',
+  consent_again: false,
   declaration: [],
   enabled: true,
   installed: true,

@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
@@ -5,7 +6,7 @@ import { expect, type Page, test } from '@playwright/test'
 
 import { vscodeLink } from '../electron/editor'
 
-import { atlas, type Desktop, launch, ROOT, say } from './harness'
+import { atlas, type Desktop, launch, openApp, ROOT, say } from './harness'
 
 let desktop: Desktop | undefined
 
@@ -669,6 +670,70 @@ test('a home that had its key before is offered "Bring your work" once, alone, f
   await page.reload()
   await expect(page.getByTestId('tab-executors')).toBeVisible(STARTED)
   await expect(page.getByTestId('first-run')).toBeHidden()
+})
+
+test('after an update that changed its plugin, Claude Code waits for consent again, says so, and comes back', async () => {
+  const scripts = await scriptsFolder()
+  const claude = withClaude(scripts)
+  desktop = await launch(claude)
+  const { codex, dsh, folder, gemini, home, page } = desktop
+  keepOldSession(desktop.claude, folder)
+  await openClaudeCode(page)
+  await openFolder(page, folder)
+  await page.getByTestId('session-row').filter({ hasText: SESSION_TITLE }).click()
+  await expect(page.getByTestId('user-message').first()).toContainText('Make the cart total show cents.')
+  await desktop.app.close()
+
+  // The update: the consent kept was given to what an earlier version of the plugin declared.
+  const updated = spawnSync(
+    python,
+    [
+      '-c',
+      'import sqlite3, sys; db = sqlite3.connect(sys.argv[1]); ' +
+        `db.execute("UPDATE plugins_state SET consent = 'earlier' WHERE name = 'claude-code'"); db.commit()`,
+      path.join(home, 'atlas.db')
+    ],
+    { encoding: 'utf8', windowsHide: true }
+  )
+  expect(updated.status, updated.stderr).toBe(0)
+
+  const reopened = await openApp(path.dirname(home), home, {
+    CODEX_HOME: codex,
+    DSH_HOME: dsh,
+    GEMINI_CLI_HOME: gemini,
+    ...claude.environment
+  })
+
+  try {
+    const again = reopened.page
+    // The session's tab comes back saying why it cannot go on, where it used to read forever.
+    const notice = again.getByTestId('session-not-running')
+    await expect(notice).toContainText('Claude Code waits for your consent again after an update', STARTED)
+    // And the sidebar keeps Claude Code, saying the same, where it used to drop it.
+    await again.getByTestId('tab-executors').click()
+    // The sidebar's, not the tab's own.
+    const waiting = again.locator(
+      '[data-testid="executor-consent-again"][data-executor="claude-code"]:not([data-testid="session-not-running"] *)'
+    )
+    await expect(waiting).toBeVisible()
+
+    await waiting.getByTestId('executor-review-consent').click()
+    const row = again.locator('[data-testid="plugin-row"][data-plugin="claude-code"]')
+    await expect(row.getByTestId('plugin-consent-again')).toBeVisible()
+    const consent = row.getByTestId('plugin-consent')
+    await expect(consent).toContainText('Adds the executor claude-code')
+    await consent.getByTestId('plugin-consent-yes').click()
+    await expect(row.getByTestId('plugin-consent-again')).toBeHidden()
+
+    // On again: the sidebar lists it as before, and its session's tab reads the session.
+    await expect(waiting).toBeHidden(STARTED)
+    await expect(again.locator('[data-testid="executor-node"][data-executor="claude-code"]')).toBeVisible()
+    await again.getByTestId('tab').filter({ hasText: SESSION_TITLE }).click()
+    await expect(again.getByTestId('session-not-running')).toBeHidden()
+    await expect(again.getByTestId('user-message').first()).toContainText('Make the cart total show cents.', STARTED)
+  } finally {
+    await reopened.app.close().catch(() => undefined)
+  }
 })
 
 test('another account is added by its nickname, logs in in its own folder, and a session goes on there in a copy', async () => {

@@ -2480,13 +2480,16 @@ class Gateway:
                 )
             if on is not None:
                 row = dataclasses.replace(row, base=on[0], account_id=on[1], nickname=on[2])
-            manifest = views[plugin].manifest if plugin in views else None
-            if name in self._offered and manifest is not None:
+            view = views.get(plugin)
+            manifest = view.manifest if view is not None else None
+            if name in self._offered and view is not None and manifest is not None:
                 row = dataclasses.replace(
                     row,
                     enabled=False,
                     declaration=list(manifest.declaration()),
                     consent=manifest.fingerprint(),
+                    # On, and offered all the same: its consent no longer matches.
+                    consent_again=view.enabled,
                 )
             executors.append(row)
         return executors
