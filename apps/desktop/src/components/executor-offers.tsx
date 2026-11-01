@@ -14,7 +14,7 @@ import { IconButton } from './ui/tip'
  * on 14/10/2026): each one installed to turn on, its consent given right here after reading what
  * its plugin declares; each one not found, or too old, greyed out with why, which says how to
  * install or update it. Atlas looks every time it opens, when the executors tab shows, and on
- * "Look again", so one installed while Atlas runs is found. Shown on the key screen and in
+ * "Look again", so one installed while Atlas runs is found. Shown on the first run's Executors step and in
  * Settings → Extensions → Executors, there in the marketplace's grid (`grid`) and searched
  * (`query`); never in the executors sidebar, which shows only the ones turned on.
  */

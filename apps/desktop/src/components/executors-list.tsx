@@ -33,6 +33,7 @@ import {
   $archivedSessions,
   $showArchived,
   archiveKey,
+  isArchived,
   setArchived,
   setSessionArchived,
   setShowArchived
@@ -492,14 +493,14 @@ const SEPARATOR = 'my-1 h-px bg-selected'
 function ExecutorTree({ executor }: { executor: ExecutorRow }) {
   const read = useStore($sessionFolders)[executor.name]
   const home = useStore($home)
-  const archived = useStore($archived)[archiveKey(home, executor.name)] ?? []
+  const archived = useStore($archived)[archiveKey(home, executor.name)]
   const shown = useStore($showArchived)[archiveKey(home, executor.name)] === true
   const [showArchived, setShowArchived] = useState(false)
   const used = useStore($used)
   const folders = read?.folders ?? null
-  const kept = folders?.filter(row => !archived.includes(row.folder)) ?? null
+  const kept = folders?.filter(row => !isArchived(archived, row.folder, row.updated_at)) ?? null
   const listed = kept && byLastUse(kept, row => lastUse(row.updated_at, used[folderKey(executor.name, row.folder)]))
-  const hidden = folders?.filter(row => archived.includes(row.folder)) ?? []
+  const hidden = folders?.filter(row => isArchived(archived, row.folder, row.updated_at)) ?? []
 
   return (
     <div className="ml-3 space-y-1 border-l border-border pt-1 pl-2" data-testid="executor-tree">
@@ -575,14 +576,14 @@ function Folder({ executor: node, row }: { executor: ExecutorRow; row: SessionFo
   const read = useStore($sessions)[key]
   const dot = useInstancesDot(instance => instance.executor === executor && instance.folder === row.folder)
   const home = useStore($home)
-  const archived = useStore($archivedSessions)[archiveKey(home, executor)] ?? []
+  const archived = useStore($archivedSessions)[archiveKey(home, executor)]
   const shown = useStore($showArchived)[archiveKey(home, executor)] === true
   const used = useStore($used)
   const [showArchived, setShowArchived] = useState(false)
   const all = read?.sessions ?? null
-  const kept = all?.filter(found => !archived.includes(found.session_id)) ?? null
+  const kept = all?.filter(found => !isArchived(archived, found.session_id, found.updated_at)) ?? null
   const sessions = kept && byLastUse(kept, found => lastUse(found.updated_at, used[instanceKey(found.instance_id)]))
-  const hidden = all?.filter(found => found.session_id && archived.includes(found.session_id)) ?? []
+  const hidden = all?.filter(found => isArchived(archived, found.session_id, found.updated_at)) ?? []
   const Chevron = open ? ChevronDown : ChevronRight
 
   return (

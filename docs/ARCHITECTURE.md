@@ -1730,7 +1730,8 @@ editable settings, in Settings above), and what the environment set shown locked
 order:
 
 1. **General:** the language (Portuguese, English or the system's) and the look (light, dark or the
-   system's), both kept by the app on this computer; and "About": Atlas's version,
+   system's), both kept by the app on this computer; the first run opened again (step
+   18d); and "About": Atlas's version,
    looking for an update and updating, through the update button the app already has. The look left
    the home menu. A new language reloads the window, whose texts are read once; the server is not
    touched.
@@ -1898,14 +1899,34 @@ Setup, a file that runs it, is step 18b (The Setup, below); signing is 18c.
   blocks and flaky providers), and a model call costs money. The model is
   then the first provider with a key, as it already is. OpenRouter's OAuth login is left out
   (decided with the user).
+- **The first run** (step 18d, asked for by the user on 01/11/2026, so a first sight says what Atlas
+  is): the key screen became its first step, in three steps numbered on the left, one shown at
+  a time, each done or skipped (`store/setup.ts`, kept per home in the window's storage, so a window
+  closed halfway reopens on its step). **Model**, the key screen above; **Executors**, the harnesses
+  found here turned on with their consent (`ExecutorOffers`) and, once one takes accounts, the
+  other accounts added, since their taking over at a plan's limit is Atlas's own; **Bring your
+  work**, the executors chosen and a window (7, 30 or 90 days, or any time): of their folders, the
+  ones that changed within it have their sessions read and counted, and what changed before it is
+  archived (`store/work.ts`), never copied or touched. It opens by itself while no provider has a
+  key, stays open once the key is stored so the steps after it follow, and opens again from the
+  settings' General; "Go to Atlas" leaves at any point, and leaving with no key leaves the band.
+  A home that had its key before the first run existed is offered **Bring your work** once, alone,
+  when its executors have folders untouched for a month, the long lists it is for; one with none is
+  only marked, and never asked (decided with the user on 01/11/2026).
+  It fills the window, without the sidebar. The title's last word stands out in the theme's own
+  foreground against softer words, with no color of its own: the theme has none to spare.
+- **Archived means still since it was archived** (decided with the user on 01/11/2026): an executor's
+  folder or session keeps when it was archived, and one that changed after that is listed again by
+  itself, so a session resumed in a terminal is never left hidden. The lists of ids kept before
+  count as archived the first time the window reads them.
 - **Proved** by the scripts' tests under Windows PowerShell 5.1, PowerShell 7 and bash
   (`tests/installation/test_install_ps1.py`, `test_install_sh.py`, `test_install_pins.py`); by
   the real install in CI (`.github/workflows/install.yml`) on Windows and Ubuntu, and macOS when
   asked, from the commit under test, run twice
   (`irm | iex` under 5.1 then a file under 7; `curl | bash` under the system's bash), checking the
   command, the PATH a new shell reads, the built app and a server that answers, only when the
-  installer or what it installs changes, or when asked; by the app's e2e of the key
-  screen against the fake model; and by an install in Windows Sandbox (a clean machine under the
+  installer or what it installs changes, or when asked; by the app's e2e of the first
+  run against the fake model; and by an install in Windows Sandbox (a clean machine under the
   Restricted policy) and one by a tester.
 
 ### The Setup — decided 2026-11-01

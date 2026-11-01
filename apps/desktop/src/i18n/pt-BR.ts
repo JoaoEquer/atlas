@@ -305,6 +305,46 @@ export const ptBR: Override<Messages> = {
     switchTo: 'Trocar de casa',
     zipFilter: 'Backup do Atlas'
   },
+  firstRun: {
+    accounts: 'Tem mais de uma conta?',
+    accountsIntro:
+      'Adicione as outras contas aqui: quando uma bater o limite do plano, o Atlas segue na outra sozinho.',
+    bring: 'Trazer minhas sessões do',
+    bringAll: 'Trazer tudo',
+    bringCount: (count: number) => (count === 1 ? 'Trazer 1 sessão' : `Trazer ${String(count)} sessões`),
+    bringNote: 'O resto vai para Arquivadas, a um clique. Nada muda nos originais.',
+    continue: 'Continuar',
+    counting: 'Contando…',
+    hints: { executors: 'Claude Code, Codex', model: 'Uma chave de API', work: 'Último passo' },
+    inProgress: 'Em andamento',
+    intros: {
+      executors:
+        'O Atlas trabalha pelos agentes de código que você já usa, nas suas pastas, cada um com o seu próprio login.',
+      model:
+        'O Atlas conversa com um modelo usando a sua própria chave de API. Cole uma para começar: ela é ' +
+        'conferida com o provedor, sem custo, e guardada criptografada nesta máquina.',
+      work: 'Suas sessões continuam onde estão. Escolha o que aparece na lista; o resto espera em Arquivadas.'
+    },
+    leave: 'Ir para o Atlas',
+    logIn: 'Entrar',
+    marks: { done: 'Feito', skipped: 'Pulado' },
+    noExecutors:
+      'Nenhum executor está ligado, então não há o que trazer: ligue um no passo anterior, ou comece por aqui.',
+    reopen: 'Refaça isto quando quiser em Configurações → Geral.',
+    setup: 'Configuração',
+    skip: 'Pular',
+    start: 'Começar uma conversa',
+    stepOf: (step: number, total: number) => `Passo ${String(step)} de ${String(total)}`,
+    steps: { executors: 'Executores', model: 'Modelo', work: 'Trazer seu trabalho' },
+    titles: {
+      executors: { lead: 'Conecte seus', word: 'agentes' },
+      model: { lead: 'Escolha o', word: 'modelo' },
+      work: { lead: 'Traga seu', word: 'trabalho' }
+    },
+    windowAll: 'de qualquer data',
+    windowDays: (days: number) => `dos últimos ${String(days)} dias`,
+    windowLabel: 'Desde quando'
+  },
   keys: {
     band: 'Nenhum provedor de modelo está conectado, então o Atlas ainda não responde.',
     bandAction: 'Conectar um',
@@ -553,6 +593,9 @@ export const ptBR: Override<Messages> = {
   },
   settings: {
     about: 'Sobre',
+    firstRun: 'Configuração inicial',
+    firstRunHint: 'Os passos com que o Atlas abriu: o modelo, os executores e as sessões que a lista mostra.',
+    firstRunOpen: 'Refazer a configuração',
     aboutYou: 'Sobre você',
     aboutYouHint:
       'Quem você é, do que gosta e como trabalha: o USER.md. O Atlas lê em toda conversa e acrescenta conforme aprende.',

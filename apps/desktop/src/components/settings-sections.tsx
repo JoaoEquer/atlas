@@ -15,6 +15,7 @@ import {
   writeSettings
 } from '@/store/app'
 import { closeSettings } from '@/store/settings'
+import { openFirstRun } from '@/store/setup'
 import { $pluginThemes, $themeChoice, setTheme, type ThemeChoice, themeKey } from '@/store/theme'
 import { $update, $updateOpen } from '@/store/updates'
 
@@ -269,6 +270,20 @@ export function GeneralSection() {
         ]}
         testId="setting-theme"
       />
+      <section className="space-y-2" data-testid="settings-first-run">
+        <Heading hint={t.settings.firstRunHint}>{t.settings.firstRun}</Heading>
+        <button
+          className={SECONDARY}
+          data-testid="settings-first-run-open"
+          onClick={() => {
+            closeSettings()
+            openFirstRun($home.get(), true)
+          }}
+          type="button"
+        >
+          {t.settings.firstRunOpen}
+        </button>
+      </section>
       <section className="space-y-2" data-testid="settings-about">
         <Heading>{t.settings.about}</Heading>
         <p className="text-sm">{version ? t.settings.version(version) : '…'}</p>

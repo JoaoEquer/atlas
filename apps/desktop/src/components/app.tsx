@@ -9,6 +9,7 @@ import {
   $bots,
   $cards,
   $connection,
+  $home,
   $keyLater,
   $keyNotice,
   $modelOptions,
@@ -19,22 +20,26 @@ import {
   $session,
   $threads,
   $view,
+  $workbench,
   currentFolder,
   DRAFT,
   keyScreenShown
 } from '@/store/app'
 import { $panelWidth, $sidebarWidth, toggleSidebar } from '@/store/layout'
+import { $firstRun, firstRunOf } from '@/store/setup'
 import { $terminals, openTerminal, refreshTerminalAvailable, terminalAvailable, togglePanel } from '@/store/terminals'
 import { EMPTY_THREAD } from '@/store/thread'
 import { waitingCalls } from '@/store/waiting'
+import { offerWork } from '@/store/work'
 
 import { ApprovalCard } from './approval-card'
 import { AskCard } from './ask-card'
 import { BotDialogHost } from './bot-dialog'
 import { BotEmpty, BotHeader } from './bot-header'
 import { Composer } from './composer'
+import { FirstRun } from './first-run'
 import { HomeDialogHost } from './home-dialog'
-import { KeyBand, KeyScreen } from './key-screen'
+import { KeyBand } from './key-screen'
 import { MarketplaceView } from './marketplace-view'
 import { PreviewLinks } from './preview-links'
 import { ProposalCard } from './proposal-card'
@@ -82,8 +87,22 @@ export function App() {
   const options = useStore($modelOptions)
   const later = useStore($keyLater)
   const notice = useStore($keyNotice)
-  // With no provider's key, the app opens on the key screen; after "choose later", a band.
-  const keyScreen = state === 'open' && keyScreenShown(options, later, notice)
+  // With no provider's key, the app opens on the first run; left with none stored, a band. Opened
+  // from the settings, it shows until it is left.
+  const home = useStore($home)
+  const setupOpen = firstRunOf(useStore($firstRun), home).open
+  const firstRun = state === 'open' && (setupOpen || keyScreenShown(options, later, notice))
+  // A home that had its key before the first run existed is offered "Bring your work" once.
+  const keyed = options !== null && !keyScreenShown(options, false, null)
+  const executorsOn = useStore($workbench)
+    .executors.filter(row => row.enabled && row.installed && row.supported)
+    .map(row => row.name)
+    .join('\n')
+  useEffect(() => {
+    if (state === 'open' && keyed && read.workbench) {
+      void offerWork(home, executorsOn ? executorsOn.split('\n') : [])
+    }
+  }, [executorsOn, home, keyed, read.workbench, state])
   const keyBand = state === 'open' && later && keyScreenShown(options, false, null)
   // The rails' widths, which styles.css gives the sidebar and the side panel.
   const panelWidth = useStore($panelWidth)
@@ -131,16 +150,23 @@ export function App() {
     }
   }, [])
 
+  if (firstRun) {
+    return (
+      <div className="relative flex h-full bg-background text-foreground" data-connection={state}>
+        <FirstRun />
+        <SettingsView />
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-full bg-background text-foreground" data-connection={state} style={widths}>
       <Sidebar />
       <main className="main-pane flex min-w-0 flex-1 flex-col">
-        {!keyScreen && <TabStrip />}
+        <TabStrip />
         <ConnectionBand />
         {keyBand && <KeyBand />}
-        {keyScreen ? (
-          <KeyScreen />
-        ) : view === 'proposals' ? (
+        {view === 'proposals' ? (
           <ProposalsView />
         ) : view === 'routines' ? (
           <RoutinesView />

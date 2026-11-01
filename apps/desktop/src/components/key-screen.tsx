@@ -1,67 +1,20 @@
-import { useStore } from '@nanostores/react'
 import { useState } from 'react'
 
 import { t } from '@/i18n'
 import type { KeyProvider } from '@/protocol/protocol.generated'
-import { $keyNotice, $keyProviders, chooseKeyLater, connectProvider, dismissKeyNotice } from '@/store/app'
-
-import { ExecutorOffers } from './executor-offers'
+import { chooseKeyLater, connectProvider } from '@/store/app'
 
 /**
- * The key screen (docs/ARCHITECTURE.md, The installer): what the app opens on when no provider has a
- * key in the vault, so a first run needs no terminal: pick a provider, follow its "get a key" link,
- * paste the key.
- *
- * The field takes any text that is not blank, so an unusual key never blocks
- * anyone; the server checks it where it costs nothing and keeps out only a key the provider refuses.
- * The key is sent once and never comes back. "Choose later" gives way to a band, so a user who
- * skipped is never left with no way forward.
+ * The providers that take a key (docs/ARCHITECTURE.md, The installer), each with its key field: the
+ * first run's Model step, and the settings' Model. The field takes any text that is not blank, so
+ * an unusual key never blocks anyone; the server checks it where it costs nothing and keeps out
+ * only a key the provider refuses. The key is sent once and never comes back.
  */
-export function KeyScreen() {
-  const providers = useStore($keyProviders)
-  const notice = useStore($keyNotice)
-
-  return (
-    <div className="flex flex-1 items-start justify-center overflow-y-auto p-6" data-testid="key-screen">
-      <div className="mt-[8vh] w-full max-w-lg space-y-5">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">{t.keys.title}</h1>
-          <p className="text-sm text-muted-foreground">{t.keys.intro}</p>
-        </div>
-        {notice ? (
-          <div className="space-y-3 rounded-lg border border-waiting/40 bg-waiting/10 p-4 text-sm">
-            <p className="font-medium">{t.keys.saved}</p>
-            <p data-testid="key-notice">{notice.detail}</p>
-            <button className={PRIMARY} data-testid="key-continue" onClick={dismissKeyNotice} type="button">
-              {t.keys.continue}
-            </button>
-          </div>
-        ) : (
-          providers && <Providers providers={providers} />
-        )}
-        {!notice && <ExecutorOffers />}
-        {!notice && (
-          <button
-            className="text-sm text-muted-foreground hover:text-foreground"
-            data-testid="key-later"
-            onClick={() => {
-              chooseKeyLater(true)
-            }}
-            type="button"
-          >
-            {t.keys.later}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
 
 /** The provider the screen calls a good first choice: one key, hundreds of models. */
 const FIRST_CHOICE = 'openrouter'
 
-/** The providers, each with its key field: the key screen's, and the settings screen's Model. The
- * one called a good first choice comes first, open (the UI review, 26/10/2026: it said so second,
+/** The providers, each with its key field. The one called a good first choice comes first, open (the UI review, 26/10/2026: it said so second,
  * under another one open). */
 export function Providers({ providers }: { providers: KeyProvider[] }) {
   const listed = [...providers].sort((a, b) => Number(b.id === FIRST_CHOICE) - Number(a.id === FIRST_CHOICE))
@@ -171,7 +124,7 @@ function ProviderRow({ onPick, open, provider }: RowProps) {
   )
 }
 
-/** Where the key screen goes after "choose later": a band that leads back to it. */
+/** Where the first run leaves a home with no key: a band that leads back to its Model step. */
 export function KeyBand() {
   return (
     <div

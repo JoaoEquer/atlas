@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { expect, type Page, test } from '@playwright/test'
@@ -573,7 +573,9 @@ test('a first run offers the harnesses installed here, turned on with consent ri
     }
   })
   const { page } = desktop
-  await expect(page.getByTestId('key-screen')).toBeVisible()
+  // The Executors step, after the Model step skipped.
+  await page.getByTestId('first-run-skip').click()
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'executors')
   // Codex is offered beside it, found here or not: this test is about Claude Code's.
   const offer = page.getByTestId('executor-offer').filter({ hasText: 'Claude Code' })
   await expect(offer).toContainText('Claude Code 2.1.140 · someone@example.com')
@@ -585,7 +587,7 @@ test('a first run offers the harnesses installed here, turned on with consent ri
   await expect(offer.getByRole('button', { name: 'Turn on' })).toBeHidden()
 
   // In the executors tab it is there to open.
-  await page.getByTestId('key-later').click()
+  await page.getByTestId('first-run-leave').click()
   await page.getByTestId('tab-executors').click()
   await expect(page.getByTestId('executor-card')).toContainText('Claude Code')
 })
@@ -598,12 +600,72 @@ test('a harness not found here is shown greyed out, with why, and nothing to tur
     }
   })
   const { page } = desktop
+  await page.getByTestId('first-run-skip').click()
   // Codex is offered beside it, found here or not: this test is about Claude Code's.
   const offer = page.getByTestId('executor-offer').filter({ hasText: 'Claude Code' })
   // The why in full (18/10/2026), where it used to say only that it was not found.
   await expect(offer.getByTestId('executor-problem')).toContainText('Claude Code could not start')
   await expect(offer).toHaveAttribute('data-usable', 'false')
   await expect(offer.getByRole('button', { name: 'Turn on' })).toBeHidden()
+})
+
+test('the first run opened again brings the sessions of a window, and archives the older ones', async () => {
+  const scripts = await scriptsFolder()
+  desktop = await launch(withClaude(scripts))
+  const { claude, folder, page } = desktop
+  keepOldSession(claude, folder)
+  // A second folder, last touched two months ago.
+  const old = path.join(path.dirname(folder), 'old-shop')
+  const text = readFileSync(path.join(claude, 'projects', projectFolder(folder), `${SESSION}.jsonl`), 'utf8')
+  const project = path.join(claude, 'projects', projectFolder(old))
+  mkdirSync(project, { recursive: true })
+  const file = path.join(project, '0a1b2c3d-0000-4000-8000-000000000002.jsonl')
+  writeFileSync(file, text.split(JSON.stringify(folder).slice(1, -1)).join(JSON.stringify(old).slice(1, -1)))
+  const twoMonths = (Date.now() - 60 * 24 * 60 * 60 * 1000) / 1000
+  utimesSync(file, twoMonths, twoMonths)
+
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-first-run-open').click()
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'model')
+  await page.getByTestId('first-run-step-work').click()
+
+  const work = page.getByTestId('first-run-work')
+  await expect(work.getByTestId('first-run-executor')).toHaveText('Claude Code')
+  await expect(work.getByTestId('first-run-counts')).toHaveText('1 Claude Code', STARTED)
+  await work.getByTestId('first-run-window').selectOption('90')
+  await expect(work.getByTestId('first-run-counts')).toHaveText('2 Claude Code', STARTED)
+  await work.getByTestId('first-run-window').selectOption('30')
+  await work.getByRole('button', { name: 'Bring 1 session' }).click()
+  await expect(page.getByTestId('first-run')).toBeHidden()
+
+  // The list keeps the folder of the window; the old one waits under Archived, untouched.
+  await openClaudeCode(page)
+  await expect(page.getByTestId('session-folder')).toHaveCount(1)
+  await expect(page.getByTestId('session-folder')).toHaveAttribute('data-folder', folder)
+  expect(existsSync(file)).toBe(true)
+})
+
+test('a home that had its key before is offered "Bring your work" once, alone, for its old folders', async () => {
+  const scripts = await scriptsFolder()
+  // A folder whose only session was last touched two months ago, there before Atlas opens.
+  const claude = path.join(path.dirname(scripts), 'claude')
+  const old = path.join(path.dirname(scripts), 'old-shop')
+  keepOldSession(claude, old)
+  const file = path.join(claude, 'projects', projectFolder(old), `${SESSION}.jsonl`)
+  const twoMonths = (Date.now() - 60 * 24 * 60 * 60 * 1000) / 1000
+  utimesSync(file, twoMonths, twoMonths)
+  desktop = await launch(withClaude(scripts))
+  const { page } = desktop
+
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'work', STARTED)
+  await expect(page.getByTestId('first-run-step-model')).toHaveAttribute('data-mark', 'done')
+  await page.getByTestId('first-run-leave').click()
+  await expect(page.getByTestId('first-run')).toBeHidden()
+
+  // Once: a reload does not ask again.
+  await page.reload()
+  await expect(page.getByTestId('tab-executors')).toBeVisible(STARTED)
+  await expect(page.getByTestId('first-run')).toBeHidden()
 })
 
 test('another account is added by its nickname, logs in in its own folder, and a session goes on there in a copy', async () => {

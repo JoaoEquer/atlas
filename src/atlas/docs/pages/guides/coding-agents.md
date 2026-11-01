@@ -11,6 +11,8 @@ Atlas runs the coding agents you already use, Claude Code, Codex, the Gemini CLI
 
 Open **Settings**, then **Extensions**, and on its **Executors** tab turn on the harnesses you use; one that is not installed shows the command that installs it. Each one you turn on appears in the **Executors** tab of the sidebar with its project folders, its sessions and its plan's usage: the five-hour window, the week and each model's quota, read the way the harness's own `/usage` shows them, without spending a token.
 
+A folder or a session you archive leaves the list, and comes back by itself as soon as it changes again, in Atlas or in a terminal. To keep only what you have been working on, run **Bring your work** again (**Settings**, then **General**, then **Open the first run again**): what has not changed within the days you choose is archived, and nothing is copied or touched.
+
 A session you started elsewhere shows up in the list too. If it is still open there, Atlas warns you and offers to go on in a copy. To start a new one, choose **New session** at the top of the tab, then the executor and the project folder.
 
 ## Several accounts

@@ -326,6 +326,44 @@ export const en = {
     switchTo: 'Switch to another home',
     zipFilter: 'Atlas backup'
   },
+  firstRun: {
+    accounts: 'More than one account?',
+    accountsIntro:
+      "Add your other accounts here: when one reaches its plan's limit, Atlas goes on in the next by itself.",
+    bring: 'Bring my sessions from',
+    bringAll: 'Bring everything',
+    bringCount: (count: number) => (count === 1 ? 'Bring 1 session' : `Bring ${String(count)} sessions`),
+    bringNote: 'The rest goes to Archived, a click away. Nothing changes in the originals.',
+    continue: 'Continue',
+    counting: 'Counting…',
+    hints: { executors: 'Claude Code, Codex', model: 'An API key', work: 'Last step' },
+    inProgress: 'In progress',
+    intros: {
+      executors: 'Atlas works through the coding agents you already use, in your folders, each with your own login.',
+      model:
+        'Atlas talks to a model with your own API key. Paste one to start: it is checked with the provider, ' +
+        'at no cost, and kept encrypted on this machine.',
+      work: 'Your sessions stay where they are. Choose what shows in the list; the rest waits in Archived.'
+    },
+    leave: 'Go to Atlas',
+    logIn: 'Log in',
+    marks: { done: 'Done', skipped: 'Skipped' },
+    noExecutors: 'No executor is on, so there is nothing to bring: turn one on in the step before, or start here.',
+    reopen: 'Open this again any time from Settings → General → First run.',
+    setup: 'First run',
+    skip: 'Skip',
+    start: 'Start a conversation',
+    stepOf: (step: number, total: number) => `Step ${String(step)} of ${String(total)}`,
+    steps: { executors: 'Executors', model: 'Model', work: 'Bring your work' },
+    titles: {
+      executors: { lead: 'Connect your', word: 'agents' },
+      model: { lead: 'Choose the', word: 'model' },
+      work: { lead: 'Bring your', word: 'work' }
+    },
+    windowAll: 'from any time',
+    windowDays: (days: number) => `from the last ${String(days)} days`,
+    windowLabel: 'Since when'
+  },
   keys: {
     band: 'No model provider is connected, so Atlas cannot answer yet.',
     bandAction: 'Connect one',
@@ -571,6 +609,9 @@ export const en = {
   },
   settings: {
     about: 'About',
+    firstRun: 'First run',
+    firstRunHint: 'The steps Atlas opened on: the model, the executors, and the sessions the list shows.',
+    firstRunOpen: 'Open the first run again',
     aboutYou: 'About you',
     aboutYouHint:
       'Who you are, what you prefer and how you work: USER.md. Atlas reads it in every conversation and adds to it as it learns.',

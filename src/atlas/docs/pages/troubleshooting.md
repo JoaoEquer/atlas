@@ -32,8 +32,8 @@ what causes each and the way out. Each guide also has a section of its own for i
 
 ## The first start
 
-- **The app opens on "Connect a model provider"**: Atlas has no key yet. Paste one, or choose
-  **I'll choose later** and come back from the band at the top
+- **The app opens on its first run, on "Choose the model"**: Atlas has no key yet. Paste one, or choose
+  **Skip** or **Go to Atlas** and come back from the band at the top
   ([Models and keys](/docs/guides/models/)).
 - **A key is refused**: the provider answered 401 or 403. Make a new key on its page.
 - **Atlas answers that its quota is used up**: the provider's limit or credit, not Atlas's. Add

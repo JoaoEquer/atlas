@@ -37,9 +37,13 @@ The warning comes only once, for the Setup: the app it installs is built on your
 
 ## The first time it opens
 
-1. The app asks for an API key from a model provider: OpenAI, Anthropic, Google Gemini or OpenRouter. Atlas checks the key without spending anything and keeps it in its encrypted vault.
-2. Start talking. Each conversation can switch models.
-3. To use your coding agents, open **Settings**, then **Extensions**, on its **Executors** tab: it lists the harnesses on this computer, Claude Code, Codex, the Gemini CLI and DeepSeek's. Turn on the ones you use; each one shows up in the **Executors** tab of the sidebar, and one not installed shows the command that installs it.
+The app opens on its first run: three steps, numbered on the left. Each one can be skipped, and **Go to Atlas** leaves at any point.
+
+1. **Model**: an API key from a model provider, OpenAI, Anthropic, Google Gemini or OpenRouter. Atlas checks the key without spending anything and keeps it in its encrypted vault.
+2. **Executors**: the coding agents found on this computer, Claude Code, Codex, the Gemini CLI and DeepSeek's. Turn on the ones you use; one not installed shows the command that installs it. With more than one account of a harness, add the others here: when one reaches its plan's limit, Atlas goes on in the next.
+3. **Bring your work**: choose the harnesses and how far back, the last 7, 30 or 90 days, or any time. Their sessions from then show in the **Executors** tab of the sidebar; the older ones wait under **Archived**. Nothing is copied, and the harnesses' own files are not touched.
+
+Then start talking: each conversation can switch models. If you used Atlas before the first run existed and your coding agents have folders untouched for a month, Atlas offers **Bring your work** once, alone. **Settings**, then **General**, then **Open the first run again** brings the steps back.
 
 ## Updating
 

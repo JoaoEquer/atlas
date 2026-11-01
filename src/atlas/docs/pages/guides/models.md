@@ -26,8 +26,9 @@ on them.
 
 ## Add a key
 
-- **The first time the app opens**, with no key yet, it asks for one, with a link to each
-  provider's page. **I'll choose later** leaves a band at the top that leads back.
+- **The first time the app opens**, with no key yet, its first run asks for one, with a link to each
+  provider's page. **Skip** goes on without one, and leaving the first run with no key leaves a band at
+  the top that leads back.
 - **Later**, open **Settings**, then **Model**: **Provider keys** lists the providers, each with a
   field for its key.
 - **In a terminal**, `atlas secrets set OPENAI_API_KEY` reads the key without showing it. Use the

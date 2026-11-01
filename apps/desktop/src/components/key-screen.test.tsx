@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { KeyProvider, ModelOptions, ProviderConnected } from '@/protocol/protocol.generated'
 import * as app from '@/store/app'
 
-import { KeyScreen } from './key-screen'
+import { Providers } from './key-screen'
 
 afterEach(() => {
   cleanup()
@@ -47,10 +47,9 @@ describe('when the key screen shows', () => {
   })
 })
 
-describe('the key screen', () => {
+describe("the providers' key fields", () => {
   it('lists first, open, the provider it calls a good first choice', () => {
-    app.$keyProviders.set([provider('openai', 'OpenAI'), provider('openrouter', 'OpenRouter')])
-    render(<KeyScreen />)
+    render(<Providers providers={[provider('openai', 'OpenAI'), provider('openrouter', 'OpenRouter')]} />)
 
     const choices = screen.getAllByRole('radio')
     expect(choices.map(choice => choice.querySelector('span')?.textContent)).toEqual(['OpenRouter', 'OpenAI'])
@@ -59,9 +58,7 @@ describe('the key screen', () => {
 
   it('connects the picked provider with the pasted key, and links to where keys are made', async () => {
     const connected = vi.spyOn(app, 'connectProvider').mockResolvedValue(answer('valid', 'The key opens OpenRouter.'))
-    app.$keyProviders.set([provider('openai', 'OpenAI'), provider('openrouter', 'OpenRouter')])
-
-    render(<KeyScreen />)
+    render(<Providers providers={[provider('openai', 'OpenAI'), provider('openrouter', 'OpenRouter')]} />)
     fireEvent.click(screen.getByText('OpenRouter'))
     const field = screen.getByTestId('key-input')
     expect(field).toHaveProperty('type', 'password')
@@ -80,9 +77,7 @@ describe('the key screen', () => {
 
   it('says why a refused key was kept out, and keeps it in the field to fix', async () => {
     vi.spyOn(app, 'connectProvider').mockResolvedValue(answer('refused', 'OpenRouter refused the key (HTTP 401).'))
-    app.$keyProviders.set([provider('openrouter', 'OpenRouter')])
-
-    render(<KeyScreen />)
+    render(<Providers providers={[provider('openrouter', 'OpenRouter')]} />)
     fireEvent.change(screen.getByTestId('key-input'), { target: { value: 'wrong' } })
     fireEvent.click(screen.getByTestId('key-connect'))
 
@@ -90,25 +85,9 @@ describe('the key screen', () => {
     expect(screen.getByTestId('key-input')).toHaveProperty('value', 'wrong')
   })
 
-  it('shows what a stored key’s check said until the user continues', () => {
-    const dismissed = vi.spyOn(app, 'dismissKeyNotice').mockReturnValue()
-    app.$keyNotice.set(answer('no_credit', 'The key is valid; its credit or quota: none left.'))
+  it('says which provider already has a key', () => {
+    render(<Providers providers={[provider('openai', 'OpenAI', true)]} />)
 
-    render(<KeyScreen />)
-
-    expect(screen.getByTestId('key-notice').textContent).toBe('The key is valid; its credit or quota: none left.')
-    fireEvent.click(screen.getByTestId('key-continue'))
-    expect(dismissed).toHaveBeenCalled()
-  })
-
-  it('lets the user choose later', () => {
-    const later = vi.spyOn(app, 'chooseKeyLater').mockReturnValue()
-    app.$keyProviders.set([provider('openai', 'OpenAI', true)])
-
-    render(<KeyScreen />)
-    fireEvent.click(screen.getByTestId('key-later'))
-
-    expect(later).toHaveBeenCalledWith(true)
     expect(screen.getByText('connected')).toBeTruthy()
   })
 })
