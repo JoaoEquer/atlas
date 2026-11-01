@@ -92,6 +92,13 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "atlas"
 
+# browser-harness 0.1.13 pins pillow 12.3.0, which carries critical advisories fixed in 13.0.0
+# (16/10/2026). It only opens, draws on and resizes screenshots, which 13 keeps; the override
+# goes when browser-harness asks for 13 itself. The installer, the update and the image sync from
+# the lock, so it holds for every install.
+[tool.uv]
+override-dependencies = ["pillow==13.0.0"]
+
 [dependency-groups]
 dev = [
     "deptry==0.25.1",         # no undeclared or unused dependencies
