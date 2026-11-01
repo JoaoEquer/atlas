@@ -396,6 +396,22 @@ function ExecutorNode({
           title={title}
         />
       </div>
+      {/* Not logged in (never, or its login expired): the way to log in is on the row, not only in
+          its menu, since until then a turn fails. */}
+      {!row.logged_in && doing === '' && (
+        <div className="pb-1 pl-14">
+          <button
+            className="link text-xs"
+            data-testid="executor-log-in"
+            onClick={() => {
+              setDoing('login')
+            }}
+            type="button"
+          >
+            {t.executors.logIn}
+          </button>
+        </div>
+      )}
       {doing === 'new' && (
         <div className="px-2 pb-1">
           <NewSession executor={row.name} onDone={done} />

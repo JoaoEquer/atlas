@@ -693,3 +693,22 @@ describe('the executors and their accounts, in the order the user drags them int
     expect($executorOrder.get()).toEqual({ work: ['claude-code@ab12cd34', 'claude-code', 'codex'] })
   })
 })
+
+describe('an executor not logged in (asked for by the user on 01/11/2026)', () => {
+  it('offers its login on its row, not only in its menu, and hides it while the login is open', async () => {
+    await showClaudeCode(() => new Promise(() => undefined))
+    act(() => {
+      current().$workbench.set({ executors: [{ ...EXECUTOR, logged_in: false }], instances: [] })
+    })
+
+    fireEvent.click(screen.getByTestId('executor-log-in'))
+    expect(screen.getByTestId('executor-account')).toBeTruthy()
+    expect(screen.queryByTestId('executor-log-in')).toBeNull()
+  })
+
+  it('says nothing of it once logged in', async () => {
+    await showClaudeCode(() => new Promise(() => undefined))
+
+    expect(screen.queryByTestId('executor-log-in')).toBeNull()
+  })
+})

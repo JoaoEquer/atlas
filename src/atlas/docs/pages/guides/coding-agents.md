@@ -15,7 +15,7 @@ A folder or a session you archive leaves the list, and comes back by itself as s
 
 A session you started elsewhere shows up in the list too. If it is still open there, Atlas warns you and offers to go on in a copy. To start a new one, choose **New session** at the top of the tab, then the executor and the project folder.
 
-When an update of Atlas changes what an executor's plugin may do, the plugin waits for your consent again before it runs, and so does the executor. Its place in the sidebar says so ("Claude Code waits for your consent again after an update"), and so does a tab of one of its sessions; **Review and turn on** opens the plugin in **Extensions**, on the **Plugins** tab, with what it now declares. Once you turn it on, its sessions come back as they were.
+When an update of Atlas changes what an executor's plugin may do, the plugin waits for your consent again before it runs, and so does the executor. Its place in the sidebar says so ("Claude Code waits for your consent again after an update"), and so does a tab of one of its sessions; **Review and turn on** opens the plugin in **Extensions**, on the **Plugins** tab, with what it now declares. Once you turn it on, its sessions come back as they were. One that is not logged in, never or no longer, says **not logged in** on its row, with a **Log in** button that opens the harness's own login in your browser.
 
 ## Several accounts
 
