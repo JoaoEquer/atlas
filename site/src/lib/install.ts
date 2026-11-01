@@ -9,26 +9,42 @@ export interface InstallWay {
   lines: string[]
   /** What to do once they have run, when it is more than opening the app. */
   after?: string
+  /** The Setup for this system, for whoever does not open a terminal (step 18b). */
+  downloads?: Download[]
 }
+
+export interface Download {
+  label: string
+  href: string
+}
+
+/** The release the Setup's files are put in; its addresses never change (.github/workflows/setup.yml). */
+const SETUP = `${REPOSITORY}/releases/download/setup`
 
 export const installWays: InstallWay[] = [
   {
     id: 'windows',
     label: 'Windows',
     where: 'In PowerShell',
-    lines: [`irm ${INSTALLERS}/install.ps1 | iex`]
+    lines: [`irm ${INSTALLERS}/install.ps1 | iex`],
+    downloads: [{ label: 'Atlas-Setup.exe', href: `${SETUP}/Atlas-Setup.exe` }]
   },
   {
     id: 'macos',
     label: 'macOS',
     where: 'In a terminal',
-    lines: [`curl -fsSL ${INSTALLERS}/install.sh | bash`]
+    lines: [`curl -fsSL ${INSTALLERS}/install.sh | bash`],
+    downloads: [
+      { label: 'Apple Silicon', href: `${SETUP}/Atlas-Setup-arm64.dmg` },
+      { label: 'Intel', href: `${SETUP}/Atlas-Setup-x64.dmg` }
+    ]
   },
   {
     id: 'linux',
     label: 'Linux',
     where: 'In a terminal',
-    lines: [`curl -fsSL ${INSTALLERS}/install.sh | bash`]
+    lines: [`curl -fsSL ${INSTALLERS}/install.sh | bash`],
+    downloads: [{ label: 'AppImage', href: `${SETUP}/Atlas-Setup-x86_64.AppImage` }]
   },
   {
     id: 'docker',

@@ -108,6 +108,9 @@ export function homeMarkdown(site: URL): string {
     if (way.after) {
       lines.push(way.after, '')
     }
+    if (way.downloads) {
+      lines.push(`Or download the Setup: ${way.downloads.map(d => `[${d.label}](${d.href})`).join(', ')}.`, '')
+    }
   }
   lines.push(...install.steps.map((step, k) => `${String(k + 1)}. ${step}`), '', install.update, '')
   lines.push(install.needs, '')

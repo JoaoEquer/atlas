@@ -45,6 +45,17 @@ const { ways, id, compact = false } = Astro.props
       </div>
       <p class="where">{way.where}</p>
       {way.after && <p class="after">{way.after}</p>}
+      {way.downloads && (
+        <p class="downloads">
+          No terminal? Download the Setup:{' '}
+          {way.downloads.map((download, k) => (
+            <>
+              {k > 0 && ' · '}
+              <a href={download.href}>{download.label}</a>
+            </>
+          ))}
+        </p>
+      )}
     </div>
   ))}
   <span class="visually-hidden" aria-live="polite" data-copy-status></span>
@@ -230,6 +241,17 @@ const { ways, id, compact = false } = Astro.props
     color: var(--haze);
     font-size: var(--step--1);
     line-height: 1.55;
+  }
+
+  .downloads {
+    color: var(--haze);
+    font-size: var(--step--2);
+  }
+
+  .downloads a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
 
   .compact .where {
