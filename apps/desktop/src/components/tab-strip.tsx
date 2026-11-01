@@ -8,6 +8,7 @@ import {
   $connection,
   $openSession,
   $read,
+  $remote,
   $selected,
   $tabs,
   $view,
@@ -20,10 +21,12 @@ import {
   showTab
 } from '@/store/app'
 import { away, named, samePlace, screenPlace, type Tab } from '@/store/tabs'
+import { $terminals, openTerminal, terminalAvailable, togglePanel } from '@/store/terminals'
 
 import { PanelShow, usePanelState } from './side-panel'
 import { rowDot, StatusDot, useConversationDot, useSessionDot } from './status-dot'
-import { Close, Plus, Robot, Terminal } from './ui/icons'
+import { Close, Folder, Plus, Robot, Terminal, VsCode } from './ui/icons'
+import { IconButton } from './ui/tip'
 
 /** What a dragged tab carries, so a drop takes only a tab. */
 const DRAGGED = 'application/x-atlas-tab'
@@ -210,6 +213,7 @@ export function TabStrip() {
           {t.tabs.waiting(waiting.length)}
         </button>
       )}
+      <TitleActions />
       {panel === 'offered' && <PanelShow />}
     </div>
   )
@@ -367,4 +371,58 @@ function useTabDot(tab: Tab) {
   )
 
   return place.kind === 'conversation' ? conversation : session
+}
+
+/**
+ * The session on screen's folder from the title bar (step 18g, asked for by the user on
+ * 01/11/2026): in the system's file manager, in VS Code, and in a terminal, which shows or hides
+ * the terminals once one is open, as Ctrl+` does. Only a folder of this machine: one of another
+ * machine's is not here to open. What went wrong is said where the button's name is.
+ */
+function TitleActions() {
+  const view = useStore($view)
+  const open = useStore($openSession)
+  const remote = useStore($remote)
+  const [failed, setFailed] = useState('')
+
+  if (view !== 'session' || !open?.folder || remote) {
+    return null
+  }
+
+  const folder = open.folder
+  const said = (done: string) => {
+    setFailed(done)
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 px-1.5" data-testid="title-actions">
+      <IconButton
+        icon={Folder}
+        label={failed || t.tabs.openFolder}
+        onClick={() => void window.atlas.openFolder(folder).then(said)}
+        side="bottom"
+        testId="title-open-folder"
+      />
+      <IconButton
+        icon={VsCode}
+        label={failed || t.executors.openInEditor}
+        onClick={() => void window.atlas.openInEditor(folder).then(said)}
+        side="bottom"
+        testId="title-open-editor"
+      />
+      <IconButton
+        icon={Terminal}
+        label={t.tabs.terminal}
+        onClick={() => {
+          if ($terminals.get().length === 0) {
+            void terminalAvailable().then(found => (found ? openTerminal(folder) : undefined))
+          } else {
+            togglePanel()
+          }
+        }}
+        side="bottom"
+        testId="title-terminal"
+      />
+    </div>
+  )
 }

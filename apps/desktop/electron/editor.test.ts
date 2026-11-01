@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { openInEditor, vscodeLink } from './editor'
+import { openFolder, openInEditor, vscodeLink } from './editor'
 
 const made: string[] = []
 
@@ -66,5 +66,26 @@ describe('opening a folder in VS Code', () => {
     const error = await openInEditor(folder, () => Promise.reject(new Error('no program for vscode:')))
 
     expect(error).toBe('VS Code did not open: no program for vscode:')
+  })
+})
+
+describe("a session's folder in the file manager", () => {
+  it('opens a folder of this machine, and says why the system could not', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'atlas-folder-'))
+    made.push(folder)
+    const opened: string[] = []
+
+    expect(
+      await openFolder(folder, found => {
+        opened.push(found)
+
+        return Promise.resolve('')
+      })
+    ).toBe('')
+    expect(opened).toEqual([folder])
+    expect(await openFolder(folder, () => Promise.resolve('No application'))).toBe(
+      'The folder did not open: No application'
+    )
+    expect(await openFolder('relative/folder', () => Promise.resolve(''))).toContain('Not a full path')
   })
 })

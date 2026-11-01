@@ -257,6 +257,8 @@ export const ptBR: Override<Messages> = {
     executors: 'Agentes de código trabalhando nas suas pastas, uma sessão de cada vez.'
   },
   tabs: {
+    openFolder: 'Abrir a pasta',
+    terminal: 'Terminal (Ctrl+`)',
     close: (title: string) => `Fechar ${title}`,
     label: 'Conversas e sessões abertas',
     new: 'Nova aba',

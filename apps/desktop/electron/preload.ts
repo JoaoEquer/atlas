@@ -91,6 +91,8 @@ contextBridge.exposeInMainWorld('atlas', {
   },
   /** A session's folder opened in VS Code; `''` once handed over, else why not. */
   openInEditor: (folder: string): Promise<string> => ipcRenderer.invoke('atlas:open-in-editor', folder),
+  /** A session's folder opened in the system's file manager; `''` once opened, else why not. */
+  openFolder: (folder: string): Promise<string> => ipcRenderer.invoke('atlas:open-folder', folder),
   /** Stop a home's server; the window lets one go when a fourth opens. */
   release: (home: null | string): Promise<void> => ipcRenderer.invoke('atlas:release', home),
   /** Open this home first next time (the last home). */

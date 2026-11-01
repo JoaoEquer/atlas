@@ -55,6 +55,8 @@ The route is drawn as a path above the session's box, from its pill: each stop i
 - **The mode**, for a harness that lists its permission modes: Claude Code's **Manual** (it asks before it changes anything), **Accept edits**, **Plan** and **Automatic**. Press 1 to 4 in its menu to pick one. Automatic is read about before it turns on. A harness with only an automatic mode keeps the **Auto** switch.
 - **The plan ring** fills with the fullest of the account's plan limits, and turns amber near the limit. Hover over it to see each limit and when it starts again.
 
+On the right of the title bar, a session's folder opens in the file manager, in VS Code, or in a terminal.
+
 The side panel, with the session's executor open, shows its **Environment** first: the machine, the folder and its branch. Below it, **Context** says how much of the model's window the session holds, when the harness says.
 
 ## Questions and permissions

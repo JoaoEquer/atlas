@@ -47,7 +47,7 @@ import { messagesFor, pickLocale } from '../src/i18n'
 import { activeHome, AttachedServer, cliRunner, failure, homeFolder, readAlwaysOn } from './always-on'
 import { BackupDownloads } from './backup-down'
 import { Bar, e2ePowers, registerDesktopPowers, systemKeys } from './desktop-powers'
-import { openInEditor } from './editor'
+import { openFolder, openInEditor } from './editor'
 import { backupName, homesRoot, lastHome, rememberHome } from './homes'
 import { closesTab } from './keys'
 import { type Machine, MachineError, Machines, type Transport } from './machines'
@@ -536,6 +536,10 @@ ipcMain.handle('atlas:choose-folder', async () => {
  * are this machine's. */
 ipcMain.handle('atlas:open-in-editor', (_event, folder: unknown) =>
   remote === null ? openInEditor(folder, link => shell.openExternal(link)) : 'The folder is on another machine.'
+)
+/** A session's folder in the system's file manager, the same folders as VS Code's. */
+ipcMain.handle('atlas:open-folder', (_event, folder: unknown) =>
+  remote === null ? openFolder(folder, found => shell.openPath(found)) : 'The folder is on another machine.'
 )
 /** The previews' pages are served from a protocol of their own (step 16f), declared before the app
  * is ready, as Electron asks. */

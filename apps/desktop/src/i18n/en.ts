@@ -277,6 +277,8 @@ export const en = {
     executors: 'Coding agents working in your folders, one session at a time.'
   },
   tabs: {
+    openFolder: 'Open the folder',
+    terminal: 'Terminal (Ctrl+`)',
     close: (title: string) => `Close ${title}`,
     label: 'Open conversations and sessions',
     /** The button after the tabs: the start screen, where a new conversation, bot or session is

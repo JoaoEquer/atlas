@@ -19,6 +19,7 @@ interface AtlasBridge {
   focus: () => void
   /** A session's folder opened in VS Code; `''` once handed over, else why not. */
   openInEditor: (folder: string) => Promise<string>
+  openFolder: (folder: string) => Promise<string>
   /** Stop a home's server. */
   release: (home: null | string) => Promise<void>
   /** Open this home first next time (the last home). */

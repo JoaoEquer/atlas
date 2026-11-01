@@ -3698,6 +3698,9 @@ executors' alone, never Atlas's own conversation's or a bot's; the cloud waits f
   the folder and its branch; then the session's tokens of context (`Transcript.context`, SDK
   version 20) against the window of the model it runs as, Claude Code's `[1m]` for a million or
   the models' catalog (`workbench.context`), read again as each turn ends.
+- **The title bar's actions**, on its right with a session on screen: its folder in the system's
+  file manager (`shell.openPath`, the same folders as VS Code's: this machine's, given in full),
+  in VS Code, and in a terminal, which then shows or hides the terminals as Ctrl+` does.
 
 ### A session's route across executors — decided 2026-10-21
 
