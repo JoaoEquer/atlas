@@ -155,5 +155,8 @@ def test_the_colors_a_theme_may_name_are_the_ones_the_app_defines() -> None:
     css = (Path(__file__).parents[2] / "apps" / "desktop" / "src" / "styles.css").read_text("utf-8")
     light = css.split(":root,\n.light {", 1)[1].split("\n}", 1)[0]
     defined = re.findall(r"^\s*--([a-z-]+):", light, re.MULTILINE)
+    # Atlas's own orange is its mark, never a state: a theme does not repaint it.
+    themed = [token for token in defined if token != "brand"]
 
-    assert sorted(THEME_TOKENS) == sorted(defined)
+    assert "brand" in defined
+    assert sorted(THEME_TOKENS) == sorted(themed)
