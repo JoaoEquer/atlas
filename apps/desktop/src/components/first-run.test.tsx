@@ -59,6 +59,7 @@ const OPENROUTER: KeyProvider = {
 const CLAUDE: ExecutorRow = {
   account: 'someone@example.com',
   account_folders: true,
+  modes: [],
   account_id: '',
   accounts: true,
   base: '',

@@ -49,6 +49,14 @@ Claude Code · personal  →  Claude Code · company  →  Codex · main
 
 The route is drawn as a path above the session's box, from its pill: each stop in order, the one it runs on marked, whether each can take over (installed, logged in, not at its own limit) and how much of its plan is used. With no route, the harness's own accounts take over at a plan's limit. Going on at a limit is on by default, and you can turn it off.
 
+## Under the session's box
+
+- **Where it works**: the project and the branch checked out there. Its menu shows the whole folder and, in a git repository, offers **New worktree**: a folder beside the project, `<project>-<date-time>`, on a new branch `atlas/<date-time>` from the one checked out, where a new session works apart from it. Nothing in the project's folder changes.
+- **The mode**, for a harness that lists its permission modes: Claude Code's **Manual** (it asks before it changes anything), **Accept edits**, **Plan** and **Automatic**. Press 1 to 4 in its menu to pick one. Automatic is read about before it turns on. A harness with only an automatic mode keeps the **Auto** switch.
+- **The plan ring** fills with the fullest of the account's plan limits, and turns amber near the limit. Hover over it to see each limit and when it starts again.
+
+The side panel, with the session's executor open, shows its **Environment** first: the machine, the folder and its branch. Below it, **Context** says how much of the model's window the session holds, when the harness says.
+
 ## Questions and permissions
 
 When an executor asks a question or asks for permission, the request waits for you with no deadline, in the app or on your phone through Telegram. You can also let Atlas answer: its safety reviewer takes the permissions and the conversation's model takes the questions, and what either is unsure of still comes to you.

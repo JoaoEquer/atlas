@@ -115,6 +115,7 @@ from .protocol import (
     AUTO_MODE,
     DEFAULT_MODE,
     IMAGE_TYPES,
+    MODES,
     TITLE,
     Attached,
     answered,
@@ -330,6 +331,7 @@ class ClaudeCode:
             account_folders=True,
             delete_sessions=True,
             files=True,
+            modes=MODES,
             updates=True,
         )
 
@@ -570,6 +572,11 @@ class ClaudeCodeInstance:
 
     async def set_auto(self, on: bool) -> None:
         mode = AUTO_MODE if on else DEFAULT_MODE
+        await self.process.control({"subtype": "set_permission_mode", "mode": mode})
+
+    async def set_mode(self, mode: str) -> None:
+        if mode not in MODES:
+            raise ExecutorError(f"Claude Code has no mode {mode} Atlas switches.")
         await self.process.control({"subtype": "set_permission_mode", "mode": mode})
 
     async def set_model(self, model: str | None, effort: str | None) -> None:

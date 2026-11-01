@@ -37,6 +37,7 @@ import {
   runUserCommand,
   sendToSession,
   sessionOwner,
+  setSessionMode,
   setSessionModel,
   setSessionRoute,
   setSessionSwitch,
@@ -50,10 +51,12 @@ import { EMPTY_THREAD } from '@/store/thread'
 import type { UsageRead } from '@/store/usage'
 import { waitingCalls } from '@/store/waiting'
 
+import { WherePill } from './environment'
 import { type ExecutorCard, ExecutorCardView } from './executor-cards'
 import { baseName, ConsentAgain, TooOld } from './executors-list'
 import { HarnessAutoWarning, useHarnessAuto } from './harness-auto'
 import { MessageBox } from './message-box'
+import { ModeMenu } from './mode-menu'
 import { PlanRing } from './plan-ring'
 import { TerminalButton } from './side-panel'
 import { ThreadView } from './thread-view'
@@ -316,10 +319,18 @@ function SessionComposer({
     })
   }
 
+  // A harness that lists its permission modes has them in a menu, its automatic one among them.
+  const modes = instance?.modes.length ? instance.modes : (executor?.modes ?? [])
+  const mode = instance
+    ? instance.mode
+    : settings.auto && modes.includes('auto')
+      ? 'auto'
+      : (settings.mode ?? modes[0] ?? '')
+
   return (
     <MessageBox
       auto={
-        (instance?.can_auto ?? true)
+        modes.length === 0 && (instance?.can_auto ?? true)
           ? {
               label: t.executors.auto,
               on: instance ? instance.auto : settings.auto,
@@ -374,6 +385,7 @@ function SessionComposer({
       testId="session-box"
       toolbar={
         <>
+          <WherePill executor={open.executor} folder={open.folder} />
           <SessionAccountRoute
             instance={instance}
             on={routing}
@@ -383,6 +395,21 @@ function SessionComposer({
             open={open}
           />
           <SessionModelPicker instance={instance} open={open} />
+          {modes.length > 0 && (
+            <ModeMenu
+              current={mode}
+              disabled={state !== 'open'}
+              modes={modes}
+              onPick={picked => {
+                if (picked === 'auto') {
+                  // Its automatic mode is read about first, as the switch's was.
+                  auto.toggle(true)
+                } else {
+                  void setSessionMode(picked)
+                }
+              }}
+            />
+          )}
           <TerminalButton />
           <span className="ml-auto">
             <PlanRing executor={usageKey(executors, instance, open, settings.account)} />

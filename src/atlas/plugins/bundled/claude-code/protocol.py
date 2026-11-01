@@ -78,6 +78,9 @@ SHOWN_CHARS = 4_000
 #: Claude Code's permission modes this plugin uses: its default, which asks, and `auto`.
 DEFAULT_MODE = "default"
 AUTO_MODE = "auto"
+#: The modes the box offers, its default first (SDK version 28): edits taken without asking, and
+#: a plan made before any change. Never `bypassPermissions`, which checks nothing.
+MODES = (DEFAULT_MODE, "acceptEdits", "plan", AUTO_MODE)
 #: The model its picker calls its default: the one the account and the user's settings make it.
 DEFAULT_MODEL = "default"
 #: The images Claude reads as themselves (the Messages API's); any other file goes by its path.

@@ -10,6 +10,7 @@ import {
   $openSession,
   $slashCommands,
   $view,
+  $workbench,
   currentFolder,
   readPanelCommands,
   refreshExecutorConnectors,
@@ -18,6 +19,7 @@ import {
 } from '@/store/app'
 import { level, resetsIn, windowName } from '@/store/usage'
 
+import { ContextSection, EnvironmentSection } from './environment'
 import { baseName } from './executors-list'
 import { useNow } from './use-now'
 
@@ -101,7 +103,13 @@ export function pluginGroups(skills: SlashCommandRow[], servers: ExecutorConnect
 export function ExecutorPanel({ executor }: { executor: ExecutorRow }) {
   // Read so the skills follow the folder on screen.
   useStore($view)
-  useStore($openSession)
+  // The session on screen, when it is this executor's (on any of its accounts): its environment
+  // and its context come first (step 18g).
+  const open = useStore($openSession)
+  const { instances } = useStore($workbench)
+  const family = (name: string) => name.split('@')[0]
+  const session = open && family(open.executor) === family(executor.name) ? open : null
+  const instance = session ? instances.find(row => row.instance_id === session.instanceId) : undefined
   const folder = currentFolder()
   const commands = useStore($slashCommands)[slashKey(executor.name, folder)]
   const skills = (commands ?? []).filter(command => command.group === 'skill')
@@ -120,6 +128,12 @@ export function ExecutorPanel({ executor }: { executor: ExecutorRow }) {
           {[executor.version, executor.account, executor.plan].filter(Boolean).join(' · ')}
         </p>
       </header>
+      {session && (
+        <>
+          <EnvironmentSection folder={session.folder} />
+          {instance && <ContextSection instance={instance} />}
+        </>
+      )}
       <PlanUsage executor={executor} />
       <SkillsSection executor={executor} folder={folder} skills={skills.filter(skill => !pluginOf(skill))} />
       <ServersSection executor={executor} />

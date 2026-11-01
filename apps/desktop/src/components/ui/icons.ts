@@ -31,6 +31,7 @@ export {
   IconEye as Eye,
   IconEyeOff as EyeOff,
   IconFolder as Folder,
+  IconGitBranch as Branch,
   IconFolderPlus as FolderPlus,
   IconKey as Key,
   IconLayoutSidebar as LayoutSidebar,

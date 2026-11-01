@@ -12,6 +12,8 @@ import {
   folderKey,
   MAX_OPEN_HOMES,
   openHome,
+  setSessionMode,
+  setSessionSwitch,
   startApp,
   toggleExecutor,
   toggleFolder
@@ -683,5 +685,19 @@ describe("the sidebar's dots (asked for by the user on 20/10/2026)", () => {
 
     void session.showTab(tab?.id ?? '')
     expect(session.$openExecutor.get()).toBe('claude-code@ab12')
+  })
+})
+
+describe('a mode chosen before a session runs', () => {
+  it('is kept for its first instance, the automatic mode off, and the switch takes it back', async () => {
+    const client = Object.assign(quietClient(), { call: () => new Promise(() => undefined) })
+    stop = startApp({ client: () => client, shell: { focus: () => undefined, notify: () => undefined } })
+    await openHome('work')
+    await setSessionMode('plan')
+
+    expect(current().$sessionSettings.get()).toMatchObject({ auto: false, mode: 'plan' })
+
+    await setSessionSwitch('auto', true)
+    expect(current().$sessionSettings.get()).toMatchObject({ auto: true, mode: null })
   })
 })

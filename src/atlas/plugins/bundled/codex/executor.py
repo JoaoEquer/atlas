@@ -565,6 +565,9 @@ class CodexInstance:
     async def set_auto(self, on: bool) -> None:
         self._auto = on
 
+    async def set_mode(self, mode: str) -> None:
+        raise ExecutorError("It has no permission modes Atlas switches, only its automatic one.")
+
     async def set_model(self, model: str | None, effort: str | None) -> None:
         self._model, self._effort = model, effort
 

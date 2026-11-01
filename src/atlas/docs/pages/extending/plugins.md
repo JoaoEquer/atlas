@@ -427,6 +427,7 @@ def register(ctx: PluginContext) -> None:
   | `delete_sessions` | `Executor.delete_session` | 12 |
   | `files` | `ExecutorInstance.prompt(files=)`, `ExecutorFile`, `ExecutorSpec.directories` | 13 |
   | `updates` | `Executor.update_source`, `UpdateSource` | 27 |
+  | `modes` | Its permission modes, its default first, `auto` its automatic one; `ExecutorInstance.set_mode` | 28 |
 
 - **`update_source`** says where the harness's newest version is published (an npm package and
   its dist-tag, a WinGet package, or an https address that answers the version as text) and the
@@ -696,7 +697,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 ## What the SDK offers
 
-Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 27), and the ACP
+Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 28), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
 (`SCREEN_API` 3). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.

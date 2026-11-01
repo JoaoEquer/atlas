@@ -1069,6 +1069,9 @@ export interface InstanceRow {
   effort: string
   /** The other account it runs on (step 16h, `executor.accounts`); empty, the main account. `executor` is then its executor on that account (`claude-code@1a2b3c4d`). */
   account_id: string
+  /** The permission mode it runs in, one of `modes`, its harness's, its default first (`workbench.mode`); both empty for a harness that has only its automatic mode. */
+  mode: string
+  modes: string[]
 }
 /** An executor a plugin drives, as its detection found it, for the workbench and the onboarding. */
 export interface ExecutorRow {
@@ -1107,6 +1110,8 @@ export interface ExecutorRow {
   update: string
   /** Its update runs now, at the user's click. */
   updating: boolean
+  /** Its harness's permission modes, its default first, for a session not started yet; empty, it has only its automatic mode. */
+  modes: string[]
 }
 export interface WorkbenchStartParams {
   executor: string
@@ -1139,11 +1144,44 @@ export interface WorkbenchSwitchParams {
   instance_id: string
   enabled: boolean
 }
+export interface WorkbenchModeParams {
+  instance_id: string
+  /** One of the instance's `modes`. */
+  mode: string
+}
 export interface WorkbenchModelParams {
   instance_id: string
   /** A model of `executor.models`, and one of its efforts; `null`, the harness's default. */
   model?: string | null
   effort?: string | null
+}
+export interface FolderRef {
+  /** A project folder; a relative one is the workspace's. */
+  folder: string
+}
+/** A folder's git, for a session's environment (step 18g); `repository` false outside one. */
+export interface FolderGit {
+  folder: string
+  repository: boolean
+  branch: string
+  /** The repository's top folder, the worktree's own for a worktree. */
+  root: string
+  /** The folder is a worktree of another repository's folder. */
+  worktree: boolean
+}
+export interface WorktreeParams {
+  /** A folder in the repository the worktree is of. */
+  folder: string
+  /** Its name: its folder is `<repository>-<name>`, beside the repository, on a new branch `atlas/<name>` from the one checked out. */
+  name: string
+}
+export interface InstanceRef {
+  instance_id: string
+}
+/** How full a session's context is (step 18g): its tokens, when its harness says, and the window of the model it runs as, when the models' catalog knows it. */
+export interface SessionContext {
+  tokens: number | null
+  window: number | null
 }
 export interface WorkbenchFolderParams {
   instance_id: string
@@ -1158,9 +1196,6 @@ export interface WorkbenchUseAccountParams {
   instance_id: string
   /** An `executor.accounts` id; empty, the main account. */
   account_id: string
-}
-export interface InstanceRef {
-  instance_id: string
 }
 /** A session's route (asked for by the user on 21/10/2026): where it goes on, in order, when the destination it runs on reaches its plan's limit. With none, or `enabled` off, its executor's own accounts take over (`executor.failover`). */
 export interface SessionRouteRow {
@@ -1918,12 +1953,18 @@ export interface RpcMethods {
   'workbench.atlas_answers': { params: WorkbenchSwitchParams; result: InstanceRow }
   /** The instance's own mode that asks no permission, on or off. */
   'workbench.auto': { params: WorkbenchSwitchParams; result: InstanceRow }
+  /** How many tokens of context the instance's session holds, and its model's window. */
+  'workbench.context': { params: InstanceRef; result: SessionContext }
   /** The same executor again, the user's, in another folder. */
   'workbench.duplicate': { params: WorkbenchFolderParams; result: InstanceRow }
   /** Move the user's idle instance to another folder, where its harness starts a new session. */
   'workbench.folder': { params: WorkbenchFolderParams; result: InstanceRow }
+  /** A project folder's git: the branch checked out, its repository, and whether it is a worktree. */
+  'workbench.git': { params: FolderRef; result: FolderGit }
   /** The workbench (step 16c): its executor instances, the executors the plugins found, and what the instances ask that still waits. */
   'workbench.list': { params: Empty; result: WorkbenchList }
+  /** The instance's permission mode, one its harness lists: `auto` is its automatic mode, as workbench.auto turns on. */
+  'workbench.mode': { params: WorkbenchModeParams; result: InstanceRow }
   /** The instance's model and effort from its next request on; an effort the model does not take is refused. */
   'workbench.model': { params: WorkbenchModelParams; result: InstanceRow }
   /** A prompt from an instance's card, with the files attached: a new turn, or a steer when one runs. */
@@ -1938,6 +1979,8 @@ export interface RpcMethods {
   'workbench.stop': { params: InstanceRef; result: Empty }
   /** Go on with the instance's conversation in the same folder on another account of its executor (step 16h): that account keeps a copy of its session, the original left as it was; never while it works. */
   'workbench.use_account': { params: WorkbenchUseAccountParams; result: InstanceRow }
+  /** A new worktree of the folder's repository, beside it on a new branch from the one checked out, for a session apart from the folder; nothing in the folder changes. */
+  'workbench.worktree': { params: WorktreeParams; result: FolderGit }
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
@@ -2055,16 +2098,20 @@ export const RPC_METHODS = [
   'workbench.account_switch',
   'workbench.atlas_answers',
   'workbench.auto',
+  'workbench.context',
   'workbench.duplicate',
   'workbench.folder',
+  'workbench.git',
   'workbench.list',
+  'workbench.mode',
   'workbench.model',
   'workbench.prompt',
   'workbench.route',
   'workbench.set_route',
   'workbench.start',
   'workbench.stop',
-  'workbench.use_account'
+  'workbench.use_account',
+  'workbench.worktree'
 ] as const satisfies readonly RpcMethod[]
 
 // -- Server requests (server to client, answered) --

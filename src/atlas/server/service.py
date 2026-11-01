@@ -65,6 +65,7 @@ from atlas.assistant import (
     Decides,
     ExecutorUsage,
     FileSent,
+    GitState,
     InstanceActivity,
     InstanceChanged,
     InstanceState,
@@ -250,6 +251,8 @@ from atlas.server.protocol import (
     ExecutorRow,
     ExecutorUpdated,
     ExecutorUsageRow,
+    FolderGit,
+    FolderRef,
     GithubCode,
     HomeBackupParams,
     HomeCreateParams,
@@ -347,6 +350,7 @@ from atlas.server.protocol import (
     SecretResult,
     SendParams,
     SendResult,
+    SessionContext,
     SessionDeleteParams,
     SessionFolderList,
     SessionFolderRow,
@@ -399,12 +403,14 @@ from atlas.server.protocol import (
     WorkbenchFolderParams,
     WorkbenchList,
     WorkbenchModelParams,
+    WorkbenchModeParams,
     WorkbenchPrompted,
     WorkbenchPromptParams,
     WorkbenchRouteParams,
     WorkbenchStartParams,
     WorkbenchSwitchParams,
     WorkbenchUseAccountParams,
+    WorktreeParams,
     dump,
     read,
 )
@@ -710,6 +716,10 @@ class Gateway:
             "workbench.start": self._workbench_start,
             "workbench.prompt": self._workbench_prompt,
             "workbench.auto": self._workbench_auto,
+            "workbench.mode": self._workbench_mode,
+            "workbench.git": self._workbench_git,
+            "workbench.worktree": self._workbench_worktree,
+            "workbench.context": self._workbench_context,
             "workbench.model": self._workbench_model,
             "workbench.atlas_answers": self._workbench_atlas_answers,
             "workbench.duplicate": self._workbench_duplicate,
@@ -2577,6 +2587,7 @@ class Gateway:
                     accounts=capabilities.accounts,
                     account_folders=capabilities.account_folders and on is None,
                     files=capabilities.files,
+                    modes=list(capabilities.modes),
                 )
             if on is not None:
                 row = dataclasses.replace(row, base=on[0], account_id=on[1], nickname=on[2])
@@ -2632,6 +2643,32 @@ class Gateway:
     ) -> InstanceRow:
         workbench = self.assistant.workbench
         await self._on_workbench(workbench.set_auto(params.instance_id, params.enabled))
+        return _instance_row(workbench.get(params.instance_id).view())
+
+    async def _workbench_git(self, connection: Connection, params: FolderRef) -> FolderGit:
+        state = await self._on_workbench(self.assistant.workbench.git(Path(params.folder)))
+        return _folder_git(params.folder, state)
+
+    async def _workbench_worktree(
+        self, connection: Connection, params: WorktreeParams
+    ) -> FolderGit:
+        workbench = self.assistant.workbench
+        made = await self._on_workbench(workbench.add_worktree(Path(params.folder), params.name))
+        return _folder_git(str(made), await self._on_workbench(workbench.git(made)))
+
+    async def _workbench_context(
+        self, connection: Connection, params: InstanceRef
+    ) -> SessionContext:
+        tokens, window = await self._on_workbench(
+            self.assistant.workbench.context(params.instance_id)
+        )
+        return SessionContext(tokens, window)
+
+    async def _workbench_mode(
+        self, connection: Connection, params: WorkbenchModeParams
+    ) -> InstanceRow:
+        workbench = self.assistant.workbench
+        await self._on_workbench(workbench.set_mode(params.instance_id, params.mode))
         return _instance_row(workbench.get(params.instance_id).view())
 
     async def _workbench_model(
@@ -3387,6 +3424,10 @@ def _usage_row(usage: ExecutorUsage) -> ExecutorUsageRow:
         usage.read_at,
         usage.extra_usage,
     )
+
+
+def _folder_git(folder: str, state: GitState) -> FolderGit:
+    return FolderGit(folder, state.repository, state.branch, state.root, state.worktree)
 
 
 def _executor_row(name: str, found: Detection, plugin: str, title: str) -> ExecutorRow:

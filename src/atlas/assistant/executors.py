@@ -124,6 +124,18 @@ async def default_executor_effort(executor: Executor, model: str | None) -> str 
     return None if chosen is None else default_effort(None, chosen.efforts)
 
 
+#: The name a harness's permission modes give its mode that asks no permission (SDK version 28).
+AUTO_MODE = "auto"
+
+
+def _mode_of(modes: tuple[str, ...], auto: bool) -> str:
+    """The mode an instance runs in when only its automatic mode was switched: that one, else its
+    default; empty for a harness with no modes."""
+    if not modes:
+        return ""
+    return AUTO_MODE if auto and AUTO_MODE in modes else modes[0]
+
+
 class ExecutorDesk(Protocol):
     """How what an executor instance asks reaches the user: its card. Each waits as long as the
     user takes."""
@@ -229,6 +241,10 @@ class ExecutorRun:
         self.can_switch = capabilities.accounts
         self.can_model = capabilities.models
         self.can_files = capabilities.files
+        #: Its harness's permission modes (SDK version 28), and the one it runs in: `auto` when
+        #: its automatic mode is on, else its default until another is chosen.
+        self.modes = capabilities.modes
+        self.mode = _mode_of(self.modes, spec.auto)
         #: The model and the effort chosen for it; `None`, its harness's default.
         self.chosen_model = spec.model
         self.effort = spec.effort
@@ -288,6 +304,8 @@ class ExecutorRun:
             chosen_model=self.chosen_model or "",
             effort=self.effort or "",
             account_id=self.account_id,
+            mode=self.mode,
+            modes=self.modes,
         )
 
     def changed(self) -> None:
@@ -469,6 +487,17 @@ class ExecutorRun:
         if self.instance is not None and self.live:
             await self.instance.set_auto(on)
         self.auto = on
+        self.mode = _mode_of(self.modes, on)
+        self.changed()
+
+    async def set_mode(self, mode: str) -> None:
+        """One of its harness's permission modes; `auto` is its automatic mode, as `set_auto`."""
+        if mode not in self.modes:
+            raise ExecutorError(f"{self.title} has no mode {mode} Atlas switches.")
+        if self.instance is not None and self.live:
+            await self.instance.set_mode(mode)
+        self.mode = mode
+        self.auto = mode == AUTO_MODE
         self.changed()
 
     async def set_model(self, model: str | None, effort: str | None) -> None:

@@ -3678,6 +3678,27 @@ other (that `--fork-session` writes the copy in the other account's folder is wh
 assumes, and the real one must show); the way back; the missing tool's warning; the leaks above;
 archive and delete on the other account, the first untouched.
 
+### A session's environment, mode and plan by its box — decided 2026-11-01
+
+Step 18g, from what the user brought on 01/11/2026 (decided with the user: a worktree is the
+executors' alone, never Atlas's own conversation's or a bot's; the cloud waits for Atlas Cloud):
+
+- **Where it works**, a pill by the box: the folder and the branch its git has checked out
+  (`workbench.git`, read with the user's own `git`). In a repository its menu makes a new
+  worktree beside it (`workbench.worktree`: `<repository>-<name>` on a new branch `atlas/<name>`
+  from the one checked out, `git worktree add`), and opens a new session there. Atlas never checks
+  out, resets or deletes anything in the folder.
+- **The permission mode**, a menu by the box, for a harness that lists its modes (SDK version 28,
+  `Capabilities.modes`, `ExecutorInstance.set_mode`, `workbench.mode`): Claude Code's default,
+  `acceptEdits`, `plan` and `auto`, never `bypassPermissions`. `auto` stays its automatic mode,
+  the one the box's warning is read for; a mode chosen before the session runs is set right after
+  it starts, before its first prompt. A harness with only its automatic mode keeps the switch.
+- **The plan ring**: the fullest of the account's plan limits (`executor.usage`), each on hover.
+- **The side panel's Environment and Context**, with the session's executor open: the machine,
+  the folder and its branch; then the session's tokens of context (`Transcript.context`, SDK
+  version 20) against the window of the model it runs as, Claude Code's `[1m]` for a million or
+  the models' catalog (`workbench.context`), read again as each turn ends.
+
 ### A session's route across executors — decided 2026-10-21
 
 Asked for by the user on 21/10/2026, beside the `account failover` of the same day, which stays

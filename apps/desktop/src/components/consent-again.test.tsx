@@ -11,6 +11,7 @@ import { SessionView } from './session-view'
 const RUNNING: ExecutorRow = {
   account: 'someone@example.com',
   account_folders: false,
+  modes: [],
   account_id: '',
   accounts: true,
   base: '',

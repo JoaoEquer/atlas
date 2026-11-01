@@ -11,6 +11,7 @@ import { ExecutorsList } from './executors-list'
 const EXECUTOR: ExecutorRow = {
   account: 'someone@example.com',
   account_folders: false,
+  modes: [],
   files: false,
   account_id: '',
   accounts: true,

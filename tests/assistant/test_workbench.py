@@ -437,6 +437,62 @@ def test_the_harnesss_own_auto_mode_switches_mid_session(
     assert modes == ["auto", "default"]
 
 
+def test_the_harnesss_permission_modes_switch_mid_session(
+    bench: Callable[[Screen | None], Bench],
+) -> None:
+    b = bench(Screen())
+    site = b.script("modes", {"result": "Ok."})
+
+    async def scenario() -> tuple[list[str], str, str, bool, str]:
+        run = await b.workbench.start("claude-code", site)
+        listed = list(run.view().modes)
+        first = run.view().mode
+        await b.workbench.set_mode(run.id, "plan")
+        await b.workbench.set_mode(run.id, "auto")
+        auto = run.auto
+        await b.workbench.set_auto(run.id, False)
+        after = run.view().mode
+        with pytest.raises(ExecutorError):
+            await b.workbench.set_mode(run.id, "bypassPermissions")
+        await b.assistant.close()
+        return listed, first, after, auto, run.view().mode
+
+    listed, first, after, auto, last = _run(scenario)
+
+    # Its default first, and never the mode that checks nothing.
+    assert listed == ["default", "acceptEdits", "plan", "auto"]
+    assert first == "default"
+    # `auto` is the automatic mode the box's switch turns on and off.
+    assert auto
+    assert after == last == "default"
+    requests = [entry["request"] for entry in b.log() if "request" in entry]
+    modes = [r["mode"] for r in requests if r.get("subtype") == "set_permission_mode"]
+    assert modes == ["plan", "auto", "default"]
+
+
+def test_a_sessions_context_is_its_tokens_against_its_models_window(
+    bench: Callable[[Screen | None], Bench],
+) -> None:
+    b = bench(Screen())
+    site = b.script("context", {"result": "Ok."})
+
+    async def scenario() -> tuple[tuple[int | None, int | None], tuple[int | None, int | None]]:
+        run = await b.workbench.start("claude-code", site, model="opus[1m]")
+        await b.workbench.prompt(run.id, "Go.")
+        await _idle(b, run.id)
+        on_million = await b.workbench.context(run.id)
+        run.model = "a-model-nobody-knows"
+        run.chosen_model = None
+        unknown = await b.workbench.context(run.id)
+        await b.assistant.close()
+        return on_million, unknown
+
+    on_million, unknown = _run(scenario)
+
+    assert on_million[1] == 1_000_000
+    assert unknown[1] is None
+
+
 def test_an_instance_is_duplicated_moved_and_stopped(
     bench: Callable[[Screen | None], Bench],
 ) -> None:

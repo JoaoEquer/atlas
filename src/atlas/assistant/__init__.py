@@ -3,6 +3,7 @@ conversation, the instructions, the tools, the approval gate), its turns, the ba
 that follows them, the curator, and the workbench of executor instances."""
 
 from atlas.assistant.executors import ExecutorDesk, ExecutorRun, account_name, split_account
+from atlas.assistant.git import GitState
 from atlas.assistant.handoff import HANDOFF_MARK, Handoff, entries_of, handoff_packet
 from atlas.assistant.model import (
     ATLAS_COMMANDS,
@@ -63,6 +64,7 @@ __all__ = [
     "ExecutorRun",
     "ExecutorUsage",
     "FileSent",
+    "GitState",
     "Handoff",
     "InstanceActivity",
     "InstanceChanged",

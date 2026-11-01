@@ -248,20 +248,23 @@ test('a session begun in a terminal is listed under its folder, opens as a conve
   await expect(page.getByTestId('assistant-message').last()).toContainText('Context Usage', STARTED)
   await expect(page.getByTestId('user-message').last()).toContainText('/context')
 
-  // The same box as Atlas's: the harness's automatic mode is "Auto", and "Atlas answers" is gone.
-  // On from the start (20/10/2026); off goes at once, and on again only once its warning is read
-  // and confirmed (17/10/2026).
-  const auto = page.getByRole('button', { name: 'Automatic', exact: true })
-  await expect(auto).toHaveAttribute('aria-pressed', 'true')
-  await auto.click()
-  await expect(auto).toHaveAttribute('aria-pressed', 'false')
-  await auto.click()
+  // Its permission modes in a menu by the box (step 18g), "Atlas answers" gone: automatic from the
+  // start (20/10/2026); another goes at once, and automatic again only once its warning is read and
+  // confirmed (17/10/2026).
+  const mode = page.getByTestId('mode-select')
+  await expect(mode).toHaveAttribute('data-mode', 'auto')
+  await mode.click()
+  await expect(page.getByTestId('mode-option')).toHaveText([/^Manual/, /^Accept edits/, /^Plan/, /^Automatic/])
+  await page.getByTestId('mode-option').filter({ hasText: 'Plan' }).click()
+  await expect(mode).toHaveAttribute('data-mode', 'plan')
+  await mode.click()
+  await page.getByTestId('mode-option').filter({ hasText: 'Automatic' }).click()
   const warning = page.getByTestId('harness-auto-warning')
   await expect(warning).toContainText('may run commands and edit files')
-  await expect(auto).toHaveAttribute('aria-pressed', 'false')
+  await expect(mode).toHaveAttribute('data-mode', 'plan')
   await warning.getByTestId('harness-auto-confirm').click()
   await expect(warning).toBeHidden()
-  await expect(auto).toHaveAttribute('aria-pressed', 'true')
+  await expect(mode).toHaveAttribute('data-mode', 'auto')
   await expect(page.getByText('Atlas answers')).toBeHidden()
   // Claude Code takes files (step 16i): the box has Atlas's clip.
   await expect(page.getByRole('button', { name: 'Attach files' })).toBeVisible()

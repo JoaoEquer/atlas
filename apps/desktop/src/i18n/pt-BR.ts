@@ -943,6 +943,30 @@ export const ptBR: Override<Messages> = {
     up: (name: string) => `${name} antes`,
     wentOn: (name: string) => `O limite do plano chegou: continuou em ${name}.`
   },
+  environment: {
+    context: 'Contexto',
+    local: 'Local',
+    newWorktree: 'Nova worktree',
+    newWorktreeHint: (branch: string) => `Uma sessão nova numa pasta ao lado desta, num branch a partir de ${branch}`,
+    title: 'Ambiente',
+    tokens: (count: string) => `${count} tokens`,
+    worktree: 'Worktree'
+  },
+  modes: {
+    hints: {
+      acceptEdits: 'Aceita as edições de arquivo sem perguntar',
+      auto: 'O classificador do próprio harness decide o que ele pode fazer',
+      default: 'Sempre pergunta antes de alterar alguma coisa',
+      plan: 'Faz um plano antes de alterar alguma coisa'
+    },
+    names: {
+      acceptEdits: 'Aceitar edições',
+      auto: 'Automático',
+      default: 'Manual',
+      plan: 'Plano'
+    },
+    title: 'Modo'
+  },
   planRing: {
     used: (percent: number, window: string) => `${String(percent)}% usado · ${window}`
   },

@@ -606,6 +606,9 @@ class DeepSeekInstance:
         await self._choose(self._model, self._effort)
         self._watch = asyncio.create_task(self._watch_end())
 
+    async def set_mode(self, mode: str) -> None:
+        raise ExecutorError("It has no permission modes Atlas switches, only its automatic one.")
+
     async def set_model(self, model: str | None, effort: str | None) -> None:
         self._model, self._effort = model or self._model, effort or self._effort
         await self._choose(model, effort)

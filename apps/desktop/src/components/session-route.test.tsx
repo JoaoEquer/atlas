@@ -12,6 +12,7 @@ import { SessionView } from './session-view'
 const ROW: ExecutorRow = {
   account: 'someone@example.com',
   account_folders: true,
+  modes: [],
   account_id: '',
   accounts: true,
   base: '',
@@ -53,6 +54,8 @@ const INSTANCE: InstanceRow = {
   atlas_answers: false,
   auto: true,
   can_auto: true,
+  mode: '',
+  modes: [],
   can_model: false,
   chosen_model: '',
   commands: [],

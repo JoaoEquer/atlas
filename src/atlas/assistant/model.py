@@ -200,6 +200,9 @@ class InstanceChanged:
     #: Its extra account's id (step 16h); empty, the main account.
     account_id: str = ""
     effort: str = ""
+    #: Its harness's permission modes, and the one it runs in (SDK version 28); empty, none.
+    mode: str = ""
+    modes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

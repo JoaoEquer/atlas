@@ -281,6 +281,9 @@ export interface SessionSettings {
   atlasAnswers: boolean
   auto: boolean
   effort: null | string
+  /** A permission mode of its harness other than its automatic one (`plan`); `null`, its
+   * default, or `auto` while that is on. */
+  mode: null | string
   model: null | string
 }
 
@@ -289,6 +292,7 @@ const NO_SESSION_SETTINGS: SessionSettings = {
   atlasAnswers: false,
   auto: true,
   effort: null,
+  mode: null,
   model: null
 }
 
@@ -1721,6 +1725,11 @@ export class HomeSession {
         if (settings.atlasAnswers) {
           await this.client.call('workbench.atlas_answers', { enabled: true, instance_id: instanceId })
         }
+
+        // A mode chosen before it ran, its plan mode, is its harness's from the first prompt on.
+        if (!settings.auto && settings.mode && started.modes.includes(settings.mode)) {
+          this.applyInstance(await this.client.call('workbench.mode', { instance_id: instanceId, mode: settings.mode }))
+        }
       }
 
       await this.client.call('workbench.prompt', {
@@ -1753,6 +1762,27 @@ export class HomeSession {
     }
   }
 
+  /** A permission mode of the session's harness: on its instance when one runs, kept for the next
+   * one when none does. */
+  async setSessionMode(mode: string): Promise<void> {
+    const open = this.$openSession.get()
+    const instance = open ? this.instance(open.instanceId) : undefined
+
+    if (!instance) {
+      this.$sessionSettings.set({ ...this.$sessionSettings.get(), auto: false, mode })
+
+      return
+    }
+
+    const row = await this.onSession(client =>
+      client.call('workbench.mode', { instance_id: instance.instance_id, mode })
+    )
+
+    if (row) {
+      this.applyInstance(row)
+    }
+  }
+
   /** A switch under the session's box: on its instance when one runs, kept for the next one when
    * none does. */
   async setSessionSwitch(which: SessionSwitch, enabled: boolean): Promise<void> {
@@ -1760,7 +1790,8 @@ export class HomeSession {
     const instance = open ? this.instance(open.instanceId) : undefined
 
     if (!instance) {
-      this.$sessionSettings.set({ ...this.$sessionSettings.get(), [which]: enabled })
+      const mode = which === 'auto' ? { mode: null } : {}
+      this.$sessionSettings.set({ ...this.$sessionSettings.get(), ...mode, [which]: enabled })
 
       return
     }
@@ -3823,6 +3854,12 @@ export function stopSession(): Promise<void> {
 
 export function setSessionSwitch(which: SessionSwitch, enabled: boolean): Promise<void> {
   return current().setSessionSwitch(which, enabled)
+}
+
+/** One of the session's harness's permission modes other than its automatic one, which goes by
+ * `setSessionSwitch('auto')` and its warning. */
+export function setSessionMode(mode: string): Promise<void> {
+  return current().setSessionMode(mode)
 }
 
 export function setSessionModel(model: null | string, effort: null | string): Promise<void> {

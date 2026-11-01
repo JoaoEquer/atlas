@@ -958,6 +958,30 @@ export const en = {
     up: (name: string) => `${name} sooner`,
     wentOn: (name: string) => `The plan limit was reached: it went on on ${name}.`
   },
+  environment: {
+    context: 'Context',
+    local: 'Local',
+    newWorktree: 'New worktree',
+    newWorktreeHint: (branch: string) => `A new session in a folder beside this one, on a branch from ${branch}`,
+    title: 'Environment',
+    tokens: (count: string) => `${count} tokens`,
+    worktree: 'Worktree'
+  },
+  modes: {
+    hints: {
+      acceptEdits: 'Takes file edits without asking',
+      auto: 'Its own classifier decides what it may do',
+      default: 'Always asks before it changes anything',
+      plan: 'Makes a plan before it changes anything'
+    } as Record<string, string>,
+    names: {
+      acceptEdits: 'Accept edits',
+      auto: 'Automatic',
+      default: 'Manual',
+      plan: 'Plan'
+    } as Record<string, string>,
+    title: 'Mode'
+  },
   planRing: {
     used: (percent: number, window: string) => `${String(percent)}% used · ${window}`
   },

@@ -72,6 +72,7 @@ from atlas.assistant.executors import (
     split_account,
     usage_view,
 )
+from atlas.assistant.git import GitState, add_worktree, git_state
 from atlas.assistant.handoff import Handoff, entries_of, handoff_packet
 from atlas.assistant.model import (
     AccountList,
@@ -370,6 +371,9 @@ class Workbench:
 
     async def set_auto(self, instance_id: str, on: bool) -> None:
         await self.get(instance_id).set_auto(on)
+
+    async def set_mode(self, instance_id: str, mode: str) -> None:
+        await self.get(instance_id).set_mode(mode)
 
     async def set_model(self, instance_id: str, model: str | None, effort: str | None) -> None:
         """The instance's model and effort from its next request on; no effort, Atlas's default
@@ -1293,6 +1297,29 @@ class Workbench:
         if found is None:
             raise ExecutorError(f"{name} is not installed on this computer.")
         return found
+
+    async def git(self, folder: Path) -> GitState:
+        """The folder's git, for the session's environment: its branch, and whether it is a
+        worktree."""
+        return await asyncio.to_thread(git_state, self._folder(folder))
+
+    async def add_worktree(self, folder: Path, name: str) -> Path:
+        """A new worktree of the folder's repository, beside it, for a session apart from it."""
+        return await asyncio.to_thread(add_worktree, self._folder(folder), name)
+
+    async def context(self, instance_id: str) -> tuple[int | None, int | None]:
+        """How many tokens of context the instance's session holds, when its harness says, and
+        the window of the model it runs as, when the models' catalog knows it."""
+        found = self.get(instance_id)
+        return await self._context(found), self._window(found.model or found.chosen_model or "")
+
+    def _window(self, model: str) -> int | None:
+        if model.endswith("[1m]"):
+            # Claude Code's name for a model on its million-token window.
+            return 1_000_000
+        shipped = self._assistant.models.catalog.shipped
+        windows = [info.context_window for (_, found), info in shipped.items() if found == model]
+        return next((window for window in windows if window), None)
 
     def _folder(self, folder: Path) -> Path:
         chosen = folder.expanduser()

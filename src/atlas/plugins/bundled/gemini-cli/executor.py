@@ -691,6 +691,9 @@ class GeminiInstance:
                 raise ExecutorError(untrusted_note()) from error
             raise
 
+    async def set_mode(self, mode: str) -> None:
+        raise ExecutorError("It has no permission modes Atlas switches, only its automatic one.")
+
     async def set_model(self, model: str | None, effort: str | None) -> None:
         if model is None:
             return

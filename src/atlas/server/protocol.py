@@ -1458,6 +1458,10 @@ class InstanceRow:
     #: The other account it runs on (step 16h, `executor.accounts`); empty, the main account.
     #: `executor` is then its executor on that account (`claude-code@1a2b3c4d`).
     account_id: str = ""
+    #: The permission mode it runs in, one of `modes`, its harness's, its default first
+    #: (`workbench.mode`); both empty for a harness that has only its automatic mode.
+    mode: str = ""
+    modes: list[str] = field(default_factory=list[str])
 
 
 @dataclass(frozen=True, slots=True)
@@ -1506,6 +1510,9 @@ class ExecutorRow:
     update: str = ""
     #: Its update runs now, at the user's click.
     updating: bool = False
+    #: Its harness's permission modes, its default first, for a session not started yet; empty,
+    #: it has only its automatic mode.
+    modes: list[str] = field(default_factory=list[str])
 
 
 @dataclass(frozen=True, slots=True)
@@ -1524,6 +1531,43 @@ class WorkbenchList:
 @dataclass(frozen=True, slots=True)
 class InstanceRef:
     instance_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class FolderRef:
+    #: A project folder; a relative one is the workspace's.
+    folder: str
+
+
+@dataclass(frozen=True, slots=True)
+class FolderGit:
+    """A folder's git, for a session's environment (step 18g); `repository` false outside one."""
+
+    folder: str
+    repository: bool
+    branch: str = ""
+    #: The repository's top folder, the worktree's own for a worktree.
+    root: str = ""
+    #: The folder is a worktree of another repository's folder.
+    worktree: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class WorktreeParams:
+    #: A folder in the repository the worktree is of.
+    folder: str
+    #: Its name: its folder is `<repository>-<name>`, beside the repository, on a new branch
+    #: `atlas/<name>` from the one checked out.
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class SessionContext:
+    """How full a session's context is (step 18g): its tokens, when its harness says, and the
+    window of the model it runs as, when the models' catalog knows it."""
+
+    tokens: int | None
+    window: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1694,6 +1738,13 @@ class WorkbenchPrompted:
 class WorkbenchSwitchParams:
     instance_id: str
     enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class WorkbenchModeParams:
+    instance_id: str
+    #: One of the instance's `modes`.
+    mode: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -2707,6 +2758,13 @@ METHODS: Mapping[str, Method] = {
             "The instance's own mode that asks no permission, on or off.",
         ),
         Method(
+            "workbench.mode",
+            WorkbenchModeParams,
+            InstanceRow,
+            "The instance's permission mode, one its harness lists: `auto` is its automatic mode, "
+            "as workbench.auto turns on.",
+        ),
+        Method(
             "workbench.model",
             WorkbenchModelParams,
             InstanceRow,
@@ -2719,6 +2777,26 @@ METHODS: Mapping[str, Method] = {
             InstanceRow,
             "Whether Atlas answers what the instance asks: the guardian for permissions, a model "
             "for questions; what either is unsure of still reaches the user.",
+        ),
+        Method(
+            "workbench.git",
+            FolderRef,
+            FolderGit,
+            "A project folder's git: the branch checked out, its repository, and whether it is a "
+            "worktree.",
+        ),
+        Method(
+            "workbench.worktree",
+            WorktreeParams,
+            FolderGit,
+            "A new worktree of the folder's repository, beside it on a new branch from the one "
+            "checked out, for a session apart from the folder; nothing in the folder changes.",
+        ),
+        Method(
+            "workbench.context",
+            InstanceRef,
+            SessionContext,
+            "How many tokens of context the instance's session holds, and its model's window.",
         ),
         Method(
             "workbench.duplicate",

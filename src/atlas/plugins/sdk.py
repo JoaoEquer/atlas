@@ -56,7 +56,10 @@ from the app and from every channel alike. Version 22 lets a tool send the user 
 (`ToolHost.send_file`): Atlas keeps it in the home, shows it in the app, and hands it to a channel
 that sends files (`FileChannel.send_file`); the voice plugin's spoken answers go so. Version 24
 lets a plugin bring themes (`atlas.themes`): `themes/<name>.json`, colors for the app,
-with no Python and no screen; the app offers them beside light and dark.
+with no Python and no screen; the app offers them beside light and dark. Version 28 lets an
+executor list its permission modes and switch them while it runs (`Capabilities.modes`,
+`ExecutorInstance.set_mode`), for the menu under the session's box: Claude Code's plan mode, and
+edits taken without asking.
 
 **What costs credit is declared and shown:** `llm` and `notify` call the user's model on the
 plugin's own initiative, so the manifest says `"llm": true` or `"notify": true` and the consent
@@ -103,8 +106,8 @@ from typing import Any, Literal, Protocol
 #: shortcut, pasting into the program in focus); 24, themes; 25, a setting's choices, listed by
 #: the app (fixed, Atlas's models, or the plugin's call `setting_choices`); 26, the memory's
 #: limits, read only; 27, where a harness's newest version is published and how its install
-#: updates.
-API_VERSION = 27
+#: updates; 28, a harness's permission modes.
+API_VERSION = 28
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,6 +320,10 @@ class Capabilities:
     #: It says where its newest version is published and how its install updates
     #: (`Executor.update_source`), version 27.
     updates: bool = False
+    #: Its permission modes, by the harness's own names, its default first, switched while it
+    #: runs (`ExecutorInstance.set_mode`), version 28. The one named `auto` is its mode that asks
+    #: no permission, the one `set_auto` switches; empty, it has only that switch.
+    modes: tuple[str, ...] = ()
 
 
 #: A connector's state, in Claude Code's words: up with its tools; waiting for the user's own
@@ -706,6 +713,11 @@ class ExecutorInstance(Protocol):
     async def set_auto(self, on: bool) -> None:
         """Its own mode that asks no permission, on or off for the rest of the session; only
         where `Capabilities.auto`."""
+        ...
+
+    async def set_mode(self, mode: str) -> None:
+        """One of its permission modes for the rest of the session; only where
+        `Capabilities.modes` lists it (version 28)."""
         ...
 
     async def set_model(self, model: str | None, effort: str | None) -> None:
