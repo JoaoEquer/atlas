@@ -81,7 +81,8 @@ test('a rule, an entry and a limit saved on the settings screen apply without a 
   await page.getByRole('button', { name: 'New conversation' }).click()
   await model.reply({ text: 'Two lines, then.' })
   await say(page, 'Who am I?')
-  await expect(page.getByTestId('assistant-message')).toHaveText('Two lines, then.')
+  // The conversation before stays drawn in its tab, hidden.
+  await expect(page.getByTestId('assistant-message').filter({ visible: true })).toHaveText('Two lines, then.')
   const last = (await asked()).at(-1) ?? ''
   expect(last).toContain('Prefers answers in two lines.')
   expect(last).toContain('29/800 chars')

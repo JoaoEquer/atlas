@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { type CSSProperties, useEffect } from 'react'
+import { Activity, type CSSProperties, useEffect } from 'react'
 
 import { t } from '@/i18n'
 import { PluginPage } from '@/plugins/view'
@@ -18,9 +18,11 @@ import {
   $selected,
   $sending,
   $session,
+  $tabs,
   $threads,
   $view,
   $workbench,
+  type Card,
   currentFolder,
   DRAFT,
   keyScreenShown
@@ -65,15 +67,23 @@ export function App() {
   const thread = (selected ? threads[selected] : undefined) ?? EMPTY_THREAD
   // A conversation opened for the first time is read before it shows: never as an empty one.
   const reading = selected !== null && threads[selected] === undefined
-  const sending = useStore($sending)[selected ?? DRAFT]
+  const sendingAll = useStore($sending)
+  const sending = sendingAll[selected ?? DRAFT]
   const read = useStore($read)
-  // An executor's cards are in its session's conversation, in the executors tab (step 16f).
-  const shown = cards.filter(
-    (card): card is Extract<typeof card, { kind: 'approval' | 'ask' | 'secret' }> =>
-      card.conversationId === selected && (card.kind === 'ask' || card.kind === 'approval' || card.kind === 'secret')
-  )
+  const shown = cardsOf(cards, selected)
   // The calls those cards hold wait for the user on the trail; they do not run.
   const waiting = waitingCalls(shown, thread.items)
+  // Every conversation open in a tab and read keeps its thread drawn, hidden while another shows:
+  // going back to one only shows it. Drawn again, a long conversation's Markdown held the click for
+  // about a second (found by the user on 01/11/2026). The one on screen comes last, as the only one
+  // the page reads.
+  const place = selected ?? DRAFT
+  const kept = useStore($tabs).flatMap(({ place: held }) => {
+    const other = held.kind === 'conversation' && held.conversationId !== selected ? held.conversationId : null
+    const loaded = other === null ? undefined : threads[other]
+
+    return other !== null && loaded ? [{ place: other, thread: loaded }] : []
+  })
   // A proposal shows in the conversation its review read, until it is decided.
   const fromHere = (proposal: { conversation_id: null | string }) =>
     selected !== null && proposal.conversation_id === selected
@@ -187,14 +197,29 @@ export function App() {
         ) : (
           <>
             {bot && <BotHeader bot={bot} />}
-            <ThreadView
-              empty={opening ? <Opening /> : bot ? <BotEmpty bot={bot} /> : undefined}
-              loading={reading}
-              place={selected ?? DRAFT}
-              sending={sending}
-              thread={thread}
-              waiting={waiting}
-            />
+            {/* One list, keyed by conversation, so a thread hidden or shown again is the same one. */}
+            {[
+              ...kept.map(other => (
+                <Activity key={other.place} mode="hidden">
+                  <ThreadView
+                    place={other.place}
+                    sending={sendingAll[other.place]}
+                    thread={other.thread}
+                    waiting={waitingCalls(cardsOf(cards, other.place), other.thread.items)}
+                  />
+                </Activity>
+              )),
+              <Activity key={place} mode="visible">
+                <ThreadView
+                  empty={opening ? <Opening /> : bot ? <BotEmpty bot={bot} /> : undefined}
+                  loading={reading}
+                  place={place}
+                  sending={sending}
+                  thread={thread}
+                  waiting={waiting}
+                />
+              </Activity>
+            ]}
             {shown.length + proposed.length + done.length > 0 && (
               <div className="mx-auto max-h-[50vh] w-full max-w-3xl space-y-3 overflow-y-auto px-6 pb-3">
                 {shown.map(card => {
@@ -225,6 +250,19 @@ export function App() {
       <HomeDialogHost />
       <SettingsView />
     </div>
+  )
+}
+
+/** The cards that wait for the user in a conversation's thread. An executor's are in its session's
+ * conversation, in the executors tab (step 16f). */
+function cardsOf(
+  cards: readonly Card[],
+  conversationId: null | string
+): Extract<Card, { kind: 'approval' | 'ask' | 'secret' }>[] {
+  return cards.filter(
+    (card): card is Extract<Card, { kind: 'approval' | 'ask' | 'secret' }> =>
+      card.conversationId === conversationId &&
+      (card.kind === 'ask' || card.kind === 'approval' || card.kind === 'secret')
   )
 }
 

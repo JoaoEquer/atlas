@@ -75,8 +75,11 @@ export function ThreadView({
   const size = last ? growth(last) : 0
   const sent = last?.kind === 'user' || sending.length > 0
 
-  // Another thread on screen: the user's place in it, or its end the first time.
+  // Another thread on screen, or this one shown again (app.tsx keeps a tab's thread hidden): the
+  // user's place in it, or its end the first time. Its parts, shown again, are already in place and
+  // do not rise.
   useLayoutEffect(() => {
+    setSettled(null)
     const kept = place === undefined ? undefined : PLACES.get(place)
     following.current = kept?.following ?? true
     lastTop.current = kept?.top ?? 0
@@ -114,7 +117,8 @@ export function ThreadView({
 
   function onScroll() {
     const element = scroller.current
-    if (!element) {
+    // Hidden, it has no size: that is not the user scrolling.
+    if (!element || element.clientHeight === 0) {
       return
     }
     const near = element.scrollHeight - element.scrollTop - element.clientHeight <= NEAR_END

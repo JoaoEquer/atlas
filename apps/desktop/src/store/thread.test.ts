@@ -3,7 +3,16 @@ import { describe, expect, it } from 'vitest'
 import type { EventParams } from '@/protocol/channel'
 import { CONVERSATION_EVENT_NAMES, type MessageRow } from '@/protocol/protocol.generated'
 
-import { applyEvent, DRAWN, EMPTY_THREAD, fromHistory, parseSkill, reasoningAbout, type Thread } from './thread'
+import {
+  applyEvent,
+  DRAWN,
+  EMPTY_THREAD,
+  fromHistory,
+  keepKeys,
+  parseSkill,
+  reasoningAbout,
+  type Thread
+} from './thread'
 
 let seq = 0
 
@@ -317,6 +326,35 @@ describe('a stored conversation', () => {
     ])
     expect(after.items.filter(item => item.kind === 'tool')).toHaveLength(2)
     expect(after.items.at(-1)).toMatchObject({ result: 'done', status: 'completed' })
+  })
+})
+
+describe('a conversation read again', () => {
+  it('keeps the keys of what came as events, so nothing on screen is drawn again', () => {
+    const live = play(event('message.start', { text: 'hi' }), event('message.delta', { text: 'Hello.' }), complete())
+    const read = fromHistory(
+      [row({ number: 1, role: 'user', text: 'hi' }), row({ number: 2, role: 'assistant', text: 'Hello.' })],
+      false
+    )
+
+    const kept = keepKeys(live, read)
+
+    expect(kept.items.map(item => item.key)).toEqual(live.items.map(item => item.key))
+    expect(kept.items.map(item => item.kind)).toEqual(['user', 'text'])
+  })
+
+  it('takes the read keys where the kinds part, and never a key another read item holds', () => {
+    const shown = fromHistory(
+      [row({ number: 2, role: 'user', text: 'two' }), row({ number: 3, role: 'assistant', text: 'three' })],
+      false
+    )
+    // Read again from an earlier message: the first user's key on screen is the second's read.
+    const read = fromHistory(
+      [row({ number: 1, role: 'user', text: 'one' }), row({ number: 2, role: 'user', text: 'two' })],
+      false
+    )
+
+    expect(keepKeys(shown, read).items.map(item => item.key)).toEqual(['m1', 'm2'])
   })
 })
 

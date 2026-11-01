@@ -111,3 +111,32 @@ test('reopened, the tabs come back as they were, the one on screen read, and a c
     await app.close().catch(() => undefined)
   }
 })
+
+test('a tab shown again is the thread it left, kept drawn, with what came while it was away', async () => {
+  const { model, page } = desktop
+  await model.reply(
+    { text: 'Answer one.' },
+    { text: 'Answer two.' },
+    { text: 'Answer three.' },
+    { pause: 0.05, text: 'Later, word by word.' }
+  )
+  await threeConversations(page)
+  await tabs(page).nth(0).click()
+  const answer = page.getByTestId('assistant-message').filter({ hasText: 'Answer one.' }).filter({ visible: true })
+  // A mark on the answer's element: drawn again, it would be another element, without the mark.
+  await answer.evaluate(element => {
+    Object.assign(element, { kept: true })
+  })
+
+  // A reply that ends while another tab shows is there when its tab comes back.
+  await say(page, 'And then?')
+  await tabs(page).nth(1).click()
+  await expect(page.getByTestId('assistant-message').last()).toContainText('Answer two.')
+  // Its tab's dot works while the reply comes, and goes when it ends.
+  const dot = tabs(page).nth(0).getByTestId('status-dot')
+  await expect(dot).toHaveAttribute('data-dot', 'working')
+  await expect(dot).toHaveCount(0, { timeout: 15_000 })
+  await tabs(page).nth(0).click()
+  await expect(page.getByTestId('assistant-message').last()).toContainText('Later, word by word.')
+  expect(await answer.evaluate(element => (element as { kept?: boolean } & Element).kept)).toBe(true)
+})

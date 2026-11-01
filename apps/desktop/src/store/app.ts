@@ -91,7 +91,7 @@ import { applySubagent } from './subagents'
 import { away, named, readTabs, screenPlace, type Tab, type TabPlace, Tabs, writeTabs } from './tabs'
 import { type CommandOutcome, leaveExecutorTab, runCommand, showExecutorTab } from './terminals'
 import { setPluginThemes } from './theme'
-import { applyEvent, EMPTY_THREAD, fromHistory, terminalText, type Thread } from './thread'
+import { applyEvent, EMPTY_THREAD, fromHistory, keepKeys, terminalText, type Thread } from './thread'
 import {
   failed as usageFailed,
   type UsageRead,
@@ -845,7 +845,9 @@ export class HomeSession {
       this.retitled(conversationId, opened.conversation.title)
     }
     this.client.watch(conversationId, opened.seq)
-    this.$threads.setKey(conversationId, fromHistory(opened.messages, opened.running))
+    const read = fromHistory(opened.messages, opened.running)
+    const shown = this.$threads.get()[conversationId]
+    this.$threads.setKey(conversationId, shown ? keepKeys(shown, read) : read)
     this.$autoMode.setKey(conversationId, opened.auto_mode)
     void this.readModel(conversationId).catch(() => undefined)
     void this.readSubagents(conversationId).catch(() => undefined)

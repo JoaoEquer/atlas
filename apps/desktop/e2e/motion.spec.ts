@@ -78,9 +78,8 @@ test('what comes onto the thread rises into place, and a conversation that opens
   await watchArrivals(page)
   await page.getByTestId('conversation-row').filter({ hasText: 'A first conversation' }).click()
   await expect(page.getByTestId('assistant-message').last()).toContainText('The second answer.')
-  const opened = await arrivals(page)
-  expect(opened.length).toBeGreaterThan(0)
-  expect(opened.filter(Boolean)).toEqual([])
+  // Its tab kept it drawn: shown again, nothing on it rises.
+  expect((await arrivals(page)).filter(Boolean)).toEqual([])
 })
 
 test('with "reduce motion" on in the system, nothing moves', async () => {
