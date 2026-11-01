@@ -313,16 +313,51 @@ export const ptBR: Override<Messages> = {
     bringAll: 'Trazer tudo',
     bringCount: (count: number) => (count === 1 ? 'Trazer 1 sessão' : `Trazer ${String(count)} sessões`),
     bringNote: 'O resto vai para Arquivadas, a um clique. Nada muda nos originais.',
+    away: (step: string) => `A configuração espera em ${step}.`,
+    awayBack: 'Voltar a ela',
+    botFather: 'No Telegram, fale com o @BotFather, mande /newbot, escolha um nome e copie o token que ele der.',
+    botRunning:
+      'Seu bot está ligado. Mande uma mensagem a ele no Telegram: ele responde com um código, e você aparece aqui.',
+    botStarting: 'Ligando o seu bot…',
+    checkAgain: 'Conferir de novo',
+    connect: 'Conectar',
+    connectedAs: (account: string) => (account ? `Conectado como ${account}` : 'Conectado'),
     continue: 'Continuar',
+    github: 'GitHub',
+    githubCode: 'Digite este código na página que abriu no navegador:',
+    githubIntro: 'Issues, pull requests e repositórios, pelo gh, com o login da sua conta.',
+    githubMissing: 'O gh não está nesta máquina: rode o instalador de novo, ou instale-o por cli.github.com.',
+    githubPage: 'Abrir a página de novo',
+    google: 'Gmail e Agenda',
+    googleIntro: 'O Atlas configura o gws com você numa conversa: o projeto no Google, o login e a conferência.',
+    googleNoKey: 'Precisa de um modelo para conversar: conecte um no passo 1 antes.',
+    googlePrompt:
+      'Conecte o meu Gmail e o meu Google Agenda ao Atlas pelo gws. Comece pelo `gws auth status`, instale o gws ' +
+      'se faltar, e me guie na configuração um passo de cada vez.',
+    googleSetUp: 'Configurar com o Atlas',
+    letIn: 'Deixar entrar',
+    letInDone: (name: string) => `${name} entrou: fale com o Atlas pelo Telegram.`,
+    letInWaits: (name: string, code: string) => `${name} espera com ${code}`,
+    telegramMissing: 'Este Atlas não tem o plugin do Telegram.',
+    telegramOn: 'Conectar deixa o plugin do Telegram:',
+    tokenLabel: 'O token do bot',
     counting: 'Contando…',
-    hints: { executors: 'Claude Code, Codex', model: 'Uma chave de API', work: 'Último passo' },
+    hints: {
+      connections: 'GitHub, Gmail, Agenda',
+      executors: 'Claude Code, Codex',
+      model: 'Uma chave de API',
+      telegram: 'O Atlas no celular',
+      work: 'Último passo'
+    },
     inProgress: 'Em andamento',
     intros: {
+      connections: 'O Atlas trabalha nas suas contas pelos programas delas, cada um com login nesta máquina.',
       executors:
         'O Atlas trabalha pelos agentes de código que você já usa, nas suas pastas, cada um com o seu próprio login.',
       model:
         'O Atlas conversa com um modelo usando a sua própria chave de API. Cole uma para começar: ela é ' +
         'conferida com o provedor, sem custo, e guardada criptografada nesta máquina.',
+      telegram: 'Fale com o Atlas pelo celular, por um bot só seu, e responda às perguntas dos seus agentes por lá.',
       work: 'Suas sessões continuam onde estão. Escolha o que aparece na lista; o resto espera em Arquivadas.'
     },
     leave: 'Ir para o Atlas',
@@ -335,10 +370,18 @@ export const ptBR: Override<Messages> = {
     skip: 'Pular',
     start: 'Começar uma conversa',
     stepOf: (step: number, total: number) => `Passo ${String(step)} de ${String(total)}`,
-    steps: { executors: 'Executores', model: 'Modelo', work: 'Trazer seu trabalho' },
+    steps: {
+      connections: 'Conexões',
+      executors: 'Executores',
+      model: 'Modelo',
+      telegram: 'Telegram',
+      work: 'Trazer seu trabalho'
+    },
     titles: {
+      connections: { lead: 'Conecte suas', word: 'contas' },
       executors: { lead: 'Conecte seus', word: 'agentes' },
       model: { lead: 'Escolha o', word: 'modelo' },
+      telegram: { lead: 'O Atlas no seu', word: 'bolso' },
       work: { lead: 'Traga seu', word: 'trabalho' }
     },
     windowAll: 'de qualquer data',

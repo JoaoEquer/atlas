@@ -11,6 +11,10 @@ too, and goes on in either place.
 
 ## Set it up
 
+The first run's **Telegram** step does all of this on one screen: paste the token, send your bot a
+message, and choose **Let in**. **Settings**, then **General**, then **Open the first run again**
+brings it back. By hand:
+
 1. **Make a bot.** In Telegram, talk to [@BotFather](https://t.me/BotFather), send `/newbot`,
    choose a name and a username, and copy the token it gives you.
 2. **Turn the plugin on.** In the app, open **Extensions**, in the sidebar, and on the **Plugins**

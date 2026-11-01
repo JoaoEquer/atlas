@@ -129,6 +129,7 @@ from atlas.installation import (
     compose_progress,
 )
 from atlas.jobs import JobsError, RouteTarget, Routine, Run, RunStatus, Scheduler
+from atlas.logins import LoginsError, ProgramLogins
 from atlas.marketplace import Kind as MarketKind
 from atlas.marketplace import Marketplace, MarketplaceError, MarketplaceStore
 from atlas.marketplace import Page as MarketPage
@@ -249,6 +250,7 @@ from atlas.server.protocol import (
     ExecutorRow,
     ExecutorUpdated,
     ExecutorUsageRow,
+    GithubCode,
     HomeBackupParams,
     HomeCreateParams,
     HomeImportParams,
@@ -309,6 +311,8 @@ from atlas.server.protocol import (
     PreviewPayload,
     PreviewRead,
     PreviewReadParams,
+    ProgramLoginList,
+    ProgramLoginRow,
     ProposalApproved,
     ProposalChange,
     ProposalCount,
@@ -502,8 +506,12 @@ class Gateway:
         environ: Mapping[str, str] | None = None,
         host_updater: HostChannel | None = None,
         update_transport: httpx2.AsyncBaseTransport | None = None,
+        logins: ProgramLogins | None = None,
     ) -> None:
         self.replay = Replay()
+        #: gh's and gws's logins, for the first run's Connections (step 18d).
+        self.logins = logins or ProgramLogins()
+        self.logins.changed = self.logins_changed
         #: Where each executor's newest version is published and how its install updates, as
         #: its plugin says; the newest version of each, read at most once a day; the transport
         #: those reads take (a test's own).
@@ -627,6 +635,8 @@ class Gateway:
             "pairing.list": self._pairing_list,
             "pairing.approve": self._pairing_approve,
             "pairing.forget": self._pairing_forget,
+            "login.list": self._login_list,
+            "login.github": self._login_github,
             "conversation.list": self._list,
             "conversation.search": self._search,
             "conversation.rename": self._rename,
@@ -1000,6 +1010,7 @@ class Gateway:
             if starting is not None:
                 await asyncio.gather(starting, return_exceptions=True)
         await self.plugins.stop()
+        await self.logins.close()
         await asyncio.to_thread(self.terminals.close_all)
         await self.channels.close()
         await self.scheduler.close()
@@ -2211,6 +2222,30 @@ class Gateway:
         await self._plugin_call(self.plugins.forget, params.channel, params.user)
         self.plugins_changed()
         return Empty()
+
+    # -- the programs' logins, for the first run's Connections (step 18d) -----------------------
+
+    async def _login_list(self, connection: Connection, params: Empty) -> ProgramLoginList:
+        self._owner(connection)
+        return ProgramLoginList(
+            [
+                ProgramLoginRow(row.service, row.program, row.installed, row.logged_in, row.account)
+                for row in await self.logins.read()
+            ]
+        )
+
+    async def _login_github(self, connection: Connection, params: Empty) -> GithubCode:
+        self._owner(connection)
+        try:
+            code = await self.logins.log_in_github()
+        except LoginsError as error:
+            raise ProtocolError(INVALID_PARAMS, str(error)) from error
+        return GithubCode(code.code, code.url)
+
+    def logins_changed(self) -> None:
+        frame = self._event_frame("logins.changed", Empty())
+        for connection in self._connections:
+            connection.put(frame)
 
     # -- what a channel's bridge uses (atlas.server.channels) -------------------------------------
 

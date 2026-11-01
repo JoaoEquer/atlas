@@ -7,11 +7,12 @@
 import { atom } from 'nanostores'
 
 /** The steps, in their order. */
-export const STEPS = ['model', 'executors', 'work'] as const
+export const STEPS = ['model', 'executors', 'telegram', 'connections', 'work'] as const
 
 export type Step = (typeof STEPS)[number]
 
-/** What became of a step: done (its key stored, an executor on, the work brought) or skipped. */
+/** What became of a step: done (its key stored, an executor on, someone let in on Telegram, a
+ * service connected, the work brought) or skipped. */
 export type Mark = 'done' | 'skipped'
 
 export interface FirstRun {
@@ -19,6 +20,9 @@ export interface FirstRun {
   open: boolean
   step: Step
   marks: Partial<Record<Step, Mark>>
+  /** Open, but stepped away from for a conversation it opened (Google's setup, which the agent
+   * leads): the app shows, with a band back to the step. */
+  away?: boolean
 }
 
 const KEY = 'atlas.firstRun'
@@ -60,6 +64,11 @@ export function showStep(home: null | string, step: Step): void {
   update(home, run => ({ ...run, step }))
 }
 
+/** Step away to the app, the first run kept open on its step; `away` false comes back to it. */
+export function stepAway(home: null | string, away = true): void {
+  update(home, run => ({ ...run, away }))
+}
+
 /** A step done or skipped, and the next one shown; after the last, the first run closes. */
 export function finishStep(home: null | string, step: Step, mark: Mark): void {
   const next = STEPS[STEPS.indexOf(step) + 1]
@@ -87,7 +96,7 @@ export function markOffered(home: null | string, offered: boolean): void {
 
 /** Closed before its end ("Go to Atlas"): what was done stays done. */
 export function closeFirstRun(home: null | string): void {
-  update(home, run => ({ ...run, open: false, step: 'model' }))
+  update(home, run => ({ ...run, away: false, open: false, step: 'model' }))
 }
 
 /** The window a "Bring your work" offers, in days; `null`, everything. */

@@ -38,7 +38,7 @@ import { BotDialogHost } from './bot-dialog'
 import { BotEmpty, BotHeader } from './bot-header'
 import { Composer } from './composer'
 import { ExtensionsView } from './extensions-view'
-import { FirstRun } from './first-run'
+import { FirstRun, FirstRunBand } from './first-run'
 import { HomeDialogHost } from './home-dialog'
 import { KeyBand } from './key-screen'
 import { MarketplaceView } from './marketplace-view'
@@ -91,8 +91,10 @@ export function App() {
   // With no provider's key, the app opens on the first run; left with none stored, a band. Opened
   // from the settings, it shows until it is left.
   const home = useStore($home)
-  const setupOpen = firstRunOf(useStore($firstRun), home).open
-  const firstRun = state === 'open' && (setupOpen || keyScreenShown(options, later, notice))
+  const setup = firstRunOf(useStore($firstRun), home)
+  // Stepped away from for a conversation it opened, it waits a band away.
+  const setupAway = setup.open && setup.away === true
+  const firstRun = state === 'open' && ((setup.open && !setupAway) || keyScreenShown(options, later, notice))
   // A home that had its key before the first run existed is offered "Bring your work" once.
   const keyed = options !== null && !keyScreenShown(options, false, null)
   const executorsOn = useStore($workbench)
@@ -167,6 +169,7 @@ export function App() {
         <TabStrip />
         <ConnectionBand />
         {keyBand && <KeyBand />}
+        {setupAway && <FirstRunBand step={setup.step} />}
         {view === 'proposals' ? (
           <ProposalsView />
         ) : view === 'routines' ? (

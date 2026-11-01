@@ -334,15 +334,49 @@ export const en = {
     bringAll: 'Bring everything',
     bringCount: (count: number) => (count === 1 ? 'Bring 1 session' : `Bring ${String(count)} sessions`),
     bringNote: 'The rest goes to Archived, a click away. Nothing changes in the originals.',
+    away: (step: string) => `The first run waits on ${step}.`,
+    awayBack: 'Back to it',
+    botFather: 'In Telegram, talk to @BotFather, send /newbot, choose a name, and copy the token it gives you.',
+    botRunning: 'Your bot is on. Send it a message in Telegram: it answers with a code, and you show up here.',
+    botStarting: 'Starting your bot…',
+    checkAgain: 'Check again',
+    connect: 'Connect',
+    connectedAs: (account: string) => (account ? `Connected as ${account}` : 'Connected'),
     continue: 'Continue',
+    github: 'GitHub',
+    githubCode: 'Type this code on the page that opened in your browser:',
+    githubIntro: 'Issues, pull requests and repositories, through gh, logged in with your account.',
+    githubMissing: 'gh is not on this machine: run the installer again, or install it from cli.github.com.',
+    githubPage: 'Open the page again',
+    google: 'Gmail and Calendar',
+    googleIntro: 'Atlas sets up gws with you in a conversation: the Google project, its sign-in, and a check.',
+    googleNoKey: 'It needs a model to talk to: connect one in step 1 first.',
+    googlePrompt:
+      'Connect my Gmail and Google Calendar to Atlas with gws. Start with `gws auth status`, install gws if it ' +
+      'is missing, and walk me through the setup one step at a time.',
+    googleSetUp: 'Set up with Atlas',
+    letIn: 'Let in',
+    letInDone: (name: string) => `${name} is in: talk to Atlas from Telegram.`,
+    letInWaits: (name: string, code: string) => `${name} waits with ${code}`,
+    telegramMissing: 'This Atlas has no Telegram plugin.',
+    telegramOn: 'Connecting lets the Telegram plugin:',
+    tokenLabel: "The bot's token",
     counting: 'Counting…',
-    hints: { executors: 'Claude Code, Codex', model: 'An API key', work: 'Last step' },
+    hints: {
+      connections: 'GitHub, Gmail, Calendar',
+      executors: 'Claude Code, Codex',
+      model: 'An API key',
+      telegram: 'Atlas on your phone',
+      work: 'Last step'
+    },
     inProgress: 'In progress',
     intros: {
+      connections: 'Atlas works in your accounts through their own programs, each logged in on this machine.',
       executors: 'Atlas works through the coding agents you already use, in your folders, each with your own login.',
       model:
         'Atlas talks to a model with your own API key. Paste one to start: it is checked with the provider, ' +
         'at no cost, and kept encrypted on this machine.',
+      telegram: "Talk to Atlas from your phone through a bot of your own, and answer your agents' questions there.",
       work: 'Your sessions stay where they are. Choose what shows in the list; the rest waits in Archived.'
     },
     leave: 'Go to Atlas',
@@ -354,10 +388,18 @@ export const en = {
     skip: 'Skip',
     start: 'Start a conversation',
     stepOf: (step: number, total: number) => `Step ${String(step)} of ${String(total)}`,
-    steps: { executors: 'Executors', model: 'Model', work: 'Bring your work' },
+    steps: {
+      connections: 'Connections',
+      executors: 'Executors',
+      model: 'Model',
+      telegram: 'Telegram',
+      work: 'Bring your work'
+    },
     titles: {
+      connections: { lead: 'Connect your', word: 'accounts' },
       executors: { lead: 'Connect your', word: 'agents' },
       model: { lead: 'Choose the', word: 'model' },
+      telegram: { lead: 'Atlas in your', word: 'pocket' },
       work: { lead: 'Bring your', word: 'work' }
     },
     windowAll: 'from any time',

@@ -5,14 +5,16 @@ import type {
   ExecutorRow,
   KeyProvider,
   ModelOptions,
+  PluginRow,
+  ProgramLoginRow,
   SessionFolderRow,
   SessionRow
 } from '@/protocol/protocol.generated'
 import * as app from '@/store/app'
 import { $archived, $archivedSessions, archiveKey, isArchived } from '@/store/archive'
-import { $firstRun, firstRunOf, openFirstRun } from '@/store/setup'
+import { $firstRun, firstRunOf, openFirstRun, type Step } from '@/store/setup'
 
-import { FirstRun } from './first-run'
+import { FirstRun, FirstRunBand } from './first-run'
 
 // Leaving the first run leaves the key band, which is the started app's.
 beforeEach(() => {
@@ -36,6 +38,10 @@ afterEach(() => {
   app.$workbench.set({ executors: [], instances: [] })
   app.$sessionFolders.set({})
   app.$sessions.set({})
+  app.$plugins.set([])
+  app.$pairings.set([])
+  app.$pluginError.set(null)
+  app.$logins.set(null)
 })
 
 const NONE: ModelOptions = { default: { effort: null, model: null, picked: false, provider: null }, providers: [] }
@@ -85,7 +91,7 @@ describe('the first run (step 18d)', () => {
     app.$keyProviders.set([OPENROUTER])
     render(<FirstRun />)
 
-    expect(screen.getByTestId('first-run-count').textContent).toBe('Step 1 of 3')
+    expect(screen.getByTestId('first-run-count').textContent).toBe('Step 1 of 5')
     expect(screen.getByTestId('first-run-title').textContent).toBe('Choose the model')
     expect(screen.getByTestId('first-run-step-model').getAttribute('aria-current')).toBe('step')
     expect(screen.getByTestId('key-provider-openrouter')).toBeTruthy()
@@ -222,5 +228,156 @@ describe('"Bring your work" (step 18d)', () => {
     expect(screen.getByTestId('first-run-no-executors')).toBeTruthy()
     fireEvent.click(screen.getByTestId('first-run-start'))
     expect(run()).toMatchObject({ marks: { work: 'skipped' }, open: false })
+  })
+
+  const at = (step: Step) => {
+    openFirstRun(null)
+    $firstRun.set({ '': { ...run(), step } })
+  }
+
+  const TOKEN = { description: "The bot's token", name: 'TELEGRAM_BOT_TOKEN', stored: false, url: '' }
+  const TELEGRAM: PluginRow = {
+    author: 'Atlas',
+    bundled: true,
+    channels: ['telegram'],
+    consent: 'fingerprint',
+    consented: false,
+    declaration: ['Reach api.telegram.org', 'Read the secret TELEGRAM_BOT_TOKEN'],
+    description: 'Talk to Atlas from Telegram',
+    enabled: false,
+    name: 'telegram',
+    problem: null,
+    running: false,
+    secrets: [TOKEN],
+    settings: [],
+    version: '1.0.0'
+  }
+
+  it('connects the bot with the consent shown, and lets in who wrote to it', async () => {
+    vi.spyOn(app, 'refreshPlugins').mockReturnValue()
+    const enable = vi.spyOn(app, 'enablePlugin').mockImplementation(() => {
+      app.$plugins.set([{ ...TELEGRAM, consented: true, enabled: true }])
+
+      return Promise.resolve(true)
+    })
+    const store = vi.spyOn(app, 'storePluginSecret').mockImplementation(() => {
+      app.$plugins.set([
+        { ...TELEGRAM, consented: true, enabled: true, running: true, secrets: [{ ...TOKEN, stored: true }] }
+      ])
+
+      return Promise.resolve(true)
+    })
+    const approve = vi.spyOn(app, 'approvePairing').mockResolvedValue(true)
+    // Continue goes on to Connections, which reads the logins.
+    vi.spyOn(app, 'refreshLogins').mockResolvedValue()
+    app.$plugins.set([TELEGRAM])
+    at('telegram')
+    render(<FirstRun />)
+
+    expect(screen.getByTestId('first-run-title').textContent).toBe('Atlas in your pocket')
+    expect(screen.getByTestId('first-run-telegram-consent').textContent).toContain('Reach api.telegram.org')
+    expect(screen.getByTestId('first-run-telegram-connect')).toHaveProperty('disabled', true)
+    fireEvent.change(screen.getByTestId('first-run-telegram-token'), { target: { value: ' 123:abc ' } })
+    fireEvent.click(screen.getByTestId('first-run-telegram-connect'))
+
+    await screen.findByTestId('first-run-telegram-ready')
+    expect(enable).toHaveBeenCalledWith(TELEGRAM)
+    expect(store).toHaveBeenCalledWith('telegram', 'TELEGRAM_BOT_TOKEN', '123:abc')
+    expect(screen.getByTestId('first-run-continue')).toHaveProperty('disabled', true)
+
+    // Someone wrote to the bot: let in from the step, and the step is done.
+    const waiting = { approved: false, asked_at: '', channel: 'telegram', code: 'K7QM2XPA', name: 'Ana', user: '42' }
+    act(() => {
+      app.$pairings.set([waiting])
+    })
+    expect(screen.getByTestId('first-run-telegram-person').textContent).toContain('Ana waits with K7QM2XPA')
+    fireEvent.click(screen.getByTestId('first-run-telegram-let-in'))
+    expect(approve).toHaveBeenCalledWith('K7QM2XPA')
+    act(() => {
+      app.$pairings.set([{ ...waiting, approved: true }])
+    })
+    fireEvent.click(screen.getByTestId('first-run-continue'))
+    expect(run()).toMatchObject({ marks: { telegram: 'done' }, step: 'connections' })
+  })
+
+  it('says why Telegram refused a stored token, and takes another', () => {
+    vi.spyOn(app, 'refreshPlugins').mockReturnValue()
+    const store = vi.spyOn(app, 'storePluginSecret').mockResolvedValue(true)
+    const refused = "Telegram refused the bot's token: get the token again."
+    app.$plugins.set([
+      { ...TELEGRAM, consented: true, enabled: true, problem: refused, secrets: [{ ...TOKEN, stored: true }] }
+    ])
+    at('telegram')
+    render(<FirstRun />)
+
+    expect(screen.getByTestId('first-run-telegram-problem').textContent).toBe(refused)
+    expect(screen.queryByTestId('first-run-telegram-consent')).toBeNull()
+    fireEvent.change(screen.getByTestId('first-run-telegram-token'), { target: { value: '456:def' } })
+    fireEvent.click(screen.getByTestId('first-run-telegram-connect'))
+    expect(store).toHaveBeenCalledWith('telegram', 'TELEGRAM_BOT_TOKEN', '456:def')
+  })
+
+  const login = (service: string, program: string, change: Partial<ProgramLoginRow> = {}): ProgramLoginRow => ({
+    account: '',
+    installed: true,
+    logged_in: false,
+    program,
+    service,
+    ...change
+  })
+
+  it("connects GitHub through gh's code in the browser, and Google in a conversation with Atlas", async () => {
+    const read = vi.spyOn(app, 'refreshLogins').mockResolvedValue()
+    const github = vi
+      .spyOn(app, 'logInToGithub')
+      .mockResolvedValue({ code: 'AB12-CD34', url: 'https://github.com/login/device' })
+    const opened = vi.spyOn(app, 'newConversation').mockReturnValue()
+    const sent = vi.spyOn(app, 'send').mockResolvedValue()
+    app.$modelOptions.set(KEYED)
+    app.$logins.set([login('github', 'gh'), login('google', 'gws')])
+    at('connections')
+    render(<FirstRun />)
+
+    expect(read).toHaveBeenCalled()
+    expect(screen.getByTestId('first-run-continue')).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByTestId('first-run-github-connect'))
+    expect((await screen.findByTestId('first-run-github-code')).textContent).toBe('AB12-CD34')
+    expect(github).toHaveBeenCalled()
+
+    // The browser said yes: logins.changed read them again.
+    act(() => {
+      app.$logins.set([login('github', 'gh', { account: 'example-user', logged_in: true }), login('google', 'gws')])
+    })
+    expect(screen.getByTestId('first-run-github-connected').textContent).toBe('Connected as example-user')
+    expect(screen.queryByTestId('first-run-github-code')).toBeNull()
+    expect(screen.getByTestId('first-run-continue')).toHaveProperty('disabled', false)
+
+    // Google: the agent leads gws's setup in a conversation, the first run a band away.
+    fireEvent.click(screen.getByTestId('first-run-google-set-up'))
+    expect(opened).toHaveBeenCalled()
+    expect(sent.mock.calls[0]?.[0]).toContain('gws auth status')
+    expect(run()).toMatchObject({ away: true, open: true, step: 'connections' })
+  })
+
+  it('offers no GitHub button without gh, and no Google setup without a model', () => {
+    vi.spyOn(app, 'refreshLogins').mockResolvedValue()
+    app.$modelOptions.set(NONE)
+    app.$logins.set([login('github', 'gh', { installed: false }), login('google', 'gws', { installed: false })])
+    at('connections')
+    render(<FirstRun />)
+
+    expect(screen.queryByTestId('first-run-github-connect')).toBeNull()
+    expect(screen.getByTestId('first-run-github-missing')).toBeTruthy()
+    expect(screen.getByTestId('first-run-google-set-up')).toHaveProperty('disabled', true)
+  })
+
+  it('the band over the app brings back the step stepped away from', () => {
+    at('connections')
+    $firstRun.set({ '': { ...run(), away: true } })
+    render(<FirstRunBand step="connections" />)
+
+    expect(screen.getByTestId('first-run-band').textContent).toContain('The first run waits on Connections.')
+    fireEvent.click(screen.getByTestId('first-run-back'))
+    expect(run()).toMatchObject({ away: false, open: true, step: 'connections' })
   })
 })

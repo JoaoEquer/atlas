@@ -38,6 +38,7 @@ src/atlas/
   browser/     the browser: Atlas's own Chrome, the code that drives it, the user taking over
   server/      HTTP + WebSocket, and the client protocol (single source)
   instances/   talking to more than one machine
+  logins/      the logins of gh and gws, the programs Atlas reaches GitHub and Google through
   secrets/     encrypted vault (age); OS keystores as adapters
   home/        ATLAS_HOME and its boundary, settings, database and migrations, logs, UTC time
   hooks/       plugins' hooks at the loop's events, in Claude Code's events and JSON
@@ -1906,11 +1907,20 @@ Setup, a file that runs it, is step 18b (The Setup, below); signing is 18c.
   then the first provider with a key, as it already is. OpenRouter's OAuth login is left out
   (decided with the user).
 - **The first run** (step 18d, asked for by the user on 01/11/2026, so a first sight says what Atlas
-  is): the key screen became its first step, in three steps numbered on the left, one shown at
+  is): the key screen became its first step, in five steps numbered on the left, one shown at
   a time, each done or skipped (`store/setup.ts`, kept per home in the window's storage, so a window
   closed halfway reopens on its step). **Model**, the key screen above; **Executors**, the harnesses
   found here turned on with their consent (`ExecutorOffers`) and, once one takes accounts, the
-  other accounts added, since their taking over at a plan's limit is Atlas's own; **Bring your
+  other accounts added, since their taking over at a plan's limit is Atlas's own; **Telegram**,
+  the bot's token pasted, the plugin turned on with the consent the step shows, and the person who
+  writes to the bot let in from the step; **Connections**, GitHub and Google Workspace through
+  their own programs' logins on the server's machine (`atlas.logins`): `gh auth status` and
+  `gws auth status` read by `login.list`, GitHub's **Connect** starting `gh auth login --web`,
+  whose one-time code the step shows while its page opens in the browser and whose end
+  `logins.changed` tells, and Google's **Set up with Atlas** opening a conversation where the
+  agent leads `gws auth setup` (step 14b's way, which needs a terminal or a Cloud project
+  only the user can make), the first run waiting a band away from its step until the user comes
+  back to it; only the owner's app may read or start a login; **Bring your
   work**, the executors chosen and a window (7, 30 or 90 days, or any time): of their folders, the
   ones that changed within it have their sessions read and counted, and what changed before it is
   archived (`store/work.ts`), never copied or touched. It opens by itself while no provider has a

@@ -8,13 +8,25 @@ import {
   $keyLater,
   $keyNotice,
   $keyProviders,
+  $logins,
   $modelOptions,
+  $pairings,
+  $pluginError,
+  $plugins,
   $sessionFolders,
   $sessions,
   $workbench,
+  approvePairing,
   chooseKeyLater,
   dismissKeyNotice,
-  keyScreenShown
+  enablePlugin,
+  keyScreenShown,
+  logInToGithub,
+  newConversation,
+  refreshLogins,
+  refreshPlugins,
+  send,
+  storePluginSecret
 } from '@/store/app'
 import {
   $firstRun,
@@ -25,6 +37,7 @@ import {
   openFirstRun,
   showStep,
   type Step,
+  stepAway,
   STEPS,
   WINDOWS,
   type WorkWindow
@@ -38,6 +51,7 @@ import { ExecutorAvatar } from './executor-avatar'
 import { ExecutorOffers } from './executor-offers'
 import { Providers } from './key-screen'
 import { Check } from './ui/icons'
+import { InlineError } from './ui/inline-error'
 
 /**
  * The first run (step 18d, docs/ARCHITECTURE.md, The installer): the app's first steps, which
@@ -110,6 +124,8 @@ export function FirstRun() {
           <div className="mt-6 space-y-5">
             {step === 'model' && <ModelStep onDone={run.open ? finish : dismissKeyNotice} />}
             {step === 'executors' && <ExecutorsStep onDone={finish} />}
+            {step === 'telegram' && <TelegramStep onDone={finish} />}
+            {step === 'connections' && <ConnectionsStep onDone={finish} />}
             {step === 'work' && <WorkStep onDone={finish} />}
           </div>
           <button
@@ -293,6 +309,278 @@ function Account({ row }: { row: ExecutorRow }) {
   )
 }
 
+/** Telegram: the bot's token, the plugin turned on with the consent shown right there, and the
+ * person who wrote to the bot let in from the step. */
+function TelegramStep({ onDone }: { onDone: (mark: Mark) => void }) {
+  const plugin = useStore($plugins).find(row => row.name === TELEGRAM)
+  const people = useStore($pairings).filter(row => row.channel === TELEGRAM)
+  const error = useStore($pluginError)
+  const [token, setToken] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    refreshPlugins()
+  }, [])
+
+  if (!plugin) {
+    return (
+      <>
+        <p className="text-sm text-muted-foreground" data-testid="first-run-no-telegram">
+          {t.firstRun.telegramMissing}
+        </p>
+        <Next done={false} onDone={onDone} />
+      </>
+    )
+  }
+
+  const on = plugin.enabled && plugin.consented
+  const stored = plugin.secrets.find(secret => secret.name === TELEGRAM_TOKEN)?.stored ?? false
+  const ready = on && stored && plugin.problem === null
+  const letIn = people.filter(row => row.approved)
+
+  const connect = async () => {
+    setBusy(true)
+    // Turned on first, with the consent to what the step shows; the channel waits for its token
+    // and starts once it is stored.
+    if ((on || (await enablePlugin(plugin))) && (await storePluginSecret(plugin.name, TELEGRAM_TOKEN, token.trim()))) {
+      setToken('')
+    }
+    setBusy(false)
+  }
+
+  return (
+    <>
+      <section className="space-y-3 rounded-lg border border-border p-4" data-testid="first-run-telegram">
+        <p className="text-sm">{t.firstRun.botFather}</p>
+        {!ready && (
+          <form
+            className="space-y-2"
+            onSubmit={event => {
+              event.preventDefault()
+              void connect()
+            }}
+          >
+            <label className="block text-sm font-medium" htmlFor="first-run-telegram-token">
+              {t.firstRun.tokenLabel}
+            </label>
+            <div className="flex gap-2">
+              <input
+                autoComplete="off"
+                className="min-w-0 flex-1 rounded-md border border-border-strong bg-raised px-3 py-2 text-sm"
+                data-testid="first-run-telegram-token"
+                id="first-run-telegram-token"
+                onChange={event => {
+                  setToken(event.target.value)
+                }}
+                placeholder={t.plugins.secretPlaceholder}
+                type="password"
+                value={token}
+              />
+              <button
+                className={PRIMARY}
+                data-testid="first-run-telegram-connect"
+                disabled={busy || !token.trim()}
+                type="submit"
+              >
+                {t.firstRun.connect}
+              </button>
+            </div>
+            {stored && plugin.problem !== null && (
+              <InlineError testId="first-run-telegram-problem">{plugin.problem}</InlineError>
+            )}
+            {!on && (
+              <div className="text-xs text-muted-foreground" data-testid="first-run-telegram-consent">
+                <p>{t.firstRun.telegramOn}</p>
+                <ul className="list-disc pl-5">
+                  {plugin.declaration.map(line => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </form>
+        )}
+        {ready && (
+          <p className="text-sm text-muted-foreground" data-testid="first-run-telegram-ready">
+            {plugin.running ? t.firstRun.botRunning : t.firstRun.botStarting}
+          </p>
+        )}
+        {people.map(row => (
+          <div className="flex items-center gap-2 text-sm" data-testid="first-run-telegram-person" key={row.user}>
+            {row.approved ? (
+              <>
+                <Check aria-hidden className="text-primary" size={14} stroke={2.25} />
+                <span>{t.firstRun.letInDone(row.name)}</span>
+              </>
+            ) : (
+              <>
+                <span className="min-w-0 flex-1">{t.firstRun.letInWaits(row.name, row.code)}</span>
+                <button
+                  className="rounded border border-border-strong px-2 py-0.5 text-xs"
+                  data-testid="first-run-telegram-let-in"
+                  onClick={() => void approvePairing(row.code)}
+                  type="button"
+                >
+                  {t.firstRun.letIn}
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+        {error && <InlineError>{error}</InlineError>}
+      </section>
+      <Next done={letIn.length > 0} onDone={onDone} />
+    </>
+  )
+}
+
+/** Connections: GitHub through gh's own login in the browser, and Gmail and Calendar through gws,
+ * set up with Atlas in a conversation; each says who it is logged in as. */
+function ConnectionsStep({ onDone }: { onDone: (mark: Mark) => void }) {
+  const home = useStore($home)
+  const logins = useStore($logins)
+  const noKey = keyScreenShown(useStore($modelOptions), false, null)
+  const [code, setCode] = useState<null | { code: string; url: string }>(null)
+  const [error, setError] = useState<null | string>(null)
+  const github = logins?.find(row => row.service === 'github')
+  const google = logins?.find(row => row.service === 'google')
+
+  useEffect(() => {
+    void refreshLogins()
+  }, [])
+
+  const connectGithub = async () => {
+    setError(null)
+    const started = await logInToGithub()
+    if ('error' in started) {
+      setError(started.error)
+    } else {
+      setCode(started)
+    }
+  }
+
+  return (
+    <>
+      <section className="space-y-3 rounded-lg border border-border p-4" data-testid="first-run-github">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{t.firstRun.github}</p>
+            <p className="text-xs text-muted-foreground">{t.firstRun.githubIntro}</p>
+          </div>
+          {github?.logged_in ? (
+            <Connected account={github.account} service="github" />
+          ) : (
+            github?.installed && (
+              <button
+                className={PRIMARY}
+                data-testid="first-run-github-connect"
+                onClick={() => void connectGithub()}
+                type="button"
+              >
+                {t.firstRun.connect}
+              </button>
+            )
+          )}
+        </div>
+        {github && !github.installed && (
+          <p className="text-sm text-muted-foreground" data-testid="first-run-github-missing">
+            {t.firstRun.githubMissing}
+          </p>
+        )}
+        {code && !github?.logged_in && (
+          <div className="space-y-1 rounded-md bg-subtle p-3 text-sm">
+            <p>{t.firstRun.githubCode}</p>
+            <p className="font-mono text-lg tracking-widest select-all" data-testid="first-run-github-code">
+              {code.code}
+            </p>
+            <button
+              className="text-xs underline underline-offset-4"
+              onClick={() => {
+                window.open(code.url)
+              }}
+              type="button"
+            >
+              {t.firstRun.githubPage}
+            </button>
+          </div>
+        )}
+        {error && <InlineError>{error}</InlineError>}
+      </section>
+      <section className="space-y-3 rounded-lg border border-border p-4" data-testid="first-run-google">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{t.firstRun.google}</p>
+            <p className="text-xs text-muted-foreground">{t.firstRun.googleIntro}</p>
+          </div>
+          {google?.logged_in ? (
+            <Connected account={google.account} service="google" />
+          ) : (
+            <button
+              className={PRIMARY}
+              data-testid="first-run-google-set-up"
+              disabled={noKey}
+              onClick={() => {
+                // The agent leads gws's setup in a conversation; the first run waits on this step,
+                // a band away, and reads the logins again when it shows.
+                stepAway(home)
+                newConversation()
+                void send(t.firstRun.googlePrompt)
+              }}
+              type="button"
+            >
+              {t.firstRun.googleSetUp}
+            </button>
+          )}
+        </div>
+        {noKey && !google?.logged_in && <p className="text-xs text-muted-foreground">{t.firstRun.googleNoKey}</p>}
+      </section>
+      <button
+        className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        data-testid="first-run-check-again"
+        onClick={() => void refreshLogins()}
+        type="button"
+      >
+        {t.firstRun.checkAgain}
+      </button>
+      <Next done={Boolean(github?.logged_in || google?.logged_in)} onDone={onDone} />
+    </>
+  )
+}
+
+function Connected({ account, service }: { account: string; service: string }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1 text-sm" data-testid={`first-run-${service}-connected`}>
+      <Check aria-hidden className="text-primary" size={14} stroke={2.25} />
+      {t.firstRun.connectedAs(account)}
+    </span>
+  )
+}
+
+/** The band over the app while the first run waits on a step stepped away from. */
+export function FirstRunBand({ step }: { step: Step }) {
+  const home = useStore($home)
+
+  return (
+    <div
+      className="flex items-center gap-3 border-b border-border bg-subtle px-4 py-2 text-sm text-foreground"
+      data-testid="first-run-band"
+      role="status"
+    >
+      <span>{t.firstRun.away(t.firstRun.steps[step])}</span>
+      <button
+        className="font-medium underline"
+        data-testid="first-run-back"
+        onClick={() => {
+          stepAway(home, false)
+        }}
+        type="button"
+      >
+        {t.firstRun.awayBack}
+      </button>
+    </div>
+  )
+}
+
 /** "Bring your work": the executors' sessions of a window, the rest archived. */
 function WorkStep({ onDone }: { onDone: (mark: Mark) => void }) {
   const { executors } = useStore($workbench)
@@ -422,6 +710,10 @@ function Start({ onDone }: { onDone: (mark: Mark) => void }): ReactNode {
     </button>
   )
 }
+
+/** The Telegram plugin Atlas ships, and the secret its bot reads. */
+const TELEGRAM = 'telegram'
+const TELEGRAM_TOKEN = 'TELEGRAM_BOT_TOKEN'
 
 const PRIMARY =
   'shrink-0 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40'

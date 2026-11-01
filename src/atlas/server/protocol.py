@@ -1067,6 +1067,34 @@ class PairingForgetParams:
 
 
 @dataclass(frozen=True, slots=True)
+class ProgramLoginRow:
+    """A service Atlas reaches through a program logged in on the server's machine (step 18d)."""
+
+    #: `github` or `google`.
+    service: str
+    #: `gh` or `gws`.
+    program: str
+    #: The program is on the server's PATH.
+    installed: bool
+    logged_in: bool
+    #: Who it is logged in as, when the program says: the GitHub login, Google's e-mail.
+    account: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProgramLoginList:
+    logins: list[ProgramLoginRow]
+
+
+@dataclass(frozen=True, slots=True)
+class GithubCode:
+    """GitHub's one-time code, typed on `url` in the browser while `gh` waits."""
+
+    code: str
+    url: str
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationsChanged:
     #: The conversation that was made or moved, by a channel, or whose turn began or ended.
     conversation_id: str
@@ -2457,6 +2485,20 @@ METHODS: Mapping[str, Method] = {
             "Remove someone from a channel, waiting or let in.",
         ),
         Method(
+            "login.list",
+            Empty,
+            ProgramLoginList,
+            "Whether gh and gws are on the server's machine and logged in, as their own "
+            "`auth status` says. The owner's app only.",
+        ),
+        Method(
+            "login.github",
+            Empty,
+            GithubCode,
+            "Start gh's login in the browser and give the one-time code to type there; "
+            "logins.changed tells when it ends. The owner's app only.",
+        ),
+        Method(
             "provider.connect",
             ProviderConnectParams,
             ProviderConnected,
@@ -3121,6 +3163,12 @@ EVENTS: Mapping[str, Event] = {
             PluginsChanged,
             "A plugin was turned on, off or failed, or someone asked to pair; read plugin.list "
             "and pairing.list.",
+            conversation=False,
+        ),
+        Event(
+            "logins.changed",
+            Empty,
+            "gh's login in the browser ended, well or not; read login.list.",
             conversation=False,
         ),
         Event(

@@ -55,6 +55,7 @@ import type {
   PluginScreenRow,
   PluginSettingRow,
   PreviewPayload,
+  ProgramLoginRow,
   ProposalApproved,
   ProposalRow,
   ProviderConnected,
@@ -386,6 +387,9 @@ export class HomeSession {
   /** The screens of its plugins that are on (step 16m), which the app loads while it is on screen. */
   readonly $screens = atom<PluginScreenRow[]>([])
   readonly $pairings = atom<PairingRow[]>([])
+  /** gh's and gws's logins on the server's machine, for the first run's Connections; `null` until
+   * read. */
+  readonly $logins = atom<null | ProgramLoginRow[]>(null)
   /** What the server refused on the Plugins screen, said there. */
   readonly $pluginError = atom<null | string>(null)
   /** The home's MCP servers and its skills, for the Extensions screen; `null` until it read them. */
@@ -2203,6 +2207,11 @@ export class HomeSession {
     }
   }
 
+  async refreshLogins(): Promise<void> {
+    const { logins } = await this.client.call('login.list', {})
+    this.$logins.set(logins)
+  }
+
   /** A change on the Plugins screen; what the server refuses is said there, and the screen is read
    * again either way. */
   async actOnPlugins(act: (client: AtlasClient) => Promise<unknown>): Promise<boolean> {
@@ -2602,6 +2611,12 @@ export class HomeSession {
       return
     }
 
+    if (event.type === 'logins.changed') {
+      void this.refreshLogins().catch(() => undefined)
+
+      return
+    }
+
     if (event.type === 'plugins.changed') {
       void this.refreshPlugins().catch(() => undefined)
       // A plugin turned on or off changes which executors the workbench and the onboarding show;
@@ -2867,6 +2882,7 @@ export const $plugins = atom<PluginRow[]>([])
 /** The screens of the home on screen's plugins that are on (step 16m). */
 export const $screens = atom<PluginScreenRow[]>([])
 export const $pairings = atom<PairingRow[]>([])
+export const $logins = atom<null | ProgramLoginRow[]>(null)
 export const $pluginError = atom<null | string>(null)
 export const $mcpServers = atom<McpList | null>(null)
 export const $skills = atom<null | SkillRow[]>(null)
@@ -2960,6 +2976,7 @@ const MIRRORS: Mirror[] = [
   mirror($plugins, s => s.$plugins),
   mirror($screens, s => s.$screens),
   mirror($pairings, s => s.$pairings),
+  mirror($logins, s => s.$logins),
   mirror($pluginError, s => s.$pluginError),
   mirror($mcpServers, s => s.$mcpServers),
   mirror($skills, s => s.$skills),
@@ -3554,6 +3571,29 @@ export async function settingChoices(
 /** Change a plugin's setting; `null` goes back to its default. */
 export function setPluginSetting(name: string, setting: string, value: null | string): Promise<boolean> {
   return current().actOnPlugins(client => client.call('plugin.setting', { name, setting, value }))
+}
+
+/** Read gh's and gws's logins again, for the first run's Connections. */
+export function refreshLogins(): Promise<void> {
+  return current()
+    .refreshLogins()
+    .catch(() => undefined)
+}
+
+/**
+ * GitHub's Connect: gh's login starts on the server's machine and gives a one-time code, and its
+ * page opens in the system browser for the user to type it; `logins.changed` reads the logins
+ * again once the browser said yes. Gives the code, or why it could not start.
+ */
+export async function logInToGithub(): Promise<{ code: string; url: string } | { error: string }> {
+  try {
+    const { code, url } = await current().client.call('login.github', {})
+    window.open(url)
+
+    return { code, url }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 export function approvePairing(code: string): Promise<boolean> {

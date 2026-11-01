@@ -37,11 +37,13 @@ The warning comes only once, for the Setup: the app it installs is built on your
 
 ## The first time it opens
 
-The app opens on its first run: three steps, numbered on the left. Each one can be skipped, and **Go to Atlas** leaves at any point.
+The app opens on its first run: five steps, numbered on the left. Each one can be skipped, and **Go to Atlas** leaves at any point.
 
 1. **Model**: an API key from a model provider, OpenAI, Anthropic, Google Gemini or OpenRouter. Atlas checks the key without spending anything and keeps it in its encrypted vault.
 2. **Executors**: the coding agents found on this computer, Claude Code, Codex, the Gemini CLI and DeepSeek's. Turn on the ones you use; one not installed shows the command that installs it. With more than one account of a harness, add the others here: when one reaches its plan's limit, Atlas goes on in the next.
-3. **Bring your work**: choose the harnesses and how far back, the last 7, 30 or 90 days, or any time. Their sessions from then show in the **Executors** tab of the sidebar; the older ones wait under **Archived**. Nothing is copied, and the harnesses' own files are not touched.
+3. **Telegram**: talk to Atlas from your phone. Make a bot with @BotFather, paste its token, and send the bot a message: you show up on the step, and **Let in** lets you talk to Atlas from the chat. The [Telegram](/docs/guides/telegram/) guide has the rest.
+4. **Connections**: GitHub and Gmail with Calendar, which Atlas reaches through their own programs, `gh` and `gws`, each logged in on this computer. GitHub's **Connect** opens GitHub's page in your browser and shows the code to type there. Google's **Set up with Atlas** opens a conversation where Atlas walks you through `gws`'s setup; the step waits behind a band at the top, and **Back to it** shows whether it is connected.
+5. **Bring your work**: choose the harnesses and how far back, the last 7, 30 or 90 days, or any time. Their sessions from then show in the **Executors** tab of the sidebar; the older ones wait under **Archived**. Nothing is copied, and the harnesses' own files are not touched.
 
 Then start talking: each conversation can switch models. If you used Atlas before the first run existed and your coding agents have folders untouched for a month, Atlas offers **Bring your work** once, alone. **Settings**, then **General**, then **Open the first run again** brings the steps back.
 
