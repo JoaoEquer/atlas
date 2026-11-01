@@ -3334,9 +3334,14 @@ export const PLUGIN_GUIDE = 'https://atlasv4.com/docs/extending/plugins/'
 /** A new conversation with `/write-plugin ` in its box, for the user to say what the plugin should
  *  do: the skill Atlas ships writes it with them. */
 export function writePlugin(): void {
+  newConversationWith('/write-plugin ')
+}
+
+/** A new conversation with `text` in its box, for the user to finish and send. */
+export function newConversationWith(text: string): void {
   const session = current()
   session.newConversation()
-  session.$restored.setKey(DRAFT, '/write-plugin ')
+  session.$restored.setKey(DRAFT, text)
 }
 
 export function refreshProposals(): Promise<void> {

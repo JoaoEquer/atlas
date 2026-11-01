@@ -326,6 +326,20 @@ export const en = {
     switchTo: 'Switch to another home',
     zipFilter: 'Atlas backup'
   },
+  firstSteps: {
+    count: (done: number, all: number) => `${String(done)} of ${String(all)}`,
+    hide: 'Hide',
+    routinePrompt: 'Every Monday at 9am, remind me to review what I have for the week.',
+    start: 'Start',
+    tasks: {
+      account: 'Add a second account',
+      bot: 'Create a bot',
+      delegate: 'Hand a task to an executor',
+      routine: 'Schedule a routine',
+      telegram: 'Talk to Atlas on Telegram'
+    },
+    title: 'First steps'
+  },
   firstRun: {
     accounts: 'More than one account?',
     accountsIntro:

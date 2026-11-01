@@ -305,6 +305,20 @@ export const ptBR: Override<Messages> = {
     switchTo: 'Trocar de casa',
     zipFilter: 'Backup do Atlas'
   },
+  firstSteps: {
+    count: (done: number, all: number) => `${String(done)} de ${String(all)}`,
+    hide: 'Esconder',
+    routinePrompt: 'Toda segunda às 9h, me lembre de revisar o que tenho para a semana.',
+    start: 'Começar',
+    tasks: {
+      account: 'Adicionar uma segunda conta',
+      bot: 'Criar um bot',
+      delegate: 'Entregar uma tarefa a um executor',
+      routine: 'Agendar uma rotina',
+      telegram: 'Falar com o Atlas pelo Telegram'
+    },
+    title: 'Primeiros passos'
+  },
   firstRun: {
     accounts: 'Tem mais de uma conta?',
     accountsIntro:

@@ -37,6 +37,7 @@ import { ArchivedConversations } from './archived-list'
 import { BotsList } from './bots-list'
 import { Conversation } from './conversation-row'
 import { ExecutorsList } from './executors-list'
+import { FirstSteps } from './first-steps'
 import { HomeBar } from './home-bar'
 import { SearchField, SearchResults } from './list-search'
 import { RailEdge } from './rail-edge'
@@ -62,7 +63,8 @@ import { UpdateBar, UpdateStrip } from './update-bar'
  * The conversations, the latest activity first;
  * above them, while any wait, how many memory proposals there are (step 9b); and at the foot,
  * always, the home on screen with the others and what the app does with homes (step 10c),
- * with the app's update above it while there is one. The list is the conversations,
+ * with the app's update above it while there is one, and the first steps above that until they
+ * are done or hidden (step 18e). The list is the conversations,
  * the bots or the executors (step 16f), whose tab says
  * when one of their sessions waits for the user. Hidden (asked for by
  * the user on 16/10/2026), it leaves a strip that brings it back and still says when something
@@ -212,6 +214,7 @@ export function Sidebar() {
         {tab === 'bots' ? t.bots.tab : tab === 'executors' ? t.executors.tab : t.conversations.tab}
       </h2>
       {tab === 'bots' ? <BotsList /> : tab === 'executors' ? <ExecutorsList /> : <Conversations />}
+      <FirstSteps />
       <UpdateBar />
       <HomeBar />
       <RailEdge rail="sidebar" />

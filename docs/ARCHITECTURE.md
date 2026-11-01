@@ -1931,6 +1931,17 @@ Setup, a file that runs it, is step 18b (The Setup, below); signing is 18c.
   only marked, and never asked (decided with the user on 01/11/2026).
   It fills the window, without the sidebar. The title's last word stands out in the theme's own
   foreground against softer words, with no color of its own: the theme has none to spare.
+- **The first steps** (step 18e, asked for by the user on 01/11/2026): after the first run, a card
+  at the sidebar's foot with five tasks that teach Atlas by doing them: hand a task to an
+  executor, add a second account, talk to Atlas on Telegram, schedule a routine, create a bot.
+  Each is seen done in what the home already has (an executor session, an account on another's
+  base, someone let in on Telegram, a routine, a bot), and stays done once seen
+  (`store/first-steps.ts`, per home in the window's storage). The first not done is offered with
+  its **Start**: the executors tab, the first run's own step opened alone (it closes once done
+  instead of going on), a new conversation with a routine's words in its box, or the new bot's
+  dialog. The card waits for the home's lists, so nothing looks undone before they are read, and
+  goes once all five are done or it is hidden. A home from before it shows it too, with what it
+  already did counted.
 - **Archived means still since it was archived** (decided with the user on 01/11/2026): an executor's
   folder or session keeps when it was archived, and one that changed after that is listed again by
   itself, so a session resumed in a terminal is never left hidden. The lists of ids kept before

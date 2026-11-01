@@ -23,6 +23,9 @@ export interface FirstRun {
   /** Open, but stepped away from for a conversation it opened (Google's setup, which the agent
    * leads): the app shows, with a band back to the step. */
   away?: boolean
+  /** Opened on this step alone (a first step's Start, store/first-steps.ts): done or skipped, it
+   * closes instead of going on. */
+  only?: Step
 }
 
 const KEY = 'atlas.firstRun'
@@ -60,6 +63,11 @@ export function openFirstRun(home: null | string, again = false): void {
   update(home, run => (again ? { ...FRESH, open: true } : { ...run, open: true }))
 }
 
+/** Open it on one step alone, what was done kept: a first step's Start (store/first-steps.ts). */
+export function openStep(home: null | string, step: Step): void {
+  update(home, run => ({ ...run, away: false, only: step, open: true, step }))
+}
+
 export function showStep(home: null | string, step: Step): void {
   update(home, run => ({ ...run, step }))
 }
@@ -69,14 +77,18 @@ export function stepAway(home: null | string, away = true): void {
   update(home, run => ({ ...run, away }))
 }
 
-/** A step done or skipped, and the next one shown; after the last, the first run closes. */
+/** A step done or skipped, and the next one shown; after the last, or opened on it alone, the
+ * first run closes. */
 export function finishStep(home: null | string, step: Step, mark: Mark): void {
-  const next = STEPS[STEPS.indexOf(step) + 1]
-  update(home, run => ({
-    marks: { ...run.marks, [step]: mark },
-    open: next !== undefined,
-    step: next ?? 'model'
-  }))
+  update(home, run => {
+    const next = run.only ? undefined : STEPS[STEPS.indexOf(step) + 1]
+
+    return {
+      marks: { ...run.marks, [step]: mark },
+      open: next !== undefined,
+      step: next ?? 'model'
+    }
+  })
 }
 
 /** Whether the home has a first run of its own yet: begun, left, or offered. */
@@ -96,7 +108,7 @@ export function markOffered(home: null | string, offered: boolean): void {
 
 /** Closed before its end ("Go to Atlas"): what was done stays done. */
 export function closeFirstRun(home: null | string): void {
-  update(home, run => ({ ...run, away: false, open: false, step: 'model' }))
+  update(home, run => ({ ...run, away: false, only: undefined, open: false, step: 'model' }))
 }
 
 /** The window a "Bring your work" offers, in days; `null`, everything. */

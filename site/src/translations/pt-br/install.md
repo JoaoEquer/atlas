@@ -47,6 +47,8 @@ O app abre na primeira abertura: cinco etapas, numeradas à esquerda. Cada uma p
 
 Depois é só conversar: cada conversa pode trocar de modelo. Se você usava o Atlas antes de existir a primeira abertura e os seus agentes de código têm pastas paradas há um mês, o Atlas oferece **Trazer seu trabalho** uma vez, sozinho. **Configurações**, depois **Geral**, depois **Refazer a configuração** traz as etapas de volta.
 
+No pé da barra lateral, **Primeiros passos** lista cinco coisas para experimentar: entregar uma tarefa a um agente de código, adicionar uma segunda conta, falar com o Atlas pelo Telegram, agendar uma rotina e criar um bot. O que você já fez aparece marcado, **Começar** leva à próxima, e **Esconder** guarda o cartão de vez.
+
 ## Atualizar
 
 O app mostra um botão de atualizar quando há algo novo. Ou rode a mesma linha de novo, ou o Setup, ou digite:

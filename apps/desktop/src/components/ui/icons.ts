@@ -9,6 +9,7 @@ export {
   IconArchiveOff as ArchiveOff,
   IconArrowDown as ArrowDown,
   IconArrowLeft as ArrowLeft,
+  IconArrowRight as ArrowRight,
   IconArrowUp as ArrowUp,
   IconAsterisk as ClaudeCode,
   IconBrandVscode as VsCode,

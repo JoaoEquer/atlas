@@ -47,6 +47,8 @@ The app opens on its first run: five steps, numbered on the left. Each one can b
 
 Then start talking: each conversation can switch models. If you used Atlas before the first run existed and your coding agents have folders untouched for a month, Atlas offers **Bring your work** once, alone. **Settings**, then **General**, then **Open the first run again** brings the steps back.
 
+At the foot of the sidebar, **First steps** lists five things to try: hand a task to a coding agent, add a second account, talk to Atlas on Telegram, schedule a routine and create a bot. What you already did is ticked, **Start** takes you to the next one, and **Hide** puts the card away for good.
+
 ## Updating
 
 The app shows an update button when there is something new. Or run the same line again, or the Setup, or type:
