@@ -528,28 +528,30 @@ test('both sides open at the same width, and their edges drag them wider or narr
     await page.mouse.up()
   }
 
+  // Widths are polled: a rail takes its width a frame after the pointer moves, and on a busy
+  // machine that frame came after the read.
   // The same width on both sides.
-  expect(await width(nav)).toBe(288)
-  expect(await width(panel)).toBe(288)
+  await expect.poll(() => width(nav)).toBe(288)
+  await expect.poll(() => width(panel)).toBe(288)
 
   // The sidebar's edge drags right to widen it, the panel's left; a terminal or frame under the
   // pointer does not take the drag away.
   await drag('sidebar-edge', 100)
-  expect(await width(nav)).toBe(388)
+  await expect.poll(() => width(nav)).toBe(388)
   await drag('panel-edge', -120)
-  expect(await width(panel)).toBe(408)
+  await expect.poll(() => width(panel)).toBe(408)
   await expect(page.getByTestId('composer')).toBeVisible()
 
   // Dragged too far, a rail stops where the conversation keeps its minimum, and at its own.
   await drag('panel-edge', -900)
-  expect(await conversation()).toBeGreaterThanOrEqual(383)
-  expect(await width(panel)).toBeLessThanOrEqual(640)
+  await expect.poll(conversation).toBeGreaterThanOrEqual(383)
+  await expect.poll(() => width(panel)).toBeLessThanOrEqual(640)
   await drag('sidebar-edge', -900)
-  expect(await width(nav)).toBe(224)
+  await expect.poll(() => width(nav)).toBe(224)
 
   // A double click puts an edge back; a width dragged stays for next time, in the window's storage.
   await page.getByTestId('sidebar-edge').dblclick()
-  expect(await width(nav)).toBe(288)
+  await expect.poll(() => width(nav)).toBe(288)
   const kept = await page.evaluate(() => [
     localStorage.getItem('atlas.sidebarWidth'),
     localStorage.getItem('atlas.panelWidth')
@@ -562,10 +564,10 @@ test('both sides open at the same width, and their edges drag them wider or narr
   await drag('sidebar-edge', 200)
   await drag('panel-edge', -200)
   await page.setViewportSize({ height: 820, width: 1000 })
-  expect(await conversation()).toBeGreaterThanOrEqual(383)
-  expect(await width(nav)).toBeGreaterThanOrEqual(224)
-  expect(await width(panel)).toBeGreaterThanOrEqual(224)
-  expect(await width(nav)).toBeLessThan(488)
+  await expect.poll(conversation).toBeGreaterThanOrEqual(383)
+  await expect.poll(() => width(nav)).toBeGreaterThanOrEqual(224)
+  await expect.poll(() => width(panel)).toBeGreaterThanOrEqual(224)
+  await expect.poll(() => width(nav)).toBeLessThan(488)
 })
 
 test('a first run offers the harnesses installed here, turned on with consent right there', async () => {
