@@ -14,7 +14,7 @@ from atlas.models import AssistantMessage, UserMessage
 from atlas.server import NOT_FOUND
 from fake_model import FakeModelServer, FakeReply
 from model_support import Connect
-from server_support import AtlasServer, Serve
+from server_support import WAIT, AtlasServer, Serve
 
 NAMING = "Your job is naming chat sessions."
 
@@ -73,7 +73,7 @@ def test_a_title_model_never_replaces_a_name_given_while_it_wrote(
         conversation = client.result("conversation.create")["conversation_id"]
         client.result("conversation.send", {"conversation_id": conversation, "text": "lisbon?"})
         # The title model is asked, and the user names the conversation before it answers.
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + WAIT
         while not any(NAMING in json.dumps(body) for body in fake.bodies("/v1/messages")):
             assert time.monotonic() < deadline, "the title model was never asked"
             time.sleep(0.05)

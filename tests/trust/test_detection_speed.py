@@ -5,7 +5,7 @@ import time
 import pytest
 
 from atlas.trust import detect_dangerous_command, detect_hardline_command
-from atlas.trust.detection import deny_command_variants
+from process_support import in_a_fresh_interpreter
 
 
 @pytest.mark.parametrize(
@@ -32,20 +32,24 @@ def test_a_write_to_a_long_dotted_env_name_is_still_flagged() -> None:
 
 @pytest.mark.parametrize(
     "script",
+    # Python expressions, built in the fresh interpreter: the texts are too long for a command line.
     [
-        "x=1\n" * 2000,
-        'y="$(basename "$(pwd)")"\n' * 600,
-        '"$( a ' * 400,
+        "'x=1\\n' * 8000",
+        """'y="$(basename "$(pwd)")"\\n' * 2400""",
+        """'"$( a ' * 800""",
     ],
     ids=["assignment-lines", "nested-substitutions", "unclosed-substitutions"],
 )
 def test_a_long_script_is_read_in_bounded_time(script: str) -> None:
-    # Before the fix: 15, 17 and 11 seconds, read on the server's event loop, so the whole server
-    # waited. Now well under a second, a few with coverage measured.
-    started = time.perf_counter()
-    for _ in deny_command_variants(script):
-        pass
-    assert time.perf_counter() - started < 6
+    # Read on the server's event loop, a quarter of these took 15, 17 and 11 seconds before the
+    # fix, and the reading grew with the square of the length: minutes at this size. Now under two
+    # seconds each, timed in a fresh interpreter, away from coverage and the other tests.
+    in_a_fresh_interpreter(f"""
+from atlas.trust.detection import deny_command_variants
+
+for _ in deny_command_variants({script}):
+    pass
+""")
 
 
 @pytest.mark.parametrize(

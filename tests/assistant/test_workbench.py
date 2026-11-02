@@ -170,6 +170,17 @@ async def _idle(bench: Bench, instance_id: str) -> None:
     raise AssertionError("The instance kept working.")
 
 
+async def _saying(bench: Bench, instance_id: str, text: str) -> None:
+    """Wait until the harness says *text*: a steer sent then lands mid-turn. A fixed wait guessed
+    how long the harness takes to start, and on a machine busy with the other test processes the
+    guess landed before it."""
+    for _ in range(1500):
+        if ("said", text) in bench.activity(instance_id):
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError(f"The harness never said {text!r}.")
+
+
 def test_an_instance_of_the_users_takes_prompts_steers_and_asks_on_its_card(
     bench: Callable[[Screen | None], Bench],
 ) -> None:
@@ -188,7 +199,7 @@ def test_an_instance_of_the_users_takes_prompts_steers_and_asks_on_its_card(
     async def scenario() -> tuple[str, bool, bool]:
         run = await b.workbench.start("claude-code", site)
         first = await b.workbench.prompt(run.id, "Fix the header.")
-        await asyncio.sleep(0.3)
+        await _saying(b, run.id, "Looking at the header.")
         steered = await b.workbench.prompt(run.id, "Keep the logo.")
         await _idle(b, run.id)
         await b.assistant.close()
@@ -256,7 +267,7 @@ def test_a_prompt_and_a_steer_take_the_files_the_user_attached(
     async def scenario() -> tuple[str, str]:
         run = await b.workbench.start("claude-code", site)
         await b.workbench.prompt(run.id, "What is wrong here?", (shot,))
-        await asyncio.sleep(0.3)
+        await _saying(b, run.id, "Looking.")
         await b.workbench.prompt(run.id, "", (notes,))
         await _idle(b, run.id)
         blind = await b.workbench.start("blind", site)

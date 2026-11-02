@@ -1027,6 +1027,12 @@ has.
   `tests/conftest.py` also points the process's `ATLAS_HOME` at one for every test, as a guard.
 - `tests/docker/` runs only against a built image named in `ATLAS_TEST_IMAGE` (CI's docker job, or
   by hand); without it the tests are skipped.
+- The tests run side by side: pytest on every core (`pytest-xdist`; `-n0` runs them in one process,
+  for a debugger) and the end-to-end files on several workers. So each test owns its home, its
+  folders and its ports, and what holds a key of the whole system runs alone. A test waits for
+  the thing it needs, never for a guess at how long it takes: the machine is shared with the
+  other tests. A test that times the code runs it in a fresh interpreter
+  (`tests/process_support.py`), away from coverage, with a limit far above the time it takes.
 
 ## Container — decided 2026-10-11
 

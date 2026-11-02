@@ -107,6 +107,8 @@ dev = [
     "pyright==1.1.414",       # strict typing; ty replaces it once it reaches 1.0
     "pytest==9.1.1",
     "pytest-cov==7.1.0",      # coverage floor
+    "pytest-timeout==2.5.0",  # a test that hangs fails instead of holding the run
+    "pytest-xdist==3.8.0",    # the tests on every core
     "ruff==0.16.10",          # lint and format
     "types-pyyaml==6.0.12.20260906",  # PyYAML's types, for pyright
     "atlas-agent[ddgs,mcp,anthropic,terminal,deepseek]",  # the tests prove every extra
@@ -537,7 +539,10 @@ testpaths = ["tests"]
 pythonpath = ["tests"]
 # The coverage is measured by folder, not by package: a plugin Atlas ships is imported under a
 # name of its own (`atlas_plugin_<name>`), as every plugin is, and is counted all the same.
-addopts = "--import-mode=importlib --strict-markers --cov=src/atlas --cov-report=term-missing --cov-fail-under=90"
+# The tests run on every core (`-n0` runs them in this process, for a debugger), and a test that
+# hangs fails after five minutes instead of holding the run.
+addopts = "--import-mode=importlib --strict-markers -n auto --cov=src/atlas --cov-report=term-missing --cov-fail-under=90"
+timeout = 300
 markers = [
     "offered_executors: the plugins Atlas ships that are off are looked at, as at a real start",
 ]

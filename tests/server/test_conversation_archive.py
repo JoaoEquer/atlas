@@ -17,7 +17,7 @@ from atlas.secrets import Vault
 from atlas.server import NOT_FOUND
 from fake_model import FakeModelServer, FakeReply
 from model_support import Connect
-from server_support import AtlasServer, Client, Serve
+from server_support import WAIT, AtlasServer, Client, Serve
 
 #: JSON-RPC's invalid params: what the server answers a request it refuses.
 INVALID_PARAMS = -32602
@@ -105,7 +105,7 @@ def test_a_conversation_whose_turn_runs_is_not_archived(
     with server.client() as client:
         conversation = client.result("conversation.create")["conversation_id"]
         client.result("conversation.send", {"conversation_id": conversation, "text": "Take time"})
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + WAIT
         while not server.gateway.assistant.running(conversation):
             assert time.monotonic() < deadline, "the turn never started"
             time.sleep(0.05)

@@ -17,7 +17,7 @@ import pytest
 from atlas.plugins import Capabilities, Executor, UpdateSource
 from atlas.server.updates import FRESH, Newest, UpdateError, command, newer, newest, shown
 from claude_code_support import claude_code
-from server_support import Serve
+from server_support import WAIT, Serve
 
 TAGS = {"latest": "2.1.316", "stable": "2.1.309"}
 
@@ -116,7 +116,7 @@ def test_the_row_offers_the_newer_version_and_the_owners_click_updates_it(
         executors={"claude-code": executor}, update_transport=httpx2.MockTransport(_registry)
     )
     with server.client() as client:
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + WAIT
         row: dict[str, Any] = {}
         while time.monotonic() < deadline:
             [row] = client.result("workbench.list")["executors"]

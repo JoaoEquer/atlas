@@ -29,7 +29,7 @@ from atlas.tools import system_shell
 from claude_code_support import FAKE, claude_code
 from fake_model import FakeCall, FakeModelServer, FakeReply
 from model_support import Connect
-from server_support import Client, Serve
+from server_support import WAIT, Client, Serve
 
 CHAT = "/v1/chat/completions"
 
@@ -928,7 +928,7 @@ def test_every_client_hears_a_turn_begin_and_end_and_the_list_says_which_runs(
         ended = sidebar.event("conversations.changed")["payload"]
         assert ended == {"conversation_id": conversation, "status": "answered", "title": ""}
         client.event("message.complete")
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + WAIT
         while server.gateway.assistant.running(conversation):
             assert time.monotonic() < deadline, "the turn never ended"
             time.sleep(0.05)
@@ -968,7 +968,7 @@ def test_the_curator_is_asked_while_the_server_runs(serve: Serve, home: Home) ->
     moments = [utc_now()]
     serve(housekeeping_seconds=0.05, clock=lambda: moments[-1])
     moments.append(moments[0] + timedelta(hours=3))  # two idle hours went by
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + WAIT
     database = sqlite3.connect(home.database_file)
     try:
         while not database.execute("SELECT count(*) FROM skills_curator_runs").fetchone()[0]:
