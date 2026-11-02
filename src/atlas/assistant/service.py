@@ -164,6 +164,7 @@ from atlas.models import (
     ToolResult,
     ToolStatus,
     UserMessage,
+    load_sdks,
     sees_images,
 )
 from atlas.plugins import Executor, LoadedCommand, LoadedReader, LoadedTool, Transcript
@@ -616,6 +617,7 @@ class Assistant:
             more=lambda: [bot_library(self._shared, bot) for bot in bots.list()],
         )
         self._mcp_start: asyncio.Task[None] | None = None
+        self._sdks: asyncio.Task[None] | None = None
         self._open: dict[str, OpenConversation] = {}
 
     @property
@@ -849,6 +851,7 @@ class Assistant:
         """Deliver what subagents of an earlier process left, and connect the user's MCP servers
         in the background; their tools join the conversations as they arrive. Needs a running
         event loop."""
+        self._sdks = asyncio.create_task(asyncio.to_thread(load_sdks))
         self.subagents.recover()
         self._forget_account_tokens()
         ended = self._shared.instance_store.abandon_running(self.clock())
@@ -893,6 +896,8 @@ class Assistant:
             await conversation.close()
         if self.browser is not None:
             await self.browser.close()
+        if self._sdks is not None:
+            await asyncio.gather(self._sdks, return_exceptions=True)
         if self._mcp_start is not None:
             self._mcp_start.cancel()
             await asyncio.gather(self._mcp_start, return_exceptions=True)

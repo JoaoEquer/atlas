@@ -69,7 +69,7 @@ from atlas.models.model import (
     usage_report,
 )
 from atlas.models.service import DEFAULT_RETRIES, SILENCE_LIMIT, ModelClient, Models
-from atlas.models.store import SCHEMA, CallLedger, load_catalog
+from atlas.models.store import SCHEMA, CallLedger, load_catalog, load_sdks
 
 __all__ = [
     "DEFAULT_EFFORT",
@@ -137,6 +137,7 @@ __all__ = [
     "clamp_effort",
     "default_effort",
     "load_catalog",
+    "load_sdks",
     "make_usage",
     "native_tool_search",
     "parse_catalog",
