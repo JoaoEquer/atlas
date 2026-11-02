@@ -182,16 +182,8 @@ ${options.config}
     )
   }
 
-  options.setup?.(home, model)
-
-  for (const name of options.homes ?? []) {
-    atlas(home, 'home', 'create', name, '--clone')
-  }
-
   const claude = options.environment?.CLAUDE_CONFIG_DIR ?? path.join(root, 'claude')
-  // Codex will not start on a folder that is not there.
   const codex = options.environment?.CODEX_HOME ?? path.join(root, 'codex')
-  await mkdir(codex, { recursive: true })
   const gemini = options.environment?.GEMINI_CLI_HOME ?? path.join(root, 'gemini')
   const dsh = options.environment?.DSH_HOME ?? path.join(root, 'dsh')
   const environment = {
@@ -201,7 +193,23 @@ ${options.config}
     GEMINI_CLI_HOME: gemini,
     ...options.environment
   }
-  const { app, page } = await openApp(root, home, environment, options.lang, options.chromium)
+
+  // Until the app is up, a failure (Electron not starting, a command that fails) stops the fake
+  // model here: no test holds it yet, and its process kept the folder it ran from.
+  let opened: { app: ElectronApplication; page: Page }
+  try {
+    options.setup?.(home, model)
+    for (const name of options.homes ?? []) {
+      atlas(home, 'home', 'create', name, '--clone')
+    }
+    // Codex will not start on a folder that is not there.
+    await mkdir(codex, { recursive: true })
+    opened = await openApp(root, home, environment, options.lang, options.chromium)
+  } catch (error) {
+    model.stop()
+    throw error
+  }
+  const { app, page } = opened
 
   return {
     app,
