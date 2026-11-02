@@ -35,6 +35,7 @@ call, unless answered for the conversation or always.
 """
 
 import asyncio
+import codecs
 import fnmatch
 import json
 import logging
@@ -187,21 +188,14 @@ class ApprovalGate:
         self, command: str, cwd: str | None = None, *, tool: str = COMMAND_TOOL
     ) -> str | None:
         seen = fold_atlas_home(command, str(self._home)) if self._home is not None else command
-        floor = self._floor(seen)
+        floor, outward = await asyncio.to_thread(self._read_command, seen, command, cwd)
         if floor is not None:
             return floor
-        outward = self._outward(seen)
-        if outward is None and self._resolve is not None:
-            for text in script_texts(command, self._resolve, cwd):
-                outward = self._outward(text)
-                if outward is not None:
-                    outward += " (in a script the command runs)"
-                    break
         if outward is not None:
             return await self._ask_outward(command, outward, tool)
         if self.auto_mode:
             return None
-        flagged, _, reason = detect_dangerous_command(seen)
+        flagged, _, reason = await asyncio.to_thread(detect_dangerous_command, seen)
         if not flagged or reason is None or self._granted(reason):
             return None
         approver = self._approver
@@ -232,6 +226,23 @@ class ApprovalGate:
             return None
         # The breaker counts the guardian's denials, not the user's.
         return _refused(answer, command=True, more=breaker(self._denials))
+
+    def _read_command(
+        self, seen: str, command: str, cwd: str | None
+    ) -> tuple[str | None, str | None]:
+        """The floor's refusal, or else why the command or a script it runs is outward. Run off
+        the event loop: reading a long text as shell takes its time, and the whole server waited
+        on it."""
+        floor = self._floor(seen)
+        if floor is not None:
+            return floor, None
+        outward = self._outward(seen)
+        if outward is None and self._resolve is not None:
+            for text in script_texts(command, self._resolve, cwd):
+                outward = self._outward(text)
+                if outward is not None:
+                    return None, f"{outward} (in a script the command runs)"
+        return None, outward
 
     def _floor(self, command: str) -> str | None:
         hardline, why = detect_hardline_command(command)
@@ -491,7 +502,21 @@ def script_texts(command: str, resolve: Callable[[str], Path], cwd: str | None =
             try:
                 if not path.is_file() or path.stat().st_size > SCRIPT_BYTES:
                     continue
-                texts.append(path.read_text(encoding="utf-8", errors="replace"))
+                text = _script_text(path.read_bytes())
             except OSError:
                 continue
+            if text is not None:
+                texts.append(text)
     return texts
+
+
+def _script_text(data: bytes) -> str | None:
+    """A file's bytes as a script's text, or None for a program: a NUL byte is never in a script
+    but is all over an executable, whose bytes read as shell kept the server's loop busy for
+    minutes (`& 'C:/.../python.exe' run.py`, 01/11/2026). Windows PowerShell 5.1's `Out-File`
+    writes UTF-16 with a byte order mark, and is read as such, not passed over."""
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return data.decode("utf-16", errors="replace")
+    if b"\0" in data:
+        return None
+    return data.decode("utf-8-sig", errors="replace")

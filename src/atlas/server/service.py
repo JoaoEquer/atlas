@@ -1325,12 +1325,9 @@ class Gateway:
 
     async def _check_command(self, connection: Connection, params: CommandParams) -> CommandCheck:
         """The trust gate's own detection, before a ▶ runs a command (step 16f): what is
-        blocked always and what is dangerous both ask, the user deciding."""
-        hard, reason = detect_hardline_command(params.command)
-        if hard:
-            return CommandCheck(True, reason or "")
-        dangerous, _, description = detect_dangerous_command(params.command)
-        return CommandCheck(dangerous, description or "")
+        blocked always and what is dangerous both ask, the user deciding. Off the event loop:
+        reading a long block as shell takes its time."""
+        return await asyncio.to_thread(_command_check, params.command)
 
     async def _interrupt(self, connection: Connection, params: ConversationRef) -> Interrupted:
         if not self.assistant.running(params.conversation_id):
@@ -3181,6 +3178,14 @@ def _route_of(found: RouteView) -> SessionRouteRow:
 def _accounts_of(listed: AccountList) -> ExecutorAccounts:
     rows = [AccountRow(**dump(view)) for view in listed.accounts]
     return ExecutorAccounts(listed.executor, rows, listed.can_add, listed.failover, listed.compact)
+
+
+def _command_check(command: str) -> CommandCheck:
+    hard, reason = detect_hardline_command(command)
+    if hard:
+        return CommandCheck(True, reason or "")
+    dangerous, _, description = detect_dangerous_command(command)
+    return CommandCheck(dangerous, description or "")
 
 
 def _command_row(view: BackgroundCommand) -> CommandRow:
