@@ -33,7 +33,7 @@ uv run deptry src          # dependency hygiene
 uv run pytest              # tests on every core, with the coverage floor (`-n0`: one process)
 uv run atlas serve         # run the server on 127.0.0.1:18790
 docker compose up --build  # run in a container
-docker build -t atlas:local . && ATLAS_TEST_IMAGE=atlas:local uv run pytest tests/docker --no-cov
+docker build -t atlas:local . && ATLAS_TEST_IMAGE=atlas:local uv run pytest tests/docker --no-cov -n0
                            # the image's tests: an empty container, a key, a conversation
 uv run python scripts/gen_protocol.py   # the app's TypeScript protocol, after a protocol change
 uv run python scripts/gen_docs.py       # the documentation's commands and settings pages,

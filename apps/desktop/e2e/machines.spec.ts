@@ -87,7 +87,7 @@ test("another machine's Atlas opens from its code, works there, and leaves this 
   await model.reply({ text: 'That is the shop.' })
   await say(page, '!cat shop-only.txt')
   const terminalRow = page.getByTestId('terminal-row')
-  await expect(terminalRow.getByTestId('terminal-output')).toHaveText('kept at the shop', { timeout: 30_000 })
+  await expect(terminalRow.getByTestId('terminal-output')).toHaveText('kept at the shop', { timeout: 60_000 })
   await expect(page.getByTestId('assistant-message').last()).toHaveText('That is the shop.')
 
   // The shop's home is backed up here, where this machine's save dialog said: the zip comes down

@@ -117,14 +117,10 @@ def test_a_fresh_home_is_built_served_and_left_as_declared(tmp_path: Path) -> No
     assert any(json.loads(line)["msg"] == "Serving." for line in log_lines)
 
     # The database is in WAL mode and has its ledger.
-    database = sqlite3.connect(home / "atlas.db")
-    try:
-        assert database.execute("PRAGMA journal_mode").fetchone() == ("wal",)
-        assert database.execute(
-            "SELECT name FROM sqlite_master WHERE name = 'home_migrations'"
-        ).fetchone() == ("home_migrations",)
-    finally:
-        database.close()
+    assert _read_once_released(home / "atlas.db", "PRAGMA journal_mode") == ("wal",)
+    assert _read_once_released(
+        home / "atlas.db", "SELECT name FROM sqlite_master WHERE name = 'home_migrations'"
+    ) == ("home_migrations",)
 
     # The skills Atlas ships were copied into the library when it started.
     assert (home / "skills" / "gws-gmail" / "SKILL.md").is_file()

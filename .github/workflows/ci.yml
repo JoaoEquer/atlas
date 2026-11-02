@@ -175,8 +175,9 @@ jobs:
       - run: uv sync --frozen
       - name: Build
         run: docker build -t atlas:ci .
+      # One process: the tests share one stack, and one reads what an earlier one left in it.
       - name: The image's tests
-        run: uv run pytest tests/docker --no-cov
+        run: uv run pytest tests/docker --no-cov -n0
         env:
           ATLAS_TEST_IMAGE: atlas:ci
       # Step 15: the app's SSH tunnel against a real sshd beside Atlas, on the image just built.

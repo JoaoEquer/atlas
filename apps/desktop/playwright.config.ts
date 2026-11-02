@@ -14,6 +14,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   forbidOnly: Boolean(process.env.CI),
   fullyParallel: false,
+  globalSetup: './e2e/global-setup.ts',
   projects: [
     { name: 'app', testIgnore: ALONE },
     { name: 'alone', testMatch: ALONE, dependencies: ['app'] }
