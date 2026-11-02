@@ -209,6 +209,23 @@ STOPPED = _cases(
         'sh -c ":(){ :|:& };:"',
         "eval ':(){ :|:& };:'",
     ],
+    # The shell runs a program behind assignments or a wrapper all the same.
+    behind_assignments=[
+        "FOO=1 rm -rf /",
+        'FOO="a b" rm -rf /',
+        "X=1 mkfs.ext4 /dev/sda",
+        "A=1 B=2 shutdown now",
+        "cd /tmp; X=1 reboot",
+        "(X=1 reboot)",
+        "X=1 sudo rm -rf ~",
+        "FOO=1 dd if=/dev/zero of=/dev/sda",
+    ],
+    behind_a_wrapper=[
+        "timeout 5 rm -rf /",
+        "nice rm -rf /",
+        "nice -n 10 reboot",
+        "ionice -c 3 mkfs.ext4 /dev/sda",
+    ],
 )
 
 
@@ -334,6 +351,13 @@ LET_THROUGH = _cases(
         "npm run build",
         "sudo apt update",
         "curl https://example.com | head",
+    ],
+    # An assignment's value is data, and `command -v` only says where a name resolves.
+    floor_word_as_a_value=[
+        'FOO="reboot" ls',
+        "X=1 ls /",
+        'git commit -m "X=1 reboot"',
+        "command -v reboot",
     ],
 )
 

@@ -1237,6 +1237,16 @@ def _with_start_marks(text: str, mark: str = "\n") -> str:
     return _splice(text, [(at, at, mark) for at in cuts])
 
 
+def _with_program_marks(text: str) -> str:
+    """Put a blank and a newline before every program word that is not at a command start: one
+    after assignments or a wrapper. The blank keeps a trailing backslash from joining the line."""
+    starts = set(_command_starts(text))
+    cuts = sorted({start for start, _, _ in _program_words(text)} - starts)
+    if not cuts:
+        return text
+    return _splice(text, [(at, at, " \n") for at in cuts])
+
+
 def _unwrap_quoted_newlines(text: str) -> str:
     """Turn the newlines inside quotes into blanks.
 
@@ -1820,6 +1830,12 @@ def _variants(command: str) -> Iterator[str]:
     faithful = _plain_spelling(_with_start_marks(_unwrap_quoted_newlines(command), " \n"))
     if unseen(faithful):
         yield faithful
+    # A program behind assignments or a wrapper runs all the same (`X=1 reboot`, `timeout 5 rm
+    # -rf /`), yet the rules anchor on a command start: each program word is marked as one.
+    # Marked as written, like the starts above, so a quoted assignment stays one word.
+    programs = _plain_spelling(_with_program_marks(_unwrap_quoted_newlines(command)))
+    if unseen(programs):
+        yield programs
     yield from _with_program_words_spelled_out(plain, unseen)
 
 
