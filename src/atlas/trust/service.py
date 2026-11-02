@@ -107,6 +107,8 @@ WRITE_TOOLS = frozenset({"write_file", "edit_file"})
 TARGET_CHARS = 2_000
 
 _logger = logging.getLogger("atlas.trust")
+# Why a command whose script nests past what the reader can follow is refused.
+_TOO_DEEP = "a script nested too deeply to read"
 
 
 class ApprovalGate:
@@ -233,16 +235,23 @@ class ApprovalGate:
         """The floor's refusal, or else why the command or a script it runs is outward. Run off
         the event loop: reading a long text as shell takes its time, and the whole server waited
         on it."""
-        floor = self._floor(seen)
-        if floor is not None:
-            return floor, None
-        outward = self._outward(seen)
-        if outward is None and self._resolve is not None:
-            for text in script_texts(command, self._resolve, cwd):
-                outward = self._outward(text)
-                if outward is not None:
-                    return None, f"{outward} (in a script the command runs)"
-        return None, outward
+        try:
+            floor = self._floor(seen)
+            if floor is not None:
+                return floor, None
+            outward = self._outward(seen)
+            if outward is None and self._resolve is not None:
+                for text in script_texts(command, self._resolve, cwd):
+                    outward = self._outward(text)
+                    if outward is not None:
+                        return None, f"{outward} (in a script the command runs)"
+            return None, outward
+        except RecursionError:
+            # Substitutions nested past the reader's stack, which no real script has. A command
+            # that long is refused by the parser's limit first; a script's text is not, and the
+            # error ended the turn. Refused the same way instead.
+            _logger.warning("Hardline block: %s", _TOO_DEEP)
+            return hardline_message(_TOO_DEEP, parser_limit=False), None
 
     def _floor(self, command: str) -> str | None:
         hardline, why = detect_hardline_command(command)
