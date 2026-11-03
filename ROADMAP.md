@@ -4094,7 +4094,7 @@ A e B rodam locais e não esperam a nuvem.
 | **B. Gatilhos e metas** | gatilhos por evento (e-mail, agenda, webhook), metas duradouras com progresso para os bots, um laço de atenção que sabe ficar quieto, e o registro do que cada um fez sem ninguém olhando (decidido em 03/11: só os eventos no núcleo, o resto em plugins) |
 | **C. Atlas Cloud** | o passo 20, abaixo |
 | **D. Conectores** | o login de um clique, um intermediário de apps no lugar do MCP à mão, e o índice dos dados conectados (decidido em 03/11: a loja aberta e o ajuste do login; o intermediário e o índice em plugins) |
-| **E. Canais** | SMS, ligação, o app no celular e o bot chamado pelo nome num canal de equipe |
+| **E. Canais** | SMS, ligação, o app no celular e o bot chamado pelo nome num canal de equipe (decidido em 03/11: o app é um PWA depois do relé; todo canal é plugin, inclusive o Telegram) |
 | **F. Equipes** | login único e memória da equipe, só se o Atlas Cloud mirar empresas |
 
 #### A base A, a workspace (desenhada em 01/11, decidida em 03/11, passo 21)
@@ -4372,6 +4372,53 @@ cada laço roda um harness dentro de um repositório.
   plugin.
 - Os termos novos (modelo de rotina, placar) entram no `docs/GLOSSARY.md` antes do código.
 
+#### A base E, os canais (estudada e decidida em 03/11)
+
+- **Os pares, estudados em 03/11:** os apps de celular dos agentes pessoais se pareiam com a máquina
+  por QR, e as notificações passam por um servidor do fornecedor (o push do Android e do iPhone
+  pede um servidor com credencial); um harness deixa o celular comandar a sessão do computador pelo
+  servidor dele. A ligação telefônica chega à OpenAI por um número da Twilio, e a OpenAI avisa o
+  servidor por webhook, que precisa de endereço público. O bot do Slack recebe as mensagens por uma
+  conexão de saída (Socket Mode), sem endereço público; desde 2025 o Slack limita a leitura do
+  histórico de apps de terceiros fora da loja dele a 1 pedido por minuto, e o app criado pelo
+  próprio usuário no workspace dele fica de fora do limite.
+- **Decidido pelo usuário em 03/11:**
+  - **O app no celular é um PWA com poucas funções, e só depois do relé** (passo 20), para não
+    precisar do Tailscale. A notificação vem pelo relé.
+  - **Todo canal é plugin, inclusive o Telegram,** fora da instalação (A poda do núcleo, abaixo).
+    O telefone (sobre o plugin `voice`), o WhatsApp e o Slack vêm como plugins quando fizerem
+    falta, os dois primeiros depois do relé; nenhum foi desenhado ainda.
+
+#### A poda do núcleo (pedida e decidida em 03/11, passo 26)
+
+O usuário quer podar o núcleo e formalizar o que foi construído: lapidar o Atlas antes de crescer.
+Em 03/11 o núcleo tinha uns 62 mil linhas de Python, e a instalação trazia junto 8.860 linhas de
+plugins embutidos (os quatro executores, 6.942; o `voice`, 1.297; o `telegram`, 620) e as 13 skills
+do gh e do gws.
+
+- **A regra do núcleo** (decidida pelo usuário em 03/11, escrita no `docs/ARCHITECTURE.md`):
+  - **o núcleo são as capacidades do próprio agente:** conversar, ler e escrever arquivos, rodar
+    comandos, lembrar, aprender skills, agendar e reagir a eventos, delegar (o contrato), **usar o
+    navegador e usar o computador**, e as peças que as seguram (confiança, servidor, casa, loja,
+    cliente MCP, SDK). Uma capacidade é do núcleo mesmo quando roda sobre um programa de fora (o
+    Chrome, o motor de tela): trocar o programa não tira a capacidade do agente;
+  - **é plugin a ligação com um serviço, uma conta ou um programa específico:** um canal (o
+    Telegram), um harness de fora (os executores), uma API de terceiros (a voz pela OpenAI), o
+    GitHub e o Google pelo terminal;
+  - os adaptadores de modelo ficam no núcleo: sem modelo não há conversa.
+- **O navegador e o uso do computador são nativos** (pelo usuário: "partes que precisamos trabalhar
+  muito bem ainda"). O passo 14c, que decidiu o motor de tela como MCP em 20/10, é revisto por
+  esta regra quando chegar.
+- **Saem da instalação para a loja, como itens oficiais:** os quatro executores, o `voice`, o
+  `telegram`, e o gh e o gws (passo 24). **Ficam embutidas** (pelo usuário) as skills `atlas`, a
+  documentação do Atlas sobre si, e `write-plugin`, que é o próprio SDK.
+- **Como fica (proposto):** os plugins oficiais continuam no repositório do Atlas, numa pasta
+  própria, testados no mesmo CI, e a loja os oferece fixados num commit; a primeira abertura (18d)
+  instala da loja o que o usuário escolhe; a atualização instala da loja o que já estava ligado, sem
+  perder dado nem configuração.
+- **Na linha:** antes do 21 (pelo usuário), porque cada passo construído antes dela põe mais coisa
+  no núcleo.
+
 ## Assuntos de desenho ainda abertos
 
 A arquitetura do código foi decidida em 07/10 e está em `docs/ARCHITECTURE.md`: laço próprio sem
@@ -4409,6 +4456,10 @@ servidor em Starlette.
 
 12. Os conectores e a loja. Decidido em 03/11 (A base D, a loja aberta, acima): uma fonte pública
     por tipo lida direto, sem revisão; o gh e o gws como plugins; o CIMD; o Google como hoje.
+
+13. Os canais e o núcleo. Decidido em 03/11 (A base E e A poda do núcleo, acima): o app no
+    celular é um PWA depois do relé; todo canal é plugin; o núcleo são as capacidades do agente,
+    com o navegador e o computador nativos, e o que liga a um serviço é plugin.
 
 Cada um é decidido quando o passo que depende dele chegar.
 
@@ -4456,13 +4507,14 @@ passos que faltam:
 4. Um dia de provas, as adiadas todas juntas, perguntando antes de gastar crédito: o 15, o 17a e o
    17b na OpenAI, o 16q com uma chave da DeepSeek, o 19 com um modelo real, o Cmd+W do 9d num Mac
    e o uso da tela do 15b.
-5. O 21, a workspace (a base A), decidida pelo usuário em 03/11 (Uma casa, três faces, acima).
+5. O 26, a poda do núcleo, decidida pelo usuário em 03/11: vem antes de tudo o que cresce.
+6. O 21, a workspace (a base A), decidida pelo usuário em 03/11 (Uma casa, três faces, acima).
    Roda local e vem antes do 20, pelo usuário em 03/11.
-6. O 23, os gatilhos por sonda (a base B, só os eventos), decididos pelo usuário em 03/11. Roda
+7. O 23, os gatilhos por sonda (a base B, só os eventos), decididos pelo usuário em 03/11. Roda
    local e vem antes do 20.
-7. O 24, a loja aberta (a base D), e o 25, as rotinas num executor e os modelos, decididos pelo
+8. O 24, a loja aberta (a base D), e o 25, as rotinas num executor e os modelos, decididos pelo
    usuário em 03/11. Rodam locais e vêm antes do 20.
-8. O 20, o Atlas Cloud, com o webhook do 23 chegando pelo relé.
+9. O 20, o Atlas Cloud, com o webhook do 23 chegando pelo relé.
 
 | Passo | O quê | Só depois de | Status |
 |---|---|---|---|
@@ -4530,3 +4582,4 @@ passos que faltam:
 | 23 | Os gatilhos por sonda (decididos em 03/11: A base B, os gatilhos, acima): a rotina dispara também por evento, por um comando sem modelo que roda de tempos em tempos e só acorda o agente quando imprime algo; o que ele traz chega marcado como texto de fora; uma abertura no SDK para o plugin trazer a sua fonte de evento. O webhook vem com o relé do 20; metas, atenção e diário ficam para plugins | 21 | |
 | 24 | A loja aberta, a base D (decidida em 03/11: A base D, a loja aberta, acima): uma fonte pública por tipo lida direto pelo Atlas, sem revisão (o MCP Registry oficial, o diretório oficial de plugins do Claude Code e a busca do skills.sh, com as instalações); o `atlas-marketplace` só com o que é do Atlas, aberto a PR que passa no CI; o gh e o gws como plugins, com as regras de pergunta na declaração; o CIMD no login dos MCPs | 23 | |
 | 25 | As rotinas num executor e os modelos (decididos em 03/11: As rotinas num executor e os modelos, acima): a rotina roda também num executor numa pasta, e o Atlas pergunta ao criar uma assim; a aba Modelos na tela de Rotinas, de projeto e pessoais, em português; e o placar do que rodou sozinho, precisou do usuário ou falhou | 24 | |
+| 26 | A poda do núcleo (decidida em 03/11: A poda do núcleo, acima): a regra do núcleo no `docs/ARCHITECTURE.md` (as capacidades do agente, com o navegador e o computador nativos, ficam; a ligação com um serviço, uma conta ou um programa específico é plugin); os quatro executores, o `voice`, o `telegram`, o gh e o gws saem da instalação para a loja como oficiais, sem quem já usa perder nada; as skills `atlas` e `write-plugin` ficam | 16s, 18d | |
