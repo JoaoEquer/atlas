@@ -17,7 +17,12 @@ harness's own folder for it, and the account each folder's sessions start on
 kept in the database as the approvals kept for good are. No credential is kept: each account's
 login is the harness's, in its folder. With them, the order the accounts take over in when one
 reaches its plan's limit (`jobs_account_failover`), asked for by the user on 21/10/2026, and each
-session's own route across executors (`jobs_session_routes`), asked for the same day."""
+session's own route across executors (`jobs_session_routes`), asked for the same day.
+
+Since step 22 (03/11/2026) the accounts plugin keeps all four, in its own data folder: these
+tables are read once, by `AccountStore.export`, when an update finds them filled, and written no
+more. They stay in the database, unread: taking a table back is a riskier migration than a table
+left behind."""
 
 import dataclasses
 import json
@@ -490,6 +495,63 @@ class AccountStore:
 
     def __init__(self, database: Database) -> None:
         self._database = database
+
+    def export(self) -> dict[str, object] | None:
+        """Everything kept here, as the accounts plugin reads it the first time it starts (step
+        22): each executor's accounts, the order they take over in and its folders' accounts, and
+        each session's route; `None` when no account was ever added."""
+        connection = self._database.connect()
+        try:
+            executors = [
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT DISTINCT executor FROM jobs_executor_accounts ORDER BY executor"
+                )
+            ]
+            routes = connection.execute("SELECT conversation FROM jobs_session_routes").fetchall()
+        finally:
+            connection.close()
+        if not executors:
+            return None
+        kept: dict[str, object] = {}
+        for executor in executors:
+            failover = self.failover(executor)
+            kept[executor] = {
+                "accounts": [
+                    {
+                        "id": account.id,
+                        "nickname": account.name,
+                        "folder": account.folder,
+                        "added_at": format_utc(account.added_at),
+                    }
+                    for account in self.accounts(executor)
+                ],
+                "hand_over": {
+                    "enabled": failover.enabled,
+                    "compact": failover.compact,
+                    "order": list(failover.order),
+                },
+                "folders": self.folder_accounts(executor),
+            }
+        routed: dict[str, object] = {}
+        for (conversation,) in routes:
+            route = self.route(str(conversation))
+            if route is None:
+                continue
+            routed[route.conversation] = {
+                "enabled": route.enabled,
+                "compact": route.compact,
+                "stops": [
+                    {
+                        "executor": target.executor,
+                        "account": target.account,
+                        **({"model": target.model} if target.model else {}),
+                        **({"effort": target.effort} if target.effort else {}),
+                    }
+                    for target in route.targets
+                ],
+            }
+        return {"version": 1, "executors": kept, "routes": routed}
 
     def accounts(self, executor: str) -> list[ExecutorAccount]:
         """`executor`'s other accounts, the oldest first."""

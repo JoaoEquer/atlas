@@ -10,6 +10,7 @@ import os
 import sqlite3
 import sys
 import time
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -1980,12 +1981,32 @@ def test_the_main_agent_makes_a_bot_when_asked_and_the_screens_hear(
     assert "bot_create" in search["function"]["description"]  # deferred: it costs a name
 
 
+def _accounts_on(client: Client) -> Callable[[str, dict[str, Any]], dict[str, Any]]:
+    """The accounts plugin Atlas ships turned on from the app, with the consent it shows (step
+    22), and what its screen calls, once the server runs it."""
+    [row] = [p for p in client.result("plugin.list")["plugins"] if p["name"] == "accounts"]
+    client.result("plugin.enable", {"name": "accounts", "consent": row["consent"]})
+
+    def call(name: str, params: dict[str, Any]) -> dict[str, Any]:
+        found = client.call("plugin.call", {"plugin": "accounts", "name": name, "params": params})
+        if "error" in found:
+            return {"error": found["error"]["message"]}
+        return found["result"]["result"]
+
+    deadline = time.monotonic() + WAIT
+    while "error" in call("route", {"conversation": "none"}):
+        assert time.monotonic() < deadline, "the accounts plugin never ran"
+        time.sleep(0.05)
+    return call
+
+
 def test_an_executors_other_accounts_over_the_socket(
     serve: Serve, tmp_path: Path, work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Step 16h: another account added from the app is one row more, logged in by Claude Code
-    itself in its own folder; a folder's account starts its sessions there, every screen is told,
-    and a session goes back to the main account in a copy."""
+    """Step 16h, by the accounts plugin since step 22: another account added from the app is one
+    row more, logged in by Claude Code itself in its own folder; a folder's account starts its
+    sessions there, every screen is told, and a session goes back to the main account in a
+    copy."""
     script = tmp_path / "claude-script.json"
     steps = [{"account": True}, {"usage": [0.5, 0.3]}, {"result": "Ok."}]
     script.write_text(json.dumps(steps), encoding="utf-8")
@@ -1996,16 +2017,17 @@ def test_an_executors_other_accounts_over_the_socket(
     with server.client() as client:
         [row] = client.result("workbench.list", {})["executors"]
         assert (row["accounts"], row["account_folders"], row["base"]) == (True, True, "")
-        refused = client.call(
-            "executor.add_account", {"executor": "claude-code", "nickname": "a b"}
-        )
-        assert "nickname of letters" in refused["error"]["message"]
-        added = client.result(
-            "executor.add_account", {"executor": "claude-code", "nickname": "work"}
-        )
-        assert (added["nickname"], added["logged_in"]) == ("work", False)
-        assert Path(added["folder"]) == Path.home() / ".claude-work"
+        assert not client.result("executor.accounts", {"executor": "claude-code"})["can_add"]
+        call = _accounts_on(client)
+        refused = call("add", {"executor": "claude-code", "nickname": "a b"})
+        assert "nickname of letters" in refused["error"]
+        added = call("add", {"executor": "claude-code", "nickname": "work"})
         assert client.event("executor.accounts")["payload"] == {"executor": "claude-code"}
+        listed = client.result("executor.accounts", {"executor": "claude-code"})
+        [account] = [a for a in listed["accounts"] if a["account_id"] == added["account_id"]]
+        assert (account["nickname"], account["logged_in"]) == ("work", False)
+        assert Path(account["folder"]) == Path.home() / ".claude-work"
+        assert listed["can_add"]
         rows = client.result("workbench.list", {})["executors"]
         assert [(r["name"], r["base"], r["nickname"], r["title"]) for r in rows] == [
             ("claude-code", "", "", "Claude Code"),
@@ -2018,10 +2040,9 @@ def test_an_executors_other_accounts_over_the_socket(
             ("", "someone@example.com"),
             (added["account_id"], "other@example.com"),
         ]
-        assert listed["can_add"]
-        client.result(
-            "executor.folder_account",
-            {"executor": "claude-code", "folder": str(work), "account_id": added["account_id"]},
+        call(
+            "set_folder",
+            {"executor": "claude-code", "folder": str(work), "account": added["account_id"]},
         )
         client.event("executor.accounts")
         card = client.result("workbench.start", {"executor": "claude-code", "folder": str(work)})
@@ -2052,10 +2073,8 @@ def test_an_executors_other_accounts_over_the_socket(
         )
         assert "no longer keeps" in missing["error"]["message"]
         client.result("workbench.stop", {"instance_id": card["instance_id"]})
-        client.result(
-            "executor.remove_account",
-            {"executor": "claude-code", "account_id": added["account_id"]},
-        )
+        call("remove", {"executor": "claude-code", "account": added["account_id"]})
+        client.event("executor.accounts")
         after = client.result("executor.accounts", {"executor": "claude-code"})
         assert [a["account_id"] for a in after["accounts"]] == [""]
         assert [r["name"] for r in client.result("workbench.list", {})["executors"]] == [
@@ -2066,49 +2085,41 @@ def test_an_executors_other_accounts_over_the_socket(
 def test_a_sessions_route_over_the_socket(
     serve: Serve, tmp_path: Path, work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A session's route (asked for by the user on 21/10/2026): set from the app, each
-    destination an executor and its account with how the user knows it, one Atlas does not know
-    refused, and read back for the card."""
+    """A session's route (asked for by the user on 21/10/2026; the accounts plugin's since step
+    22): set from the app, each destination an executor and its account with how the user knows
+    it, one Atlas does not know refused, and read back for the card."""
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(tmp_path / "claude-log.jsonl"))
     monkeypatch.setenv("FAKE_CLAUDE_AUTH", str(tmp_path / "auth.json"))
     server = serve(executors={"claude-code": claude_code()})
     with server.client() as client:
-        added = client.result(
-            "executor.add_account", {"executor": "claude-code", "nickname": "work"}
-        )
+        call = _accounts_on(client)
+        added = call("add", {"executor": "claude-code", "nickname": "work"})
         card = client.result("workbench.start", {"executor": "claude-code", "folder": str(work)})
-        instance = card["instance_id"]
-        assert client.result("workbench.route", {"instance_id": instance}) == {
-            "instance_id": instance,
+        conversation = card["transcript_id"]
+        assert call("route", {"conversation": conversation}) == {
             "stops": [],
             "enabled": True,
             "compact": True,
         }
-        refused = client.call(
-            "workbench.set_route",
-            {"instance_id": instance, "targets": [{"executor": "codex"}]},
+        refused = call(
+            "set_route", {"conversation": conversation, "stops": [{"executor": "codex"}]}
         )
-        assert "not installed" in refused["error"]["message"]
-        unknown = client.call(
-            "workbench.set_route",
-            {"instance_id": instance, "targets": [{"executor": "claude-code", "effort": "turbo"}]},
-        )
-        assert "no effort 'turbo'" in unknown["error"]["message"]
-        targets = [
+        assert "not installed" in refused["error"]
+        stops = [
             {
                 "executor": "claude-code",
-                "account_id": added["account_id"],
+                "account": added["account_id"],
                 "model": "opus",
                 "effort": "high",
             },
             {"executor": "claude-code"},
         ]
-        route = client.result(
-            "workbench.set_route",
-            {"instance_id": instance, "targets": targets, "enabled": True, "compact": False},
+        route = call(
+            "set_route",
+            {"conversation": conversation, "stops": stops, "enabled": True, "compact": False},
         )
-        read = client.result("workbench.route", {"instance_id": instance})
-        client.result("workbench.stop", {"instance_id": instance})
+        read = call("route", {"conversation": conversation})
+        client.result("workbench.stop", {"instance_id": card["instance_id"]})
 
     assert route == read
     assert route["compact"] is False, "compacting first turned off, and kept"

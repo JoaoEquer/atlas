@@ -250,7 +250,7 @@ Shows the outside executors' accounts before Atlas picks one, read from the harn
 model call (ARCHITECTURE, Several accounts at once): each by the target name `delegate` takes, who
 it is logged in as, its plan usage per limit window and when each resets, whether it is at its
 limit now (reached here, or by its usage) and whether it bills past its limits (`extra_usage`),
-the folders that start on it, and whether and in what order the accounts take over (`hand_over`).
+and whether and in what order the accounts take over (`hand_over`, with the accounts plugin).
 Given wherever `delegate` has an executor.
 
 - `executor`: only this executor's accounts.

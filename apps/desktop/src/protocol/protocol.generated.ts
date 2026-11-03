@@ -1197,45 +1197,6 @@ export interface WorkbenchUseAccountParams {
   /** An `executor.accounts` id; empty, the main account. */
   account_id: string
 }
-/** A session's route (asked for by the user on 21/10/2026): where it goes on, in order, when the destination it runs on reaches its plan's limit. With none, or `enabled` off, its executor's own accounts take over (`executor.failover`). */
-export interface SessionRouteRow {
-  instance_id: string
-  stops: RouteStopRow[]
-  enabled: boolean
-  /** A copy on another account compacts first, where its harness has `/compact`. */
-  compact: boolean
-}
-export interface RouteStopRow {
-  executor: string
-  account_id: string
-  /** Its executor on that account, as `workbench.executors` names it. */
-  name: string
-  title: string
-  /** The account's nickname; empty for the main account. */
-  nickname: string
-  /** Its executor is installed here; one that is not is passed over. */
-  installed: boolean
-  /** The model and the effort the session goes on with there; `None`, the ones it ran on. */
-  model: string | null
-  effort: string | null
-  /** It reached its plan's limit and has not reset: passed over until it does. */
-  limited: boolean
-}
-export interface WorkbenchRouteParams {
-  instance_id: string
-  /** In the order the session goes on to them at a plan's limit; empty, none. */
-  targets: RouteTargetParams[]
-  enabled?: boolean
-  /** A copy on another account of the same executor compacts first, where its harness has `/compact` (on by default). */
-  compact?: boolean
-}
-/** One destination of a session's route: an executor's own name and one of its `executor.accounts` ids (empty, the main account), and the model (an `executor.models` id) and the effort the session goes on with there; `None`, the ones it ran on. */
-export interface RouteTargetParams {
-  executor: string
-  account_id?: string
-  model?: string | null
-  effort?: string | null
-}
 /** What changes if an instance goes on on another account (step 16h). */
 export interface AccountSwitchRow {
   executor: string
@@ -1402,35 +1363,12 @@ export interface AccountRow {
   login: string
   logged_in: boolean
 }
-export interface ExecutorAddAccountParams {
-  executor: string
-  /** The user's nickname for it ("company-b"), which names its folder too. */
-  nickname: string
-}
-export interface ExecutorAccountRef {
-  executor: string
-  account_id: string
-}
 export interface SessionDeleteParams {
   /** An `ExecutorRow.name`: the executor on the account that keeps the session. */
   executor: string
   session_id: string
   /** As `executor.sessions` names it. */
   folder: string
-}
-export interface ExecutorFailoverParams {
-  executor: string
-  /** Every account's `executor.accounts` id in the order they take over in, the main one as empty; one left out comes after. */
-  order: string[]
-  enabled: boolean
-  compact: boolean
-}
-export interface ExecutorFolderAccountParams {
-  executor: string
-  /** As `executor.folders` names it. */
-  folder: string
-  /** An `executor.accounts` id; empty, the main account. */
-  account_id: string
 }
 export interface ExecutorAccountParams {
   executor: string
@@ -1783,8 +1721,6 @@ export interface RpcMethods {
   'executor.account': { params: ExecutorAccountParams; result: ExecutorRow }
   /** An executor's accounts, in the order they take over in at a plan's limit, each with who it is logged in as (step 16h). */
   'executor.accounts': { params: ExecutorRef; result: ExecutorAccounts }
-  /** Keep another account under a nickname, in the harness's folder for it, not logged in yet: `executor.account` on its row logs it in on the user's browser. */
-  'executor.add_account': { params: ExecutorAddAccountParams; result: AccountRow }
   /** The slash commands an executor takes in a folder, described, for the session's box: what its instance there said, or with none, what its plugin reads with no prompt (it takes seconds). An instance's `commands` changing says to read them again. */
   'executor.commands': { params: ExecutorCommandsParams; result: SlashCommandList }
   /** The MCP servers an executor has for its account, outside any project, with the state of each, read by its plugin with no prompt, for the side panel; it takes seconds. */
@@ -1793,16 +1729,10 @@ export interface RpcMethods {
   'executor.delete_session': { params: SessionDeleteParams; result: Empty }
   /** Look for the harnesses again, as at a start (installed, which version, which account): the executors tab asks when it shows, and on its "Look again". */
   'executor.detect': { params: Empty; result: ExecutorList }
-  /** The order an executor's accounts take over in when one reaches its plan's limit, whether they do, and whether a session compacts before it goes on; told to every screen as `executor.accounts`. */
-  'executor.failover': { params: ExecutorFailoverParams; result: ExecutorAccounts }
-  /** The account a folder's new sessions start on; empty, the main account. */
-  'executor.folder_account': { params: ExecutorFolderAccountParams; result: Empty }
   /** The folders an executor's sessions work in, read by its plugin without reading the sessions, for the executors tab, which reads a folder's sessions once it is opened. */
   'executor.folders': { params: ExecutorRef; result: SessionFolderList }
   /** The models an executor offers its account now and the efforts of each, its default first, read by its plugin with no prompt, for the session's box. */
   'executor.models': { params: ExecutorRef; result: ExecutorModels }
-  /** Forget another account; its folder stays, with its login and sessions, and its folders start on the main account again. Refused while an instance runs on it. */
-  'executor.remove_account': { params: ExecutorAccountRef; result: Empty }
   /** A session's steps, as its plugin reads them where its harness keeps them; nothing is copied into Atlas (step 16f). */
   'executor.session': { params: SessionReadParams; result: SessionRead }
   /** Every session of an executor, or of one of its folders, wherever it began, read by its plugin with no effect on it, each with the instance working on it here (step 16f, the executors tab). */
@@ -1969,10 +1899,6 @@ export interface RpcMethods {
   'workbench.model': { params: WorkbenchModelParams; result: InstanceRow }
   /** A prompt from an instance's card, with the files attached: a new turn, or a steer when one runs. */
   'workbench.prompt': { params: WorkbenchPromptParams; result: WorkbenchPrompted }
-  /** The instance's session's route: the destinations it goes on to at a plan's limit, accounts of its executor and of others, in order. */
-  'workbench.route': { params: InstanceRef; result: SessionRouteRow }
-  /** Set the instance's session's route, kept for its card. On an account of the same executor it goes on in a copy; on another executor in a new session, whose first prompt is a handoff packet Atlas puts together with no model call. */
-  'workbench.set_route': { params: WorkbenchRouteParams; result: SessionRouteRow }
   /** Start an executor in a folder, the user's instance; one that cannot start stays on the workbench saying why. */
   'workbench.start': { params: WorkbenchStartParams; result: InstanceRow }
   /** Stop an instance for good and take its card down. */
@@ -2013,16 +1939,12 @@ export const RPC_METHODS = [
   'conversation.unarchive',
   'executor.account',
   'executor.accounts',
-  'executor.add_account',
   'executor.commands',
   'executor.connectors',
   'executor.delete_session',
   'executor.detect',
-  'executor.failover',
-  'executor.folder_account',
   'executor.folders',
   'executor.models',
-  'executor.remove_account',
   'executor.session',
   'executor.sessions',
   'executor.update',
@@ -2106,8 +2028,6 @@ export const RPC_METHODS = [
   'workbench.mode',
   'workbench.model',
   'workbench.prompt',
-  'workbench.route',
-  'workbench.set_route',
   'workbench.start',
   'workbench.stop',
   'workbench.use_account',

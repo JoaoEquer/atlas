@@ -13,6 +13,9 @@ conversations.
   it at consent (`atlas.notify`).
 - **The memory's limits, `PluginContext.memory_limits`** (version 26): read from the home's
   stores at each call, never set by a plugin.
+- **The workbench, `PluginContext.workbench`** (version 29), for the plugin that brings the
+  harnesses' other accounts: the executors installed, whether one may take a session over, and
+  the word that its accounts changed, which the server tells every screen.
 """
 
 import importlib
@@ -20,13 +23,13 @@ import importlib.util
 import json
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from atlas.conversations import ConversationNotFoundError
 from atlas.memory import Target
 from atlas.models import AssistantMessage, ModelRequest, ModelsError, SystemMessage, UserMessage
-from atlas.plugins import LlmError, LlmMessage, LlmResult, MemoryLimits
+from atlas.plugins import Executor, LlmError, LlmMessage, LlmResult, MemoryLimits, WorkbenchHost
 
 if TYPE_CHECKING:
     from atlas.assistant.service import Assistant
@@ -41,8 +44,13 @@ _logger = logging.getLogger("atlas.assistant")
 class AssistantPluginHost:
     """`atlas.plugins.PluginHost` over one Atlas's assistant."""
 
-    def __init__(self, assistant: "Assistant") -> None:
+    def __init__(
+        self,
+        assistant: "Assistant",
+        accounts_changed: Callable[[str], None] = lambda _executor: None,
+    ) -> None:
         self._assistant = assistant
+        self._accounts_changed = accounts_changed
 
     async def complete(
         self,
@@ -99,6 +107,35 @@ class AssistantPluginHost:
     def memory_limits(self) -> MemoryLimits:
         limits = self._assistant.memory.limits
         return MemoryLimits(user=limits[Target.USER], memory=limits[Target.MEMORY])
+
+    def workbench(self) -> WorkbenchHost:
+        return _Workbench(self._assistant, self._accounts_changed)
+
+
+class _Workbench:
+    """`atlas.plugins.WorkbenchHost` over one Atlas's workbench."""
+
+    def __init__(self, assistant: "Assistant", accounts_changed: Callable[[str], None]) -> None:
+        self._assistant = assistant
+        self._changed = accounts_changed
+
+    def executor(self, name: str) -> Executor | None:
+        return self._assistant.executor(name)
+
+    def executors(self) -> Sequence[str]:
+        return self._assistant.executors()
+
+    async def available(self, name: str) -> bool:
+        return await self._assistant.workbench.available(name)
+
+    def limited(self, name: str) -> bool:
+        return self._assistant.workbench.limited(name)
+
+    def running(self, name: str) -> bool:
+        return self._assistant.workbench.running(name)
+
+    def accounts_changed(self, executor: str) -> None:
+        self._changed(executor)
 
 
 def _parsed(text: str, schema: Mapping[str, Any]) -> object:

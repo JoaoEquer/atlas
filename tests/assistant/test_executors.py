@@ -6,12 +6,14 @@ user's screen, or Atlas answers it. The database and the tools are real, in a te
 import asyncio
 import json
 import os
+import weakref
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from accounts_support import AccountsPlugin
 from atlas.__main__ import SCHEMAS
 from atlas.assistant import (
     HANDOFF_MARK,
@@ -144,6 +146,19 @@ def make(home: Home, vault: Vault, fake: FakeModelServer, connect: Connect, tmp_
         return assistant, heard
 
     return make
+
+
+#: The accounts plugin on each test's assistant, made on its first use.
+_PLUGINS: "weakref.WeakKeyDictionary[Assistant, AccountsPlugin]" = weakref.WeakKeyDictionary()
+
+
+def _accounts(assistant: Assistant, tmp_path: Path) -> AccountsPlugin:
+    """The accounts plugin Atlas ships, on `assistant`, as a home that uses other accounts has
+    it (step 22)."""
+    found = _PLUGINS.get(assistant)
+    if found is None:
+        found = _PLUGINS[assistant] = AccountsPlugin(assistant, tmp_path / "accounts-plugin")
+    return found
 
 
 def _run[T](scenario: Callable[[], Awaitable[T]]) -> T:
@@ -683,9 +698,11 @@ def test_a_delegation_runs_on_its_folders_account_even_with_the_main_one_logged_
     project = tmp_path / "work" / "project"
 
     async def scenario() -> tuple[OpenConversation, str, str]:
-        work = await assistant.workbench.add_account(CLAUDE_CODE, "work")
+        work = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "work")
         await assistant.workbench.switch_executor_account(work.name, "w@example.com")
-        await assistant.workbench.set_folder_account(CLAUDE_CODE, str(project), work.account_id)
+        await _accounts(assistant, tmp_path).set_folder_account(
+            CLAUDE_CODE, str(project), work.account_id
+        )
         conversation = await _start(assistant, "Fix my failing test.")
         await _settle(assistant, conversation)
         await assistant.close()
@@ -771,11 +788,13 @@ def test_atlas_names_the_account_a_delegation_runs_on_over_the_folders(
 
     async def scenario() -> tuple[OpenConversation, Any]:
         workbench = assistant.workbench
-        first = await workbench.add_account(CLAUDE_CODE, "first")
-        second = await workbench.add_account(CLAUDE_CODE, "second")
+        first = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "first")
+        second = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "second")
         await workbench.switch_executor_account(first.name, "f@example.com")
         await workbench.switch_executor_account(second.name, "s@example.com")
-        await workbench.set_folder_account(CLAUDE_CODE, str(project), first.account_id)
+        await _accounts(assistant, tmp_path).set_folder_account(
+            CLAUDE_CODE, str(project), first.account_id
+        )
         conversation = await _start(assistant, "Fix my failing test on the second account.")
         await _settle(assistant, conversation)
         await assistant.close()
@@ -822,6 +841,7 @@ def test_a_delegations_route_goes_on_in_codex_from_the_handoff_packet(
         FakeReply(text="Done.", when=PARENT),
     )
     assistant, heard = make(Screen(), executors={CLAUDE_CODE: claude_code(), "codex": codex()})
+    _accounts(assistant, tmp_path)  # a route is the accounts plugin's
 
     async def scenario() -> OpenConversation:
         conversation = await _start(assistant, "Fix my failing test.")
@@ -881,9 +901,11 @@ def test_a_stopped_task_resumes_on_another_account_in_a_copy_then_on_another_exe
 
     async def scenario() -> tuple[OpenConversation, Any]:
         workbench = assistant.workbench
-        work = await workbench.add_account(CLAUDE_CODE, "work")
+        work = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "work")
         await workbench.switch_executor_account(work.name, "w@example.com")
-        await workbench.set_failover(CLAUDE_CODE, [], enabled=False, compact=False)
+        await _accounts(assistant, tmp_path).set_failover(
+            CLAUDE_CODE, [], enabled=False, compact=False
+        )
         conversation = await _start(assistant, "Fix my failing test.")
         await _settle(assistant, conversation)
         resumed: list[str] = []
@@ -921,7 +943,7 @@ def test_a_stopped_task_resumes_on_another_account_in_a_copy_then_on_another_exe
     assert "All of it, in Codex." in notices[-1]
 
 
-def test_executor_accounts_tells_each_accounts_login_usage_limit_and_folders(
+def test_executor_accounts_tells_each_accounts_login_usage_and_limit(
     make: Make, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _scripts(tmp_path, monkeypatch)
@@ -931,9 +953,11 @@ def test_executor_accounts_tells_each_accounts_login_usage_limit_and_folders(
 
     async def scenario() -> tuple[str, str, str]:
         workbench = assistant.workbench
-        work = await workbench.add_account(CLAUDE_CODE, "work")
+        work = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "work")
         await workbench.switch_executor_account(work.name, "w@example.com")
-        await workbench.set_folder_account(CLAUDE_CODE, str(project), work.account_id)
+        await _accounts(assistant, tmp_path).set_folder_account(
+            CLAUDE_CODE, str(project), work.account_id
+        )
         listed = await assistant.subagents.accounts()
         unknown = await assistant.subagents.accounts("pi")
         twice = await assistant.subagents.switch_account("w@example.com", CLAUDE_CODE)
@@ -959,7 +983,6 @@ def test_executor_accounts_tells_each_accounts_login_usage_limit_and_folders(
         "w@example.com",
         False,
     )
-    assert work["folders"] == [str(project)]
     assert unknown.startswith("[Atlas: There is no executor 'pi'")
     assert twice == (
         "[Atlas: w@example.com is logged in already on claude-code@work: delegate with "

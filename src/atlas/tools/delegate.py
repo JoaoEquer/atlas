@@ -366,7 +366,7 @@ ACCOUNTS_DESCRIPTION = (
     "Before delegating to an outside executor: each of its accounts by the name delegate's "
     "executor and route take ('claude-code@work'), who it is logged in as, its plan usage per "
     "limit and when each resets, whether it is at its limit now or bills past it (extra_usage), "
-    "the folders that start on it, and the order its accounts take over in. No model call."
+    "and the order its accounts take over in. No model call."
 )
 
 

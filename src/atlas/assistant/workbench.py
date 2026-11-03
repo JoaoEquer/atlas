@@ -70,7 +70,9 @@ from atlas.assistant.executors import (
     ExecutorDesk,
     ExecutorRun,
     account_name,
+    account_nickname,
     default_executor_effort,
+    other_accounts,
     slash_view,
     split_account,
     usage_view,
@@ -85,8 +87,6 @@ from atlas.assistant.model import (
     InstanceActivity,
     InstanceState,
     Owner,
-    RouteStop,
-    RouteView,
     SessionFolderView,
     SessionView,
     SlashCommandView,
@@ -95,15 +95,7 @@ from atlas.assistant.model import (
 )
 from atlas.conversations import WORKBENCH, Conversation, title_from
 from atlas.home import format_utc, utc_now
-from atlas.jobs import (
-    AccountFailover,
-    ExecutorAccount,
-    JobsError,
-    RouteTarget,
-    SessionRoute,
-)
 from atlas.models import (
-    EFFORT_LADDER,
     AssistantMessage,
     Attachment,
     Message,
@@ -120,8 +112,10 @@ from atlas.plugins import (
     ExecutorError,
     ExecutorFile,
     ExecutorSpec,
+    HandOver,
     LimitReached,
     ModelChoice,
+    NextStop,
     SessionInfo,
     Transcript,
     TranscriptEntry,
@@ -354,7 +348,6 @@ class Workbench:
             record=assistant.instance_store,
             clock=assistant.clock,
             on_limit=self._limit_reached,
-            on_copied=self.copy_kept,
         )
         self._runs[run.id] = run
         try:
@@ -402,82 +395,54 @@ class Workbench:
         found = self.get(instance_id)
         return await self.start(found.name, folder, account=found.account_id)
 
-    # -- accounts (step 16h) ---------------------------------------------------------------------
+    # -- accounts (step 16h; since step 22, the accounts plugin's) ------------------------------
 
     async def accounts(self, name: str) -> AccountList:
-        """`name`'s accounts, the main one first, each with who its harness is logged in as;
-        only the main one for an executor whose plugin runs on no other. Raises
-        `ExecutorError`."""
+        """`name`'s accounts: its own login, then the others the accounts plugin keeps, in its
+        order, each with who its harness is logged in as. Raises `ExecutorError`."""
         executor = self._executor(name)
-        if not executor.capabilities().account_folders:
-            logged = await _logged(executor)
-            return AccountList(name, (AccountView(name, MAIN_ACCOUNT, name, "", "", *logged),))
-        kept = await asyncio.to_thread(self._assistant.account_store.accounts, name)
-        found = [(found, self._executor(account_name(name, found.id))) for found in kept]
-        logins = await asyncio.gather(_logged(executor), *(_logged(on) for _kept, on in found))
-        main = AccountView(name, MAIN_ACCOUNT, name, "", str(executor.account_folder()), *logins[0])
+        plugin = self._assistant.accounts
+        kept = other_accounts(plugin, name) if executor.capabilities().account_folders else []
+        found = [
+            (account, self._assistant.executor(account_name(name, account.id))) for account in kept
+        ]
+        logins = await asyncio.gather(
+            _logged(executor),
+            *(_nobody() if on is None else _logged(on) for _kept, on in found),
+        )
+        folder = str(executor.account_folder()) if executor.capabilities().account_folders else ""
+        main = AccountView(name, MAIN_ACCOUNT, name, "", folder, *logins[0])
         others = tuple(
-            _account_view(account, logged)
+            AccountView(name, account.id, account_name(name, account.id), account.nickname,
+                        str(account.folder), *logged)
             for (account, _on), logged in zip(found, logins[1:], strict=True)
-        )
-        failover = await asyncio.to_thread(self._assistant.account_store.failover, name)
-        listed = _in_order((main, *others), failover.order, lambda view: view.account_id)
+        )  # fmt: skip
+        hand_over = self.hand_over(name)
+        rank = {account: at for at, account in enumerate(hand_over.order)}
+        listed = sorted((main, *others), key=lambda view: rank.get(view.account_id, len(rank)))
         return AccountList(
-            name, listed, can_add=True, failover=failover.enabled, compact=failover.compact
+            name,
+            tuple(listed),
+            can_add=plugin is not None and executor.capabilities().account_folders,
+            failover=hand_over.enabled and bool(kept),
+            compact=hand_over.compact,
         )
+
+    def hand_over(self, name: str) -> HandOver:
+        """Whether the accounts of `name`'s executor take over at a plan's limit: off with no
+        accounts plugin."""
+        plugin = self._assistant.accounts
+        if plugin is None:
+            return HandOver()
+        try:
+            return plugin.hand_over(split_account(name)[0])
+        except Exception:  # a plugin's own code: no hand-over, logged
+            _logger.exception("The accounts plugin could not say how its accounts take over.")
+            return HandOver()
 
     # -- an account's plan limit (asked for by the user on 21/10/2026) --------------------------
 
-    async def set_failover(
-        self, name: str, order: Sequence[str], *, enabled: bool, compact: bool
-    ) -> AccountList:
-        """The order `name`'s accounts take over in at a plan's limit, the main one as `""`,
-        whether they do, and whether a session compacts before it goes on. Raises
-        `ExecutorError` for an account `name` does not have."""
-        executor = self._executor(name)
-        if not executor.capabilities().account_folders:
-            raise ExecutorError(f"{executor.title} runs on no account but its own.")
-        store = self._assistant.account_store
-        kept = await asyncio.to_thread(store.accounts, name)
-        known = {MAIN_ACCOUNT, *(account.id for account in kept)}
-        unknown = [account for account in order if account not in known]
-        if unknown:
-            raise ExecutorError(f"{executor.title} has no account {unknown[0]!r}.")
-        failover = AccountFailover(name, enabled, compact, tuple(dict.fromkeys(order)))
-        await asyncio.to_thread(store.set_failover, failover)
-        return await self.accounts(name)
-
-    def failover(self, name: str) -> AccountFailover:
-        """How the accounts of `name`'s executor take over from one another."""
-        return self._assistant.account_store.failover(split_account(name)[0])
-
-    async def next_account(self, name: str, limit: LimitReached | None) -> str | None:
-        """The account to go on on after `name` reached its plan's limit: the next one in the
-        user's order after it, round to the start, logged in and not at its own limit; `None`
-        when there is none, or the user turned the hand-over off. With `limit`, `name` is passed
-        over from now until it resets."""
-        base, current = split_account(name)
-        self._mark_limited(name, limit)
-        executor = self._assistant.executor(base)
-        if executor is None or not executor.capabilities().account_folders:
-            return None
-        store = self._assistant.account_store
-        failover = await asyncio.to_thread(store.failover, base)
-        if not failover.enabled:
-            return None
-        kept = await asyncio.to_thread(store.accounts, base)
-        ids = _in_order((MAIN_ACCOUNT, *(a.id for a in kept)), failover.order, lambda a: a)
-        at = ids.index(current) if current in ids else -1
-        for account in (*ids[at + 1 :], *ids[: max(at, 0)]):
-            on = account_name(base, account)
-            if self.limited(on):
-                continue
-            found = self._assistant.executor(on)
-            if found is not None and (await _logged(found))[1]:
-                return account
-        return None
-
-    def _mark_limited(self, name: str, limit: LimitReached | None) -> None:
+    def mark_limited(self, name: str, limit: LimitReached | None) -> None:
         """`name` reached its plan's limit: passed over from now until it resets."""
         if limit is not None:
             now = self._assistant.clock().timestamp()
@@ -498,6 +463,17 @@ class Workbench:
             if resets is None or resets > now:
                 return True
         return False
+
+    async def available(self, name: str) -> bool:
+        """`name` may take a session over: installed, logged in, and not at its plan's limit."""
+        if self.limited(name):
+            return False
+        found = self._assistant.executor(name)
+        return found is not None and (await _logged(found))[1]
+
+    def running(self, name: str) -> bool:
+        """A session runs on `name` here now."""
+        return any(run.name == name and run.live for run in self._runs.values())
 
     def _limit_reached(self, run: ExecutorRun) -> None:
         """A user's session stopped at its account's plan limit: it is handed over; when nothing
@@ -543,253 +519,101 @@ class Workbench:
         except ExecutorError as error:
             _logger.warning("A session could not go on after its plan's limit: %s", error)
 
-    def copy_kept(self, run: ExecutorRun) -> None:
-        """A turn of `run`, a copy of another account's session, ended: the session it replaces
-        is deleted there, in the background, once nothing needs it."""
-        replaced = run.replaces
-        if replaced is None:
-            return
-        run.replaces = None
-        task = asyncio.create_task(self._drop_replaced(run, replaced))
-        self._handing.add(task)
-        task.add_done_callback(self._handing.discard)
-
-    async def _drop_replaced(self, run: ExecutorRun, replaced: str) -> None:
-        """Delete `replaced`, the session `run`'s copy took the place of on another account of
-        its executor, once the copy's harness lists the copy (until then, the next turn tries
-        again); never one an instance here or another program has open, nor where either
-        harness cannot say."""
-        copy, folder = run.session_id, run.spec.folder
-        source = await asyncio.to_thread(self._kept_in, run)
-        if copy is None or source is None:
-            return
-        kept = self._executor(source)
-        if not (kept.capabilities().delete_sessions and run.executor.capabilities().sessions):
-            return
-        try:
-            if await self._session(run.executor, copy, folder) is None:
-                run.replaces = replaced
-                return
-            if any(
-                other.session_id == replaced and other.name == source and other.live
-                for other in self._runs.values()
-            ):
-                return
-            found = await self._session(kept, replaced, folder)
-            if found is None or found.elsewhere:
-                return
-            await kept.delete_session(replaced, folder)
-        except ExecutorError as error:
-            _logger.warning("The session a copy replaced was not deleted: %s", error)
-            return
-        except Exception:  # a plugin's own code: the session stays, logged
-            _logger.exception("An executor could not delete the session a copy replaced.")
-            return
-        _logger.info("The session a copy replaced was deleted on its account.")
-
-    def _kept_in(self, run: ExecutorRun) -> str | None:
-        """The name of the account of `run`'s executor its copy was made from, by its folder."""
-        origin = run.spec.resume_from
-        if origin is None:
+    async def next_stop(self, name: str, conversation: str) -> NextStop | str | None:
+        """Where the session of `conversation`, which ran on `name`, goes on at its plan's limit,
+        as the accounts plugin says (`Accounts.next_stop`); `None` with no plugin, or when it
+        fails, which is logged."""
+        plugin = self._assistant.accounts
+        if plugin is None:
             return None
-        base = split_account(run.name)[0]
-        kept = self._assistant.account_store.accounts(base)
-        for name in (base, *(account_name(base, account.id) for account in kept)):
-            found = self._assistant.executor(name)
-            if found is not None and name != run.name and found.account_folder() == origin:
-                return name
-        return None
-
-    async def _session(self, executor: Executor, session: str, folder: Path) -> SessionInfo | None:
-        """`session`, as `executor` lists it in `folder`; `None` when it does not."""
-        if executor.capabilities().folders:
-            listed = await executor.sessions(folder=folder)
-        else:
-            listed = await executor.sessions()
-        return next((found for found in listed if found.id == session), None)
+        try:
+            return await plugin.next_stop(name, conversation)
+        except Exception:  # a plugin's own code: nothing hands the session over, logged
+            _logger.exception("The accounts plugin could not say where a session goes on.")
+            return None
 
     async def _hand_over(self, run: ExecutorRun) -> None:
-        """Go on with the user's session on the next account, in a copy there, compacted first
-        when the user asked for it, from where it stopped; by its own route, when it has one."""
+        """Go on with the user's session where the accounts plugin says: on another account of
+        its executor in a copy there, compacted first when asked, or on another executor in a new
+        session whose first prompt is the handoff packet; from where it stopped."""
+        self.mark_limited(run.name, run.limited)
+        stop = await self.next_stop(run.name, run.transcript.id)
+        if self._runs.get(run.id) is not run or run.working:
+            return  # the user took it over meanwhile
+        if stop is None:
+            return
+        if isinstance(stop, str):
+            self.notify(InstanceActivity(run.id, "account", stop, failed=True))
+            return
+        kind = "route" if stop.route else "account"
         try:
-            store = self._assistant.account_store
-            route = await asyncio.to_thread(store.route, run.transcript.id)
-            if route is not None and route.enabled and route.targets:
-                await self._follow_route(run, route)
-                return
-            account = await self.next_account(run.name, run.limited)
-            if self._runs.get(run.id) is not run or run.working:
-                return  # the user took it over meanwhile
-            if account is None:
-                if self.failover(run.name).enabled:
-                    told = "No other account can go on now."
-                    self.notify(InstanceActivity(run.id, "account", told, failed=True))
-                return
-            name = account_name(split_account(run.name)[0], account)
-            model, effort, note = await self.carried(run, name)
+            await self._go_to(run, stop, kind)
+        except ExecutorError as error:
+            _logger.warning("A session could not go on after a plan limit: %s", error)
+            self.notify(InstanceActivity(run.id, kind, str(error), failed=True))
+
+    async def _go_to(self, run: ExecutorRun, stop: NextStop, kind: str) -> None:
+        """Carry `run`'s session to `stop`: on an account of the same executor in a copy; on
+        another executor in a new session, on the same card, whose first prompt is the handoff
+        packet."""
+        name = stop.executor
+        model, effort, note = await self.carried(run, name, stop.model, stop.effort)
+        base, account = split_account(name)
+        if base == split_account(run.name)[0]:
             switched = await self.use_account(run.id, account, carried=(model, effort))
+            # The same session, on another account: the card says so, by a route or not.
             self.notify(InstanceActivity(switched.id, "account", switched.account or account))
             if note:
                 self.notify(InstanceActivity(switched.id, "note", note))
             _logger.info("A session went on on another account after a plan limit.")
-            await self._compact(switched, run, self.failover(run.name).compact)
-            await switched.prompt(CONTINUE)
-        except ExecutorError as error:
-            _logger.warning("A session could not go on on another account: %s", error)
-            self.notify(InstanceActivity(run.id, "account", str(error), failed=True))
-
-    # -- a session's route, across executors (asked for by the user on 21/10/2026) -------------
-
-    async def route(self, instance_id: str) -> RouteView:
-        """The route of the instance's session, empty until the user sets one."""
-        found = self.get(instance_id)
-        store = self._assistant.account_store
-        route = await asyncio.to_thread(store.route, found.transcript.id)
-        if route is None:
-            return RouteView(found.id)
-        stops = [await asyncio.to_thread(self._stop, target) for target in route.targets]
-        return RouteView(found.id, tuple(stops), enabled=route.enabled, compact=route.compact)
-
-    async def set_route(
-        self,
-        instance_id: str,
-        targets: Sequence[RouteTarget],
-        *,
-        enabled: bool,
-        compact: bool = True,
-    ) -> RouteView:
-        """The destinations the instance's session goes on to at a plan's limit, in order, each an
-        executor installed here and one of its accounts (the main one as `""`) with the model and
-        the effort it goes on with there, whether it does, and whether a copy on another account
-        compacts first. Kept for its card, so the instances that take its place follow it too.
-        Raises `ExecutorError` for an executor, an account or an effort Atlas does not know."""
-        found = self.get(instance_id)
-        store = self._assistant.account_store
-        for target in targets:
-            if split_account(target.executor)[1]:
-                raise ExecutorError(f"{target.executor!r} names an account: give it apart.")
-            executor = self._executor(target.executor)
-            known = target.account == MAIN_ACCOUNT or (
-                await asyncio.to_thread(store.get, target.executor, target.account) is not None
-            )
-            if not known:
-                raise ExecutorError(f"{executor.title} has no account {target.account!r}.")
-            if target.effort is not None and target.effort not in EFFORT_LADDER:
-                raise ExecutorError(f"There is no effort {target.effort!r}.")
-        route = SessionRoute(
-            found.transcript.id, tuple(dict.fromkeys(targets)), enabled=enabled, compact=compact
-        )
-        await asyncio.to_thread(store.set_route, route)
-        return await self.route(instance_id)
-
-    def _inherit_route(self, session: str, conversation: str) -> None:
-        """A session opened again keeps the route the user gave its card."""
-        kept = self._assistant.instance_store.conversation_of(session)
-        store = self._assistant.account_store
-        route = None if kept is None else store.route(kept)
-        if route is not None:
-            store.set_route(dataclasses.replace(route, conversation=conversation))
-
-    def _stop(self, target: RouteTarget) -> RouteStop:
-        """A destination as the screen lists it."""
-        name = account_name(target.executor, target.account)
-        executor = self._assistant.executor(name)
-        store = self._assistant.account_store
-        kept = store.get(target.executor, target.account) if target.account else None
-        title = target.executor if executor is None else executor.title
-        nickname = "" if kept is None else kept.name
-        return RouteStop(
-            target.executor,
-            target.account,
-            name,
-            title,
-            nickname,
-            installed=executor is not None,
-            model=target.model,
-            effort=target.effort,
-            limited=self.limited(name),
-        )
-
-    async def next_target(
-        self, name: str, route: SessionRoute, limit: LimitReached | None = None
-    ) -> RouteTarget | None:
-        """The destination after `name` in `route`, round to the start: installed, logged in,
-        not at its own limit, and not `name` itself; `None` when none is. With `limit`, `name` is
-        passed over from now until it resets."""
-        self._mark_limited(name, limit)
-        base, current = split_account(name)
-        targets = route.targets
-        here = RouteTarget(base, current)
-        at = targets.index(here) if here in targets else -1
-        for target in (*targets[at + 1 :], *targets[: max(at, 0)]):
-            on = account_name(target.executor, target.account)
-            if on == name or self.limited(on):
-                continue
-            found = self._assistant.executor(on)
-            if found is not None and (await _logged(found))[1]:
-                return target
-        return None
-
-    async def _follow_route(self, run: ExecutorRun, route: SessionRoute) -> None:
-        """The session goes on to the next destination of its route: on an account of the same
-        executor in a copy, as an account's hand-over does; on another executor in a new session,
-        on the same card, whose first prompt is the handoff packet."""
-        target = await self.next_target(run.name, route, run.limited)
-        if self._runs.get(run.id) is not run or run.working:
-            return  # the user took it over meanwhile
-        if target is None:
-            told = "No destination in the session's route can go on now."
-            self.notify(InstanceActivity(run.id, "route", told, failed=True))
-            return
-        name = account_name(target.executor, target.account)
-        model, effort, note = await self.carried(run, name, target)
-        if target.executor == split_account(run.name)[0]:
-            switched = await self.use_account(run.id, target.account, carried=(model, effort))
-            told = switched.account or target.account
-            self.notify(InstanceActivity(switched.id, "account", told))
-            if note:
-                self.notify(InstanceActivity(switched.id, "note", note))
-            _logger.info("A session went on on another account by its route.")
-            await self._compact(switched, run, route.compact)
+            await self._compact(switched, run, stop.compact)
             await switched.prompt(CONTINUE)
             return
-        packet = await self._packet(run, target)
+        packet = await self._packet(run, name)
         await self._end(run)
         switched = await self.start(
-            target.executor,
+            base,
             run.spec.folder,
             transcript=run.transcript,
             auto=run.auto,
             instance_id=run.id,
             model=model,
             effort=effort,
-            account=target.account,
+            account=account,
         )
         switched.set_atlas_answers(run.atlas_answers)
         destination = await asyncio.to_thread(self.label, switched.name)
-        self.notify(InstanceActivity(switched.id, "route", destination))
+        self.notify(InstanceActivity(switched.id, kind, destination))
         if note:
             self.notify(InstanceActivity(switched.id, "note", note))
-        _logger.info("A session went on on another executor by its route.")
+        _logger.info("A session went on on another executor after a plan limit.")
         await switched.prompt(packet)
 
+    def _inherit_route(self, session: str, conversation: str) -> None:
+        """A session opened again keeps the route the user gave its card."""
+        plugin = self._assistant.accounts
+        kept = self._assistant.instance_store.conversation_of(session)
+        if plugin is None or kept is None:
+            return
+        try:
+            plugin.carry_route(kept, conversation)
+        except Exception:  # a plugin's own code: the route stays behind, logged
+            _logger.exception("The accounts plugin could not carry a session's route.")
+
     async def carried(
-        self, run: ExecutorRun, name: str, target: RouteTarget | None = None
+        self, run: ExecutorRun, name: str, model: str | None = None, effort: str | None = None
     ) -> tuple[str | None, str | None, str]:
         """The model and the effort `run`'s session goes on with on `name` at a switch, kept at
         every one (decided with the user on 25/10/2026), and what the screen says when they
-        change: the destination's own when its route gives them; else, on the same harness, the
+        change: `model` and `effort` when the stop gives them; else, on the same harness, the
         model the user chose, or the one it ran as when it ran on the harness's default, which may
         be another model on another account's plan, and on another harness its default; and the
         effort it ran on, onto the levels the model takes there. A model the destination does not
         offer gives way to its default. When its models cannot be read, the user's own choices go
         as they were, and the effort it ran on only where it ran."""
         same = split_account(name)[0] == split_account(run.name)[0]
-        given = target is not None and target.model is not None
-        chosen = target.model if target is not None and target.model else None
-        if not given and same:
-            chosen = run.chosen_model
-        stop_effort = target.effort if target is not None and target.effort else None
+        chosen = model or (run.chosen_model if same and model is None else None)
+        stop_effort = effort
         effort = stop_effort or run.effort
         executor = self._assistant.executor(name)
         if executor is None or not executor.capabilities().models:
@@ -809,9 +633,9 @@ class Workbench:
             label = await asyncio.to_thread(self.label, name)
             note = f"{label} does not offer {wanted}: the session goes on on its default model."
         # Its default is the first listed: found there, it goes on on the default, as it ran.
-        model = found or offered[0]
+        chose = found or offered[0]
         if effort is not None:
-            effort = clamp_effort(effort, model.efforts) if model.efforts else None
+            effort = clamp_effort(effort, chose.efforts) if chose.efforts else None
         return (None if found is None or found is offered[0] else found.id), effort, note
 
     async def _compact(self, switched: ExecutorRun, before: ExecutorRun, wanted: bool) -> None:
@@ -826,15 +650,15 @@ class Workbench:
             _logger.warning("A switched session could not be compacted: %s", error)
             self.notify(InstanceActivity(switched.id, "note", not_compacted(error)))
 
-    async def _packet(self, run: ExecutorRun, target: RouteTarget) -> str:
-        """The handoff packet for `run`'s session going on on `target`."""
+    async def _packet(self, run: ExecutorRun, target: str) -> str:
+        """The handoff packet for `run`'s session going on on the executor `target`."""
         source = await asyncio.to_thread(self.label, run.name)
         return await self.handoff(
             run.name,
             run.session_id or "",
             run.spec.folder,
             run.history,
-            account_name(target.executor, target.account),
+            target,
             limit_reason(source, run.limited, "the session's route"),
             instances=(run.id,),
         )
@@ -892,84 +716,25 @@ class Workbench:
 
     def label(self, name: str) -> str:
         """An executor on an account as the user knows it: "Claude Code · company-b"."""
-        base, account = split_account(name)
+        base, _account = split_account(name)
         executor = self._assistant.executor(name)
         title = base if executor is None else executor.title
-        kept = self._assistant.account_store.get(base, account) if account else None
-        return f"{title} · {'main account' if kept is None else kept.name}"
-
-    async def add_account(self, name: str, nickname: str) -> AccountView:
-        """Keep another account of `name`: the user's nickname for it, and the harness's folder
-        for it beside its own, made empty or taken as it is when it is there already (the user
-        may have used it in a terminal). Not logged in yet: the harness's own login does it
-        (`switch_executor_account`). Raises `ExecutorError` for a nickname that is empty, taken,
-        or cannot name a folder."""
-        executor = self._executor(name)
-        if not executor.capabilities().account_folders:
-            raise ExecutorError(f"{executor.title} runs on no account but its own.")
-        nickname = nickname.strip()
-        if not ACCOUNT_NICKNAME.fullmatch(nickname):
-            raise ExecutorError(
-                "Give the account a nickname of letters, digits, - or _, at most 40, such as "
-                "company-b: it names its folder too."
-            )
-        folder = executor.new_account_folder(nickname)
-        store = self._assistant.account_store
-        kept = await asyncio.to_thread(store.accounts, name)
-        taken = {folder_key(executor.account_folder()), *(folder_key(k.folder) for k in kept)}
-        if folder_key(folder) in taken:
-            raise ExecutorError(f"The folder {folder} is another account's already.")
-        try:
-            await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
-        except OSError as error:
-            raise ExecutorError(f"The folder {folder} could not be made: {error}") from error
-        try:
-            made = await asyncio.to_thread(
-                store.add, name, nickname, str(folder), self._assistant.clock()
-            )
-        except JobsError as error:
-            raise ExecutorError(str(error)) from error
-        _logger.info("Another account of %s was added.", name, extra={"account": made.id})
-        return _account_view(made, ("", False))
-
-    async def remove_account(self, name: str, account: str) -> None:
-        """Forget another account: its nickname, and the folders that started on it, which start
-        on the main account again. Its folder stays as it is, with its login and its sessions,
-        which are the harness's. Never while an instance runs on it. Raises `ExecutorError`."""
-        executor = self._executor(name)
-        store = self._assistant.account_store
-        found = await asyncio.to_thread(store.get, name, account)
-        if found is None:
-            raise ExecutorError(f"{executor.title} has no account {account!r}.")
-        on = account_name(name, account)
-        if any(run.name == on and run.live for run in self.runs()):
-            raise ExecutorError(
-                f"A {executor.title} session runs on {found.name}. Stop it, or switch it to "
-                "another account, then remove the account."
-            )
-        await asyncio.to_thread(store.delete, name, account)
-        self._usage.pop(on, None)
+        nickname = account_nickname(self._assistant.accounts, name)
+        return f"{title} · {nickname or 'main account'}"
 
     def folder_account(self, name: str, folder: Path | str) -> str:
-        """The account `folder`'s new sessions start on: the other one it names, when that one
-        is still there, else the main one."""
-        named = self._assistant.account_store.folder_accounts(name)
-        wanted = folder_key(folder)
-        return next((found for kept, found in named.items() if folder_key(kept) == wanted), "")
-
-    async def set_folder_account(self, name: str, folder: str, account: str) -> None:
-        """The account `folder`'s new sessions start on; empty, the main account. Raises
-        `ExecutorError` for an account `name` does not have."""
-        executor = self._executor(name)
-        store = self._assistant.account_store
-        if account and await asyncio.to_thread(store.get, name, account) is None:
-            raise ExecutorError(f"{executor.title} has no account {account!r}.")
-        named = await asyncio.to_thread(store.folder_accounts, name)
-        for kept in named:
-            # One row per folder, however its path was written (`C:` or `c:`).
-            if folder_key(kept) == folder_key(folder) and kept != folder:
-                await asyncio.to_thread(store.set_folder_account, name, kept, "")
-        await asyncio.to_thread(store.set_folder_account, name, folder, account)
+        """The account `folder`'s new sessions start on, as the accounts plugin keeps it, when
+        that account is still there; else the harness's own login."""
+        plugin = self._assistant.accounts
+        if plugin is None:
+            return MAIN_ACCOUNT
+        try:
+            found = plugin.folder_account(name, Path(folder))
+        except Exception:  # a plugin's own code: the harness's own login, logged
+            _logger.exception("The accounts plugin could not say a folder's account.")
+            return MAIN_ACCOUNT
+        known = {account.id for account in other_accounts(plugin, name)}
+        return found if found in known else MAIN_ACCOUNT
 
     async def account_switch(self, instance_id: str, account: str) -> AccountSwitch:
         """What changes if the instance goes on on `account` of its executor (empty, the main
@@ -1051,7 +816,8 @@ class Workbench:
         """Go on with the instance's conversation in the same folder on another account of its
         executor (empty, the main one), only when the user asks: that account's harness reads
         this one's session and keeps a copy of its own (decided with the user on 19/10/2026), the
-        original deleted once the copy is kept (`copy_kept`), and the card stays. Never while it
+        original left as it was (decided with the user on 03/11/2026: Atlas deletes no session),
+        and the card stays. Never while it
         works; the instances on other accounts go on as they are. On the model and the effort
         `carried`, a plan limit's switch's (`carried`), else on the ones chosen for it."""
         found = self._idle(instance_id, "switch accounts")
@@ -1194,10 +960,8 @@ class Workbench:
             if str(run.spec.folder) not in listed:
                 fresh.setdefault(str(run.spec.folder), now)
         base = split_account(name)[0]
-        named = await asyncio.to_thread(self._assistant.account_store.folder_accounts, base)
-        accounts = {folder_key(folder): account for folder, account in named.items()}
         return [
-            SessionFolderView(name, folder, updated_at, accounts.get(folder_key(folder), ""))
+            SessionFolderView(name, folder, updated_at, self.folder_account(base, folder))
             for folder, updated_at in [*fresh.items(), *listed.items()]
         ]
 
@@ -1458,14 +1222,6 @@ def not_compacted(error: ExecutorError) -> str:
     return f"It could not be compacted first ({error}); it goes on as it was."
 
 
-def _in_order[T](
-    items: Sequence[T], order: Sequence[str], key: Callable[[T], str]
-) -> tuple[T, ...]:
-    """`items` in the user's `order` of their keys; those it does not name after, as they were."""
-    rank = {account: index for index, account in enumerate(order)}
-    return tuple(sorted(items, key=lambda item: rank.get(key(item), len(rank))))
-
-
 def folder_key(folder: Path | str) -> str:
     """A folder as two of its spellings compare: Windows' paths ignore case (`C:` and `c:` are one
     folder), and a trailing separator names the same one."""
@@ -1478,6 +1234,11 @@ def _first_prompt(run: ExecutorRun) -> str:
         if isinstance(message, UserMessage) and message.text.strip():
             return " ".join(message.text.split())[:200]
     return ""
+
+
+async def _nobody() -> tuple[str, bool]:
+    """An account whose executor is gone: logged in as nobody."""
+    return "", False
 
 
 async def _login(executor: Executor) -> str:
@@ -1495,12 +1256,6 @@ async def _logged(executor: Executor) -> tuple[str, bool]:
     if found.account is None:
         return "", False
     return found.account.login, found.account.logged_in
-
-
-def _account_view(account: ExecutorAccount, logged: tuple[str, bool]) -> AccountView:
-    """Another account, as the executors tab lists it."""
-    on = account_name(account.executor, account.id)
-    return AccountView(account.executor, account.id, on, account.name, account.folder, *logged)
 
 
 async def _log_in_as(executor: Executor, login: str) -> None:

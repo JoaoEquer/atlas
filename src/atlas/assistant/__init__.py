@@ -2,7 +2,13 @@
 conversation, the instructions, the tools, the approval gate), its turns, the background review
 that follows them, the curator, and the workbench of executor instances."""
 
-from atlas.assistant.executors import ExecutorDesk, ExecutorRun, account_name, split_account
+from atlas.assistant.executors import (
+    ExecutorDesk,
+    ExecutorRun,
+    account_name,
+    other_accounts,
+    split_account,
+)
 from atlas.assistant.git import GitState
 from atlas.assistant.handoff import HANDOFF_MARK, Handoff, entries_of, handoff_packet
 from atlas.assistant.model import (
@@ -93,6 +99,7 @@ __all__ = [
     "entries_of",
     "handoff_packet",
     "identity",
+    "other_accounts",
     "review_actions",
     "routine_notice",
     "split_account",

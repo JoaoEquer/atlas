@@ -90,7 +90,7 @@ from atlas.agent import (
     typed_text,
 )
 from atlas.assistant.describe import describe_image
-from atlas.assistant.executors import ExecutorDesk, split_account
+from atlas.assistant.executors import ExecutorDesk, other_accounts, split_account
 from atlas.assistant.messages import AgentMessages
 from atlas.assistant.model import (
     ATLAS_COMMANDS,
@@ -128,7 +128,6 @@ from atlas.home import Database, Home, Settings, TrustSettings, time_zone, utc_n
 from atlas.hooks import ConversationHooks, ConversationMonitors, Hooks, PluginMonitor
 from atlas.jobs import (
     MAX_CHILD_CALLS,
-    AccountStore,
     AgentDefinition,
     DelegationError,
     InstanceStore,
@@ -167,7 +166,7 @@ from atlas.models import (
     load_sdks,
     sees_images,
 )
-from atlas.plugins import Executor, LoadedCommand, LoadedReader, LoadedTool, Transcript
+from atlas.plugins import Accounts, Executor, LoadedCommand, LoadedReader, LoadedTool, Transcript
 from atlas.secrets import MCP_SIGN_IN_FILE, SecretsError, Vault
 from atlas.skills import (
     Curator,
@@ -283,13 +282,14 @@ class _Shared:
     #: The title providers skipped for now (no credit, a refused key).
     titles: TitleQuarantine
     instance_store: InstanceStore
-    #: The executors' extra accounts and each folder's (step 16h).
-    account_store: AccountStore
     #: The files the user attached to messages (step 16g).
     attachments: Attachments
     #: The MCP servers' tools and the plugins' (step 16j), which each conversation copies.
     mcp_tools: Toolset = field(default_factory=Toolset)
     mcp: Any = None
+    #: The harnesses' other accounts, from the plugin that brings them (step 22); `None`, each
+    #: harness on its own login alone.
+    accounts: Accounts | None = None
     #: The plugins' tools, one line per plugin for tool search's list of sources.
     plugin_sources: dict[str, str] = field(default_factory=dict[str, str])
     #: The plugins' MCP servers, as an MCP file's document, for the MCP client.
@@ -567,7 +567,6 @@ class Assistant:
             subagent_store=SubagentStore(database),
             titles=TitleQuarantine(clock),
             instance_store=InstanceStore(database),
-            account_store=AccountStore(database),
             attachments=Attachments(home.attachments_folder),
             last_active=clock(),
         )
@@ -696,9 +695,14 @@ class Assistant:
         return self._shared.instance_store
 
     @property
-    def account_store(self) -> AccountStore:
-        """The executors' other accounts, and the account of each folder (step 16h)."""
-        return self._shared.account_store
+    def accounts(self) -> Accounts | None:
+        """The harnesses' other accounts, from the plugin that brings them (step 22); `None` when
+        no plugin does."""
+        return self._shared.accounts
+
+    def set_accounts(self, accounts: Accounts | None) -> None:
+        self._shared.accounts = accounts
+        self._on_accounts.clear()
 
     @property
     def vault(self) -> Vault:
@@ -745,15 +749,17 @@ class Assistant:
         found = self._executors.get(executor)
         if found is None or not account:
             return found
-        if not found.capabilities().account_folders:
+        accounts = self._shared.accounts
+        if accounts is None or not found.capabilities().account_folders:
             return None
-        kept = self._shared.account_store.get(executor, account)
+        kept = next((a for a in other_accounts(accounts, executor) if a.id == account), None)
         if kept is None:
             self._on_accounts.pop(name, None)
             return None
+        folder = str(kept.folder)
         made = self._on_accounts.get(name)
-        if made is None or made[0] is not found or made[1] != kept.folder:
-            made = (found, kept.folder, found.for_account(Path(kept.folder)))
+        if made is None or made[0] is not found or made[1] != folder:
+            made = (found, folder, found.for_account(kept.folder))
             self._on_accounts[name] = made
         return made[2]
 

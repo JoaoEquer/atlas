@@ -71,7 +71,6 @@ from atlas.assistant import (
     InstanceState,
     PreviewAsked,
     Reviewed,
-    RouteView,
     RoutineRunner,
     SubagentChanged,
     Titled,
@@ -79,6 +78,7 @@ from atlas.assistant import (
     TurnStopped,
     WorkbenchEvent,
     account_name,
+    other_accounts,
 )
 from atlas.bots import Bot, BotError
 from atlas.browser import ENGINE
@@ -129,7 +129,7 @@ from atlas.installation import (
     compose_log,
     compose_progress,
 )
-from atlas.jobs import JobsError, RouteTarget, Routine, Run, RunStatus, Scheduler
+from atlas.jobs import AccountStore, JobsError, Routine, Run, RunStatus, Scheduler
 from atlas.logins import LoginsError, ProgramLogins
 from atlas.marketplace import Kind as MarketKind
 from atlas.marketplace import Marketplace, MarketplaceError, MarketplaceStore
@@ -230,17 +230,13 @@ from atlas.server.protocol import (
     Events,
     EventsParams,
     ExecutorAccountParams,
-    ExecutorAccountRef,
     ExecutorAccounts,
-    ExecutorAddAccountParams,
     ExecutorApprovalParams,
     ExecutorApprovalResult,
     ExecutorChoiceRow,
     ExecutorCommandsParams,
     ExecutorConnector,
     ExecutorConnectors,
-    ExecutorFailoverParams,
-    ExecutorFolderAccountParams,
     ExecutorList,
     ExecutorModel,
     ExecutorModels,
@@ -333,7 +329,6 @@ from atlas.server.protocol import (
     RenameParams,
     RequestCancel,
     ReviewSummary,
-    RouteStopRow,
     RoutineFinished,
     RoutineList,
     RoutineRef,
@@ -358,7 +353,6 @@ from atlas.server.protocol import (
     SessionListParams,
     SessionRead,
     SessionReadParams,
-    SessionRouteRow,
     SessionRow,
     SettingRow,
     SettingsList,
@@ -406,7 +400,6 @@ from atlas.server.protocol import (
     WorkbenchModeParams,
     WorkbenchPrompted,
     WorkbenchPromptParams,
-    WorkbenchRouteParams,
     WorkbenchStartParams,
     WorkbenchSwitchParams,
     WorkbenchUseAccountParams,
@@ -466,6 +459,11 @@ PREVIEW_CHARS = 120
 _THREADS_TABLE = "conversations_threads"
 #: How long after the host's update ended a server that starts still tells its clients.
 UPDATE_NEWS_SECONDS = 600.0
+#: The plugin that keeps the harnesses' other accounts (step 22), its own file in its data folder,
+#: and the one an update leaves there with what Atlas kept before.
+ACCOUNTS_PLUGIN = "accounts"
+ACCOUNTS_BOOK = "accounts.json"
+ACCOUNTS_FROM_ATLAS = "from-atlas.json"
 
 _logger = logging.getLogger("atlas.server")
 
@@ -581,7 +579,7 @@ class Gateway:
             clock=clock,
         )
         self.plugins = Plugins(home, Database(home.database_file), vault, clock=clock)
-        self.plugins.host = AssistantPluginHost(self.assistant)
+        self.plugins.host = AssistantPluginHost(self.assistant, self._told_accounts_changed)
         #: The marketplace (step 16s), installing into this home.
         self.marketplace = Marketplace(
             home,
@@ -612,6 +610,10 @@ class Gateway:
         #: Each row of an executor on another account (step 16h): its executor, the account's
         #: id and nickname.
         self._account_rows: dict[str, tuple[str, str, str]] = {}
+        #: The other accounts went to their plugin in this run, or there were none (step 22).
+        self._accounts_moved = False
+        #: What the accounts plugin's changes start, told to the screens in the background.
+        self._accounts_telling: set[asyncio.Task[None]] = set()
         #: The executors found of the plugins Atlas ships that are off: the onboarding offers them.
         self._offered: set[str] = set()
         self._executor_plugins: set[str] = set()
@@ -726,8 +728,6 @@ class Gateway:
             "workbench.folder": self._workbench_folder,
             "workbench.account": self._workbench_account,
             "workbench.use_account": self._workbench_use_account,
-            "workbench.route": self._workbench_route,
-            "workbench.set_route": self._workbench_set_route,
             "workbench.account_switch": self._workbench_account_switch,
             "workbench.stop": self._workbench_stop,
             "executor.detect": self._executor_detect,
@@ -740,10 +740,6 @@ class Gateway:
             "executor.commands": self._executor_commands,
             "executor.account": self._executor_account,
             "executor.accounts": self._executor_accounts,
-            "executor.add_account": self._executor_add_account,
-            "executor.remove_account": self._executor_remove_account,
-            "executor.folder_account": self._executor_folder_account,
-            "executor.failover": self._executor_failover,
             "executor.delete_session": self._executor_delete_session,
             "executor.session": self._executor_session,
             "subagent.session": self._subagent_session,
@@ -878,8 +874,12 @@ class Gateway:
         asks (`executor.detect`). The executors of the plugins Atlas ships that are off are
         looked at too, for the onboarding to offer."""
         if self._fixed_executors:
-            # Given here (a test, a proof): they stay as given, and are looked at all the same.
+            # Given here (a test, a proof): they stay as given, and are looked at all the same,
+            # with the other accounts of the plugin that brings them.
             async with self._executors_lock:
+                await asyncio.to_thread(self._move_accounts)
+                accounts = await self.plugins.accounts()
+                self.assistant.set_accounts(None if accounts is None else accounts.accounts)
                 for name in self.assistant.executors():
                     given = self.assistant.executor(name)
                     if given is not None:
@@ -898,6 +898,10 @@ class Gateway:
             offered: set[str] = set()
             sources: dict[str, UpdateSource] = {}
             self._executors_seen = await asyncio.to_thread(_executor_states, self.plugins)
+            # The other accounts first: the executors on them are rows of their own (step 22).
+            await asyncio.to_thread(self._move_accounts)
+            accounts = await self.plugins.accounts()
+            self.assistant.set_accounts(None if accounts is None else accounts.accounts)
             for loaded in await self.plugins.executors():
                 executor, detection = await self._detect(loaded)
                 plugins.add(loaded.plugin)
@@ -928,21 +932,52 @@ class Gateway:
         if before != (detections, plugins, offered):
             self.plugins_changed()
 
+    def _move_accounts(self) -> None:
+        """Once, the other accounts Atlas kept itself until step 22 go to the accounts plugin,
+        which is turned on for whoever had any, as the update's own doing (decided with the user
+        on 03/11/2026: it is what they used): its data folder gets them, and no account's folder
+        is touched. A home that never added an account, or whose plugin already keeps its own,
+        is left as it is."""
+        if self._accounts_moved:
+            return
+        self._accounts_moved = True
+        folder = self.plugins.data_folder(ACCOUNTS_PLUGIN)
+        if (folder / ACCOUNTS_BOOK).exists() or (folder / ACCOUNTS_FROM_ATLAS).exists():
+            return
+        exported = AccountStore(Database(self._home.database_file)).export()
+        if exported is None:
+            return
+        try:
+            view = self.plugins.view(ACCOUNTS_PLUGIN)
+        except PluginError:
+            _logger.warning("The accounts plugin is not here: the other accounts stay unread.")
+            return
+        folder.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(exported, indent=2, ensure_ascii=False) + "\n"
+        (folder / ACCOUNTS_FROM_ATLAS).write_text(text, encoding="utf-8")
+        if view.manifest is not None and not view.enabled:
+            try:
+                self.plugins.enable(ACCOUNTS_PLUGIN, view.manifest.fingerprint())
+            except PluginError as error:
+                _logger.warning("The accounts plugin could not be turned on: %s", error)
+                return
+        _logger.info("The other accounts went to the accounts plugin.")
+
     async def _account_detections(self, name: str, executor: Executor) -> dict[str, Detection]:
         """The detection of `name`'s executor on each of its other accounts (step 16h), each one
         row more, named as the screens name it: its login is that account's folder's."""
         if not executor.capabilities().account_folders:
             return {}
         plugin = self._executor_names.get(name, ("", executor.title))[0]
-        kept = await asyncio.to_thread(self.assistant.account_store.accounts, name)
+        kept = await asyncio.to_thread(other_accounts, self.assistant.accounts, name)
         found: dict[str, Detection] = {}
         for account in kept:
             named = account_name(name, account.id)
             on = self.assistant.executor(named)
             if on is not None:
                 found[named] = await self._look(on)
-                self._executor_names[named] = (plugin, f"{executor.title} · {account.name}")
-                self._account_rows[named] = (name, account.id, account.name)
+                self._executor_names[named] = (plugin, f"{executor.title} · {account.nickname}")
+                self._account_rows[named] = (name, account.id, account.nickname)
         return found
 
     async def _detect(self, loaded: LoadedExecutor) -> tuple[Executor | None, Detection]:
@@ -2719,31 +2754,6 @@ class Gateway:
         )
         return _instance_row(run.view())
 
-    async def _workbench_route(
-        self, connection: Connection, params: InstanceRef
-    ) -> SessionRouteRow:
-        found = await self._on_workbench(self.assistant.workbench.route(params.instance_id))
-        return _route_of(found)
-
-    async def _workbench_set_route(
-        self, connection: Connection, params: WorkbenchRouteParams
-    ) -> SessionRouteRow:
-        targets = [
-            RouteTarget(
-                given.executor,
-                given.account_id,
-                model=given.model or None,
-                effort=given.effort or None,
-            )
-            for given in params.targets
-        ]
-        found = await self._on_workbench(
-            self.assistant.workbench.set_route(
-                params.instance_id, targets, enabled=params.enabled, compact=params.compact
-            )
-        )
-        return _route_of(found)
-
     async def _workbench_account_switch(
         self, connection: Connection, params: WorkbenchUseAccountParams
     ) -> AccountSwitchRow:
@@ -2765,46 +2775,6 @@ class Gateway:
         listed = await self._on_workbench(self.assistant.workbench.accounts(params.executor))
         return _accounts_of(listed)
 
-    async def _executor_failover(
-        self, connection: Connection, params: ExecutorFailoverParams
-    ) -> ExecutorAccounts:
-        listed = await self._on_workbench(
-            self.assistant.workbench.set_failover(
-                params.executor, params.order, enabled=params.enabled, compact=params.compact
-            )
-        )
-        await self._accounts_changed(params.executor, rows=False)
-        return _accounts_of(listed)
-
-    async def _executor_add_account(
-        self, connection: Connection, params: ExecutorAddAccountParams
-    ) -> AccountRow:
-        view = await self._on_workbench(
-            self.assistant.workbench.add_account(params.executor, params.nickname)
-        )
-        await self._accounts_changed(params.executor)
-        return AccountRow(**dump(view))
-
-    async def _executor_remove_account(
-        self, connection: Connection, params: ExecutorAccountRef
-    ) -> Empty:
-        await self._on_workbench(
-            self.assistant.workbench.remove_account(params.executor, params.account_id)
-        )
-        await self._accounts_changed(params.executor)
-        return Empty()
-
-    async def _executor_folder_account(
-        self, connection: Connection, params: ExecutorFolderAccountParams
-    ) -> Empty:
-        await self._on_workbench(
-            self.assistant.workbench.set_folder_account(
-                params.executor, params.folder, params.account_id
-            )
-        )
-        await self._accounts_changed(params.executor, rows=False)
-        return Empty()
-
     async def _executor_delete_session(
         self, connection: Connection, params: SessionDeleteParams
     ) -> Empty:
@@ -2814,6 +2784,12 @@ class Gateway:
             )
         )
         return Empty()
+
+    def _told_accounts_changed(self, executor: str) -> None:
+        """The accounts plugin changed `executor`'s accounts or a folder's (step 22)."""
+        task = asyncio.create_task(self._accounts_changed(executor))
+        self._accounts_telling.add(task)
+        task.add_done_callback(self._accounts_telling.discard)
 
     async def _accounts_changed(self, executor: str, *, rows: bool = True) -> None:
         """Every screen reads the executor's accounts and folders again; with `rows`, its
@@ -3168,11 +3144,6 @@ def _said_kind(text: str) -> Literal["message", "notice", "terminal", "skill"]:
     if is_skill_text(text):
         return "skill"
     return "terminal" if is_terminal_text(text) else "message"
-
-
-def _route_of(found: RouteView) -> SessionRouteRow:
-    stops = [RouteStopRow(**dump(stop)) for stop in found.stops]
-    return SessionRouteRow(found.instance_id, stops, found.enabled, found.compact)
 
 
 def _accounts_of(listed: AccountList) -> ExecutorAccounts:

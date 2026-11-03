@@ -268,6 +268,7 @@ def test_a_user_plugin_named_as_a_shipped_one_is_refused(
 #: made on purpose: the commit's message says users will be asked to consent again. Found on
 #: 01/11/2026, when Claude Code's `atlas.api` moved from 2 to 25 and nothing said so.
 BUNDLED_CONSENTS = {
+    "accounts": "e22ba200bd5957fcf6633c637089d4a5b431f530e440c84913829181fa324282",
     "claude-code": "35414510c384728fbb4b07323160448e898a29b50cfb90595e3e07e2721f00e9",
     "codex": "693d68ea873b613f5d88b99ac5857c884e6da3038e79347efea6430db863703c",
     "deepseek": "4ff0b8f41f12fccd1b19a74dc37c164b1c8328da5bdfaa2f9353689ed3f70154",
@@ -297,9 +298,12 @@ def test_a_shipped_plugin_asks_for_consent_again_only_on_purpose(home: Home, vau
 def test_atlas_ships_its_channel_and_executor_plugins_off(home: Home, vault: Vault) -> None:
     database = Database(home.database_file)
     migrate(database, (SCHEMA,))
-    claude, codex, deepseek, gemini, telegram, voice = Plugins(
+    accounts, claude, codex, deepseek, gemini, telegram, voice = Plugins(
         home, database, vault, bundled_folder=BUNDLED_FOLDER
     ).all()
+    assert (accounts.name, accounts.bundled, accounts.enabled) == ("accounts", True, False)
+    assert accounts.manifest is not None
+    assert accounts.manifest.accounts, "the harnesses' other accounts (step 22)"
     assert (telegram.name, telegram.bundled, telegram.enabled, telegram.problem) == (
         "telegram",
         True,

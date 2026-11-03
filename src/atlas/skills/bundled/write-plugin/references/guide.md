@@ -452,6 +452,60 @@ def register(ctx: PluginContext) -> None:
   [src/atlas/plugins/bundled/deepseek](https://github.com/marqueskaio/atlas/tree/main/src/atlas/plugins/bundled/deepseek). The Claude Code and
   Codex plugins speak their harness's own protocol.
 
+## Other accounts
+
+Atlas runs each harness on your own login, one account. Running them on several accounts at once,
+and moving a session to another account when its plan runs out, is a plugin's: the **accounts**
+plugin Atlas ships does it, and one plugin a home may bring it (`"accounts": true`, `"api": 29`).
+
+```python
+from pathlib import Path
+
+from atlas.plugins.sdk import HandOver, NextStop, OtherAccount, PluginContext
+
+
+class MyAccounts:
+    def __init__(self, ctx: PluginContext) -> None:
+        self.ctx = ctx
+
+    def accounts(self, executor):
+        return [OtherAccount("1a2b3c4d", "company-b", Path.home() / ".claude-company-b")]
+
+    def folder_account(self, executor, folder):
+        return ""  # the harness's own login
+
+    def hand_over(self, executor):
+        return HandOver(enabled=True, compact=True, order=("", "1a2b3c4d"))
+
+    async def next_stop(self, name, conversation):
+        on = "claude-code@1a2b3c4d"
+        return NextStop(on) if await self.ctx.workbench.available(on) else None
+
+    def keep_route(self, conversation, executors): ...
+
+    def carry_route(self, source, conversation): ...
+
+
+def register(ctx: PluginContext) -> None:
+    ctx.register_accounts(MyAccounts(ctx))
+```
+
+- **`Accounts`** says which accounts each executor has beside its own login (`OtherAccount`: an
+  id, a nickname, the harness's folder for it), the account a folder's new sessions start on
+  (`folder_account`), and whether and in what order they take over at a plan's limit
+  (`hand_over`, a `HandOver`). Atlas runs each account as an executor of its own,
+  `<executor>@<id>`, made by the harness's plugin on that folder (`for_account`).
+- **At a plan's limit**, Atlas asks `next_stop`: a `NextStop` names where the session goes on
+  (an executor on an account, the model and effort there, whether it compacts first, and whether
+  a route chose it); a string says why none can; `None` leaves the session where it is, and
+  Atlas goes on there when the limit resets. Carrying the session is Atlas's: a copy on the same
+  harness, or a new session whose first prompt is a handoff packet on another.
+- **A route** is the stops one session goes on to, in order: `keep_route` keeps one the model
+  gave a delegated task, and `carry_route` keeps a card's when its session opens again.
+- **`ctx.workbench`** is what Atlas lends it (a `WorkbenchHost`): `executor(name)`,
+  `executors()`, `available(name)` (installed, logged in, not at its limit), `limited(name)`,
+  `running(name)`, and `accounts_changed(executor)`, which every screen hears.
+
 ## Two examples
 
 **A business system's MCP, no Python.** The system already has an MCP server, so the plugin only
@@ -697,7 +751,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 ## What the SDK offers
 
-Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 28), and the ACP
+Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 29), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
 (`SCREEN_API` 3). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
@@ -720,6 +774,7 @@ SDK adds and the guide does not name fails it.
 | `ctx.register_call(name, run)` | what the screen's `ctx.call` reaches | 17 |
 | `ctx.register_reader(kind, run)` | an attachment read into text (Readers) | 21 |
 | `ctx.memory_limits()` | the memory's limits as the user set them, a `MemoryLimits` (`user`, `memory`), read only; `None` in a terminal command | 26 |
+| `ctx.register_accounts(accounts)`, `ctx.workbench` | the harnesses' other accounts (Other accounts) | 29 |
 
 **What Atlas hands what it registered:**
 

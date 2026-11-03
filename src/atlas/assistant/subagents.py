@@ -38,6 +38,7 @@ from atlas.assistant.executors import (
     ExecutorRun,
     account_name,
     default_executor_effort,
+    other_accounts,
     split_account,
 )
 from atlas.assistant.model import (
@@ -62,8 +63,6 @@ from atlas.jobs import (
     STEER_OPEN,
     WAITED_NOTES,
     AgentDefinition,
-    RouteTarget,
-    SessionRoute,
     Subagent,
     SubagentStatus,
     Task,
@@ -88,6 +87,7 @@ from atlas.plugins import (
     ExecutorSpec,
     Finished,
     LimitReached,
+    NextStop,
     Returned,
 )
 
@@ -187,10 +187,10 @@ class Subagents:
             found = assistant.executor(name)
             if found is None or not found.capabilities().account_folders:
                 continue
-            kept = assistant.account_store.accounts(name)
+            kept = other_accounts(assistant.accounts, name)
             if kept:
                 names.append(target_name(name, ""))
-                names.extend(target_name(name, account.name) for account in kept)
+                names.extend(target_name(name, account.nickname) for account in kept)
         return names
 
     def _resolve(self, name: str) -> tuple[str, str | None] | str:
@@ -209,34 +209,45 @@ class Subagents:
         if wanted.lower() == MAIN_TARGET:
             return base, MAIN_ACCOUNT
         kept = (
-            assistant.account_store.accounts(base) if found.capabilities().account_folders else []
+            other_accounts(assistant.accounts, base) if found.capabilities().account_folders else []
         )
         for account in kept:
-            if wanted.lower() in (account.name.lower(), account.id):
+            if wanted.lower() in (account.nickname.lower(), account.id):
                 return base, account.id
-        names = ", ".join([MAIN_TARGET, *(account.name for account in kept)])
+        names = ", ".join([MAIN_TARGET, *(account.nickname for account in kept)])
         return (
             f"[Atlas: {found.title} has no account {wanted!r}. Its accounts: {names}; "
             "executor_accounts shows each.]"
         )
 
-    def _route(self, names: Sequence[str]) -> tuple[RouteTarget, ...] | str:
-        """A delegation's route from the target names the model gave, a bare executor being its
-        main account; or what the model is told about one Atlas does not know."""
-        targets: list[RouteTarget] = []
+    def _route(self, names: Sequence[str]) -> tuple[str, ...] | str:
+        """A delegation's route from the target names the model gave, each as its executor on
+        its account (`claude-code@1a2b3c4d`, a bare executor being its own login); or what the
+        model is told about one Atlas does not know, or when no plugin keeps routes."""
+        if names and self._assistant.accounts is None:
+            return (
+                "[Atlas: A route needs the accounts plugin, which is not on here. Delegate "
+                "without a route, or ask the user to turn the plugin on.]"
+            )
+        targets: list[str] = []
         for name in names:
             resolved = self._resolve(name)
             if isinstance(resolved, str):
                 return resolved
             base, account = resolved
-            targets.append(RouteTarget(base, account or MAIN_ACCOUNT))
+            targets.append(account_name(base, account or MAIN_ACCOUNT))
         return tuple(dict.fromkeys(targets))
 
-    def _keep_route(self, conversation_id: str, route: Sequence[RouteTarget]) -> None:
-        """A delegated task's route, kept by its stored conversation as a card's is, so it holds
-        when the task is resumed."""
-        if route:
-            self._assistant.account_store.set_route(SessionRoute(conversation_id, tuple(route)))
+    def _keep_route(self, conversation_id: str, route: Sequence[str]) -> None:
+        """A delegated task's route, kept by the accounts plugin for its stored conversation as a
+        card's is, so it holds when the task is resumed."""
+        accounts = self._assistant.accounts
+        if not route or accounts is None:
+            return
+        try:
+            accounts.keep_route(conversation_id, route)
+        except Exception:  # a plugin's own code: the task goes without its route, logged
+            _logger.exception("The accounts plugin could not keep a delegated task's route.")
 
     async def spawn(
         self,
@@ -254,7 +265,7 @@ class Subagents:
         where each task goes on at a plan's limit, in order, in place of the executor's own
         order of its accounts."""
         assistant = self._assistant
-        targets: tuple[RouteTarget, ...] = ()
+        targets: tuple[str, ...] = ()
         account: str | None = None
         if executor is not None:
             resolved = self._resolve(executor)
@@ -419,7 +430,7 @@ class Subagents:
             await asyncio.to_thread(self._keep_route, record.conversation_id, routed)
         workbench = assistant.workbench
         base, current = split_account(record.executor)
-        target: RouteTarget | None = None
+        target: str | None = None
         if executor is not None:
             resolved = self._resolve(executor)
             if isinstance(resolved, str):
@@ -434,11 +445,11 @@ class Subagents:
                         workbench.folder_account, chosen_base, record.folder
                     )
                 )
-            target = RouteTarget(chosen_base, chosen)
+            target = account_name(chosen_base, chosen)
         elif workbench.limited(record.executor):
             found_next = await self._next(record.executor, record.conversation_id, None)
-            target = None if found_next is None else found_next[0]
-        name = record.executor if target is None else account_name(target.executor, target.account)
+            target = None if found_next is None else found_next.executor
+        name = record.executor if target is None else target
         crossing = split_account(name)[0] != base
         resume_from = None
         if not crossing and name != record.executor:
@@ -558,7 +569,6 @@ class Subagents:
             subagent_id=record.id,
             record=assistant.instance_store,
             clock=assistant.clock,
-            on_copied=workbench.copy_kept,
         )
         run.atlas_answers = atlas_answers
         return run
@@ -671,11 +681,6 @@ class Subagents:
             accounts = await workbench.accounts(name)
         except ExecutorError as error:
             return {"executor": name, "error": str(error)}
-        folders = (
-            await asyncio.to_thread(assistant.account_store.folder_accounts, name)
-            if accounts.can_add
-            else {}
-        )
         alone = len(accounts.accounts) == 1
 
         async def row(view: AccountView) -> dict[str, object]:
@@ -692,9 +697,6 @@ class Subagents:
                 else:
                     entry |= _usage_entry(usage)
             entry["at_limit"] = workbench.limited(view.name)
-            starts = [folder for folder, kept in folders.items() if kept == view.account_id]
-            if starts:
-                entry["folders"] = starts
             return entry
 
         found = assistant.executor(name)
@@ -900,20 +902,14 @@ class Subagents:
 
     async def _next(
         self, name: str, conversation_id: str, limit: LimitReached | None
-    ) -> tuple[RouteTarget, bool] | None:
-        """Where a delegated task goes on after `name` reached its plan's limit, and whether a
-        copy there compacts first: the next destination of its route, when it has one on, else
-        the next of its executor's accounts in the user's order; `None` when none can."""
+    ) -> NextStop | None:
+        """Where a delegated task goes on after `name` reached its plan's limit, as the accounts
+        plugin says (its route, else the next of its executor's accounts); `None` when none can,
+        or no plugin brings other accounts."""
         workbench = self._assistant.workbench
-        store = self._assistant.account_store
-        route = await asyncio.to_thread(store.route, conversation_id)
-        if route is not None and route.enabled and route.targets:
-            target = await workbench.next_target(name, route, limit)
-            return None if target is None else (target, route.compact)
-        account = await workbench.next_account(name, limit)
-        if account is None:
-            return None
-        return RouteTarget(split_account(name)[0], account), workbench.failover(name).compact
+        workbench.mark_limited(name, limit)
+        found = await workbench.next_stop(name, conversation_id)
+        return found if isinstance(found, NextStop) else None
 
     async def _hand_over(
         self, child: _Child, heard: Callable[[ExecutorEvent], None]
@@ -928,18 +924,17 @@ class Subagents:
         old = child.run
         if old is None or old.session_id is None:
             return None
-        found_next = await self._next(old.name, child.record.conversation_id, old.limited)
-        if found_next is None:
+        stop = await self._next(old.name, child.record.conversation_id, old.limited)
+        if stop is None:
             return None
-        target, compact = found_next
-        name = account_name(target.executor, target.account)
+        name, compact = stop.executor, stop.compact
         found = assistant.executor(name)
         logged = None if found is None else await _logged_in(found)
         if found is None or logged is None:
             return None
-        crossing = target.executor != split_account(old.name)[0]
+        crossing = split_account(name)[0] != split_account(old.name)[0]
         # The model and the effort it ran on go on with it (decided with the user on 25/10/2026).
-        model, effort, note = await workbench.carried(old, name, target)
+        model, effort, note = await workbench.carried(old, name, stop.model, stop.effort)
         packet = ""
         if crossing:
             source = await asyncio.to_thread(workbench.label, old.name)
@@ -988,7 +983,7 @@ class Subagents:
             workbench.notify(InstanceActivity(run.id, "route", destination))
             _logger.info("A delegated task went on on another executor by its route.")
             return run, await run.run(packet, heard)
-        workbench.notify(InstanceActivity(run.id, "account", logged.login or target.account))
+        workbench.notify(InstanceActivity(run.id, "account", logged.login or name))
         _logger.info("A delegated task went on on another account after a plan limit.")
         # It compacts first where its harness has `/compact`; one that fails leaves it as it was.
         if not (compact and "compact" in old.commands):

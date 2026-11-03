@@ -1769,60 +1769,6 @@ class WorkbenchUseAccountParams:
 
 
 @dataclass(frozen=True, slots=True)
-class RouteTargetParams:
-    """One destination of a session's route: an executor's own name and one of its
-    `executor.accounts` ids (empty, the main account), and the model (an `executor.models` id)
-    and the effort the session goes on with there; `None`, the ones it ran on."""
-
-    executor: str
-    account_id: str = ""
-    model: str | None = None
-    effort: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class WorkbenchRouteParams:
-    instance_id: str
-    #: In the order the session goes on to them at a plan's limit; empty, none.
-    targets: list[RouteTargetParams]
-    enabled: bool = True
-    #: A copy on another account of the same executor compacts first, where its harness has
-    #: `/compact` (on by default).
-    compact: bool = True
-
-
-@dataclass(frozen=True, slots=True)
-class RouteStopRow:
-    executor: str
-    account_id: str
-    #: Its executor on that account, as `workbench.executors` names it.
-    name: str
-    title: str
-    #: The account's nickname; empty for the main account.
-    nickname: str = ""
-    #: Its executor is installed here; one that is not is passed over.
-    installed: bool = True
-    #: The model and the effort the session goes on with there; `None`, the ones it ran on.
-    model: str | None = None
-    effort: str | None = None
-    #: It reached its plan's limit and has not reset: passed over until it does.
-    limited: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class SessionRouteRow:
-    """A session's route (asked for by the user on 21/10/2026): where it goes on, in order, when
-    the destination it runs on reaches its plan's limit. With none, or `enabled` off, its
-    executor's own accounts take over (`executor.failover`)."""
-
-    instance_id: str
-    stops: list[RouteStopRow] = field(default_factory=list[RouteStopRow])
-    enabled: bool = True
-    #: A copy on another account compacts first, where its harness has `/compact`.
-    compact: bool = True
-
-
-@dataclass(frozen=True, slots=True)
 class AccountSwitchRow:
     """What changes if an instance goes on on another account (step 16h)."""
 
@@ -1873,44 +1819,12 @@ class ExecutorAccounts:
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutorFailoverParams:
-    executor: str
-    #: Every account's `executor.accounts` id in the order they take over in, the main one as
-    #: empty; one left out comes after.
-    order: list[str]
-    enabled: bool
-    compact: bool
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutorAddAccountParams:
-    executor: str
-    #: The user's nickname for it ("company-b"), which names its folder too.
-    nickname: str
-
-
-@dataclass(frozen=True, slots=True)
 class SessionDeleteParams:
     #: An `ExecutorRow.name`: the executor on the account that keeps the session.
     executor: str
     session_id: str
     #: As `executor.sessions` names it.
     folder: str
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutorAccountRef:
-    executor: str
-    account_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutorFolderAccountParams:
-    executor: str
-    #: As `executor.folders` names it.
-    folder: str
-    #: An `executor.accounts` id; empty, the main account.
-    account_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -2827,21 +2741,6 @@ METHODS: Mapping[str, Method] = {
             "it was; never while it works.",
         ),
         Method(
-            "workbench.route",
-            InstanceRef,
-            SessionRouteRow,
-            "The instance's session's route: the destinations it goes on to at a plan's limit, "
-            "accounts of its executor and of others, in order.",
-        ),
-        Method(
-            "workbench.set_route",
-            WorkbenchRouteParams,
-            SessionRouteRow,
-            "Set the instance's session's route, kept for its card. On an account of the same "
-            "executor it goes on in a copy; on another executor in a new session, whose first "
-            "prompt is a handoff packet Atlas puts together with no model call.",
-        ),
-        Method(
             "workbench.account_switch",
             WorkbenchUseAccountParams,
             AccountSwitchRow,
@@ -2922,39 +2821,11 @@ METHODS: Mapping[str, Method] = {
             "who it is logged in as (step 16h).",
         ),
         Method(
-            "executor.add_account",
-            ExecutorAddAccountParams,
-            AccountRow,
-            "Keep another account under a nickname, in the harness's folder for it, not logged "
-            "in yet: `executor.account` on its row logs it in on the user's browser.",
-        ),
-        Method(
-            "executor.remove_account",
-            ExecutorAccountRef,
-            Empty,
-            "Forget another account; its folder stays, with its login and sessions, and its "
-            "folders start on the main account again. Refused while an instance runs on it.",
-        ),
-        Method(
             "executor.delete_session",
             SessionDeleteParams,
             Empty,
             "Delete one session, in its account's folder only, after the user said yes; an idle "
             "instance on it closes first. Refused while it works.",
-        ),
-        Method(
-            "executor.failover",
-            ExecutorFailoverParams,
-            ExecutorAccounts,
-            "The order an executor's accounts take over in when one reaches its plan's limit, "
-            "whether they do, and whether a session compacts before it goes on; told to every "
-            "screen as `executor.accounts`.",
-        ),
-        Method(
-            "executor.folder_account",
-            ExecutorFolderAccountParams,
-            Empty,
-            "The account a folder's new sessions start on; empty, the main account.",
         ),
         Method(
             "executor.account",

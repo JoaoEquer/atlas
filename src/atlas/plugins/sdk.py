@@ -59,7 +59,11 @@ lets a plugin bring themes (`atlas.themes`): `themes/<name>.json`, colors for th
 with no Python and no screen; the app offers them beside light and dark. Version 28 lets an
 executor list its permission modes and switch them while it runs (`Capabilities.modes`,
 `ExecutorInstance.set_mode`), for the menu under the session's box: Claude Code's plan mode, and
-edits taken without asking.
+edits taken without asking. Version 29 moves the harnesses' other accounts out of Atlas into one
+plugin (`Accounts`, `PluginContext.register_accounts`, step 22): the accounts, the order they take
+over in at a plan's limit, a folder's account and a session's route are the plugin's; running each
+account as an executor of its own and carrying a session to the stop the plugin names are
+Atlas's (`WorkbenchHost`).
 
 **What costs credit is declared and shown:** `llm` and `notify` call the user's model on the
 plugin's own initiative, so the manifest says `"llm": true` or `"notify": true` and the consent
@@ -106,8 +110,8 @@ from typing import Any, Literal, Protocol
 #: shortcut, pasting into the program in focus); 24, themes; 25, a setting's choices, listed by
 #: the app (fixed, Atlas's models, or the plugin's call `setting_choices`); 26, the memory's
 #: limits, read only; 27, where a harness's newest version is published and how its install
-#: updates; 28, a harness's permission modes.
-API_VERSION = 28
+#: updates; 28, a harness's permission modes; 29, the harnesses' other accounts, in one plugin.
+API_VERSION = 29
 
 
 @dataclass(frozen=True, slots=True)
@@ -825,6 +829,117 @@ class Executor(Protocol):
         ...
 
 
+# -- accounts (version 29) ------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class OtherAccount:
+    """An account of an executor beside the harness's own login (version 29): its executor runs
+    as `<executor>@<id>`, made on `folder` by the executor's `for_account`."""
+
+    #: Short and lasting: it names the account's executor, and what Atlas keeps of its sessions.
+    id: str
+    #: The user's name for it ("company-b").
+    nickname: str
+    #: The harness's folder for it, as `new_account_folder` gave it.
+    folder: Path
+
+
+@dataclass(frozen=True, slots=True)
+class HandOver:
+    """Whether an executor's accounts take over from one another at a plan's limit, whether a
+    session compacts in its copy before it goes on, and in what order they take over (version
+    29): the accounts' ids, the harness's own login as `""`; one left out comes after."""
+
+    enabled: bool = False
+    compact: bool = True
+    order: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class NextStop:
+    """Where a session at its plan's limit goes on (version 29): `executor` is an executor's name,
+    or its executor on an account (`claude-code@1a2b3c4d`). On the same harness the session goes
+    on in a copy, compacted first when `compact` says; on another, in a new session whose first
+    prompt is a handoff packet Atlas writes. `model` and `effort` are the ones it goes on with
+    there; `None`, the ones it ran on, fitted to what that executor offers. `route`: the session's
+    own route chose it, which the card says apart from an account's hand-over."""
+
+    executor: str
+    model: str | None = None
+    effort: str | None = None
+    compact: bool = True
+    route: bool = False
+
+
+class Accounts(Protocol):
+    """What a plugin that runs the harnesses on several accounts answers Atlas (version 29,
+    `PluginContext.register_accounts`): the accounts are its, and so is the choice of where a
+    session goes at a plan's limit; carrying the session there is Atlas's. One plugin a home
+    brings it. Atlas calls the plain methods often, from any thread: they read what the plugin
+    keeps, with no harness started."""
+
+    def accounts(self, executor: str) -> Sequence[OtherAccount]:
+        """`executor`'s accounts beside its own login, in the order the user keeps them."""
+        ...
+
+    def folder_account(self, executor: str, folder: Path) -> str:
+        """The id of the account `folder`'s new sessions of `executor` start on; empty, the
+        harness's own login."""
+        ...
+
+    def hand_over(self, executor: str) -> HandOver:
+        """Whether `executor`'s accounts take over at a plan's limit, as the user set it."""
+        ...
+
+    async def next_stop(self, name: str, conversation: str) -> NextStop | str | None:
+        """Where the session of `conversation`, which ran on `name` (an executor, or its executor
+        on an account), goes on now that its plan's limit stopped it: a `NextStop`; why none can
+        (told on its card); or `None`, when nothing hands it over. `WorkbenchHost.available` says
+        which can take it. With no stop, Atlas goes on where it was when the limit resets."""
+        ...
+
+    def keep_route(self, conversation: str, executors: Sequence[str]) -> None:
+        """Give the session of `conversation` a route of its own: the executors, on their
+        accounts (`claude-code@1a2b3c4d`), it goes on to at a plan's limit, in order, as the model
+        named them for a delegated task."""
+        ...
+
+    def carry_route(self, source: str, conversation: str) -> None:
+        """The session of `source` opened again as `conversation`: it keeps its card's route."""
+        ...
+
+
+class WorkbenchHost(Protocol):
+    """What Atlas lends the plugin that brings `Accounts` (version 29, `PluginContext.workbench`):
+    its executors, and what it knows of their accounts now."""
+
+    def executor(self, name: str) -> "Executor | None":
+        """An executor installed here, by its name, or its executor on an account; `None` when
+        it is not."""
+        ...
+
+    def executors(self) -> Sequence[str]:
+        """The executors installed here, by name, without their accounts."""
+        ...
+
+    async def available(self, name: str) -> bool:
+        """`name` may take a session over: installed, logged in, and not at its plan's limit."""
+        ...
+
+    def limited(self, name: str) -> bool:
+        """`name` is at its plan's limit now: it reached it here, or its usage says so."""
+        ...
+
+    def running(self, name: str) -> bool:
+        """A session runs on `name` here now."""
+        ...
+
+    def accounts_changed(self, executor: str) -> None:
+        """`executor`'s accounts changed: Atlas lists them again on every screen."""
+        ...
+
+
 # -- tools (version 14) ---------------------------------------------------------------------------
 
 
@@ -1038,4 +1153,16 @@ class PluginContext(Protocol):
         `audio`. Before a turn, Atlas hands it each such file the user sent, from the app or a
         channel, and gives the model what it returns in the file's note. One reader a kind: a
         second plugin's is left out and logged."""
+        ...
+
+    def register_accounts(self, accounts: "Accounts") -> None:
+        """The harnesses' other accounts, when the manifest says `"accounts": true` (version 29):
+        Atlas runs each as an executor of its own and asks `accounts` where a session goes at a
+        plan's limit. One plugin a home: a second one's is left out and logged."""
+        ...
+
+    @property
+    def workbench(self) -> "WorkbenchHost":
+        """The executors Atlas runs and what it knows of their accounts (version 29), when the
+        manifest says `"accounts": true`; otherwise reading it raises."""
         ...

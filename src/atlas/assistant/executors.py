@@ -53,6 +53,7 @@ from atlas.models import (
     default_effort,
 )
 from atlas.plugins import (
+    Accounts,
     Answers,
     Called,
     CommandsChanged,
@@ -65,6 +66,7 @@ from atlas.plugins import (
     ExecutorSpec,
     Finished,
     LimitReached,
+    OtherAccount,
     Permission,
     PlanUsage,
     Question,
@@ -99,6 +101,27 @@ def split_account(name: str) -> tuple[str, str]:
     empty for the main account."""
     executor, _, account = name.partition(ACCOUNT_MARK)
     return executor, account
+
+
+def other_accounts(accounts: Accounts | None, executor: str) -> list[OtherAccount]:
+    """`executor`'s accounts beside its own login, as the plugin that brings them keeps them
+    (step 22): none when no plugin does, or when its code fails, which is logged."""
+    if accounts is None:
+        return []
+    try:
+        return list(accounts.accounts(executor))
+    except Exception:  # a plugin's own code: its accounts are left out, logged
+        _logger.exception("The accounts plugin could not list an executor's accounts.")
+        return []
+
+
+def account_nickname(accounts: Accounts | None, name: str) -> str:
+    """The user's nickname for the account `name` runs on; empty for the harness's own login,
+    or an account no longer kept."""
+    executor, account = split_account(name)
+    if not account:
+        return ""
+    return next((a.nickname for a in other_accounts(accounts, executor) if a.id == account), "")
 
 
 async def default_executor_effort(executor: Executor, model: str | None) -> str | None:
@@ -185,14 +208,10 @@ class ExecutorRun:
         record: InstanceStore | None = None,
         clock: Callable[[], datetime] = utc_now,
         on_limit: "Callable[[ExecutorRun], None] | None" = None,
-        on_copied: "Callable[[ExecutorRun], None] | None" = None,
     ) -> None:
-        """`on_limit` hears a turn from its card stopped at the account's plan limit;
-        `on_copied`, a turn that ended with its session a copy of another account's, the one it
-        `replaces`."""
+        """`on_limit` hears a turn from its card stopped at the account's plan limit."""
         self.id = instance_id
         self._on_limit = on_limit
-        self._on_copied = on_copied
         self.name = name
         self.executor = executor
         self.spec = spec
@@ -220,11 +239,6 @@ class ExecutorRun:
         # session goes on in a copy too.
         copy = spec.fork or spec.resume_from is not None
         self.session_id: str | None = None if copy else spec.resume
-        #: The other account's session its copy replaces, until it is deleted there (asked for
-        #: by the user on 22/10/2026); a fork the user asked for replaces none.
-        self.replaces: str | None = (
-            spec.resume if spec.resume_from is not None and not spec.fork else None
-        )
         self.model = ""
         #: The slash commands its channel takes, once its harness said (step 16f): their
         #: names, on its card, and described, for the box (version 10 of the SDK).
@@ -421,18 +435,11 @@ class ExecutorRun:
             self.problem = f"{type(error).__name__}: {error}"
             raise ExecutorError(self.problem) from error
         finally:
-            self._copied()
             if self.state is InstanceState.WORKING:
                 self.state = InstanceState.IDLE
             self._end_turn()
             self.changed()
         return self.finished
-
-    def _copied(self) -> None:
-        """After a turn: its copy has an id of its own now, and may be kept by its harness."""
-        session, replaced = self.session_id, self.replaces
-        if self._on_copied is not None and replaced and session and session != replaced:
-            self._on_copied(self)
 
     async def run(self, task: str, on_event: Callable[[ExecutorEvent], None]) -> Finished | None:
         """A delegated task: start the instance, run the task as one turn, and how it ended."""

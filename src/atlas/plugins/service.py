@@ -59,6 +59,7 @@ from atlas.plugins.model import (
 )
 from atlas.plugins.sdk import (
     API_VERSION,
+    Accounts,
     CallRun,
     Channel,
     CliRun,
@@ -72,6 +73,7 @@ from atlas.plugins.sdk import (
     PluginLlm,
     ReadRun,
     ToolRun,
+    WorkbenchHost,
 )
 from atlas.plugins.store import (
     BUNDLED_FOLDER,
@@ -194,6 +196,14 @@ class LoadedReader:
 
 
 @dataclass(frozen=True, slots=True)
+class LoadedAccounts:
+    """The harnesses' other accounts, from the plugin that brings them (SDK version 29)."""
+
+    plugin: str
+    accounts: Accounts
+
+
+@dataclass(frozen=True, slots=True)
 class PluginScreen:
     """A plugin's screen for the app (step 16m): its `desktop/plugin.js`, as the app loads it."""
 
@@ -246,6 +256,10 @@ class PluginHost(Protocol):
 
     def memory_limits(self) -> MemoryLimits | None: ...
 
+    def workbench(self) -> WorkbenchHost | None:
+        """The executors Atlas runs (version 29); `None` when it is not serving."""
+        ...
+
 
 class _NoHost:
     async def complete(
@@ -263,6 +277,9 @@ class _NoHost:
         return False
 
     def memory_limits(self) -> MemoryLimits | None:
+        return None
+
+    def workbench(self) -> WorkbenchHost | None:
         return None
 
 
@@ -458,6 +475,23 @@ class Plugins:
                 LoadedExecutor(context.name, n, make) for n, make in context.executors.items()
             ]
         return loaded
+
+    async def accounts(self) -> LoadedAccounts | None:
+        """The harnesses' other accounts, from the plugin that is on and brings them (version
+        29), loaded with its deadline; with two, the first one's, the other logged."""
+        found: LoadedAccounts | None = None
+        for context in await self._load(lambda m: m.accounts, None, kind="accounts"):
+            if context.accounts is None:
+                continue
+            if found is not None:
+                _logger.warning(
+                    "Two plugins bring other accounts: %s's are left out.",
+                    context.name,
+                    extra={"plugin": context.name},
+                )
+                continue
+            found = LoadedAccounts(context.name, context.accounts)
+        return found
 
     async def parts(self) -> PluginParts:
         """The tools and the Python hooks of the plugins that are on, each plugin loaded once,
@@ -797,6 +831,7 @@ class _Context:
         self.cli: list[LoadedCli] = []
         self.calls: list[LoadedCall] = []
         self.readers: list[LoadedReader] = []
+        self.accounts: Accounts | None = None
         self.stops: list[Stop] = []
         #: Set once the load gave up: what the plugin registers after is ignored.
         self.abandoned = threading.Event()
@@ -951,6 +986,26 @@ class _Context:
             return
         self.readers = [reader for reader in self.readers if reader.kind != kind]
         self.readers.append(LoadedReader(self.name, kind, run))
+
+    def register_accounts(self, accounts: Accounts) -> None:
+        if not self._manifest.accounts:
+            raise PluginError(
+                f"{self.name} registered accounts, which it does not declare (atlas.accounts)."
+            )
+        if self.abandoned.is_set():
+            return
+        self.accounts = accounts
+
+    @property
+    def workbench(self) -> WorkbenchHost:
+        if not self._manifest.accounts:
+            raise PluginError(
+                f"{self.name} read the workbench, which it does not declare (atlas.accounts)."
+            )
+        found = self._plugins.host.workbench()
+        if found is None:
+            raise PluginError("Atlas is not serving here, so no executor runs.")
+        return found
 
     @property
     def llm(self) -> PluginLlm:
