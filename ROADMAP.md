@@ -4093,7 +4093,7 @@ A e B rodam locais e não esperam a nuvem.
 | **A. Workspace, revisão e PR** | uma worktree por tarefa, o diff com comentário na linha que volta ao agente, checkpoints por turno, git, PR e CI no app, a issue que vira tarefa |
 | **B. Gatilhos e metas** | gatilhos por evento (e-mail, agenda, webhook), metas duradouras com progresso para os bots, um laço de atenção que sabe ficar quieto, e o registro do que cada um fez sem ninguém olhando (decidido em 03/11: só os eventos no núcleo, o resto em plugins) |
 | **C. Atlas Cloud** | o passo 20, abaixo |
-| **D. Conectores** | o login de um clique, um intermediário de apps no lugar do MCP à mão, e o índice dos dados conectados |
+| **D. Conectores** | o login de um clique, um intermediário de apps no lugar do MCP à mão, e o índice dos dados conectados (decidido em 03/11: a loja aberta e o ajuste do login; o intermediário e o índice em plugins) |
 | **E. Canais** | SMS, ligação, o app no celular e o bot chamado pelo nome num canal de equipe |
 | **F. Equipes** | login único e memória da equipe, só se o Atlas Cloud mirar empresas |
 
@@ -4296,6 +4296,82 @@ entram no núcleo; metas, atenção e diário são caso de plugin.**
 - **Na linha:** passo 23, depois do 21 e antes do 20, porque roda local (pelo usuário, em 03/11).
   Os termos novos (gatilho, sonda) entram no `docs/GLOSSARY.md` antes do código.
 
+#### A base D, a loja aberta (estudada e decidida em 03/11, passo 24)
+
+A base D eram três ideias: conectar um serviço com um clique, um intermediário de apps no lugar do
+MCP à mão, e um índice dos dados conectados. A pesquisa de 03/11 mostrou que metade do clique já
+existe: o MCP remoto entra com OAuth e o botão Entrar desde 28/10. Faltava achar o serviço. **A
+base D passou a ser a loja cheia e aberta, mais um ajuste no login.**
+
+- **Os pares, estudados em 03/11:** nenhum usa uma fonte só para tudo; cada tipo tem uma fonte que
+  virou o padrão. Um harness tem o seu diretório de plugins e aceita qualquer loja que o usuário
+  junte; outro tem a sua loja aberta, com instalações, estrelas e uma análise de segurança
+  automática; outro lê várias fontes direto, com um verificador ao instalar. Os clientes de MCP
+  leem o registro oficial do MCP. Nenhum catálogo oficial traz o número de downloads; só a busca do
+  skills.sh traz as instalações das skills.
+- **Decidido pelo usuário em 03/11:**
+  1. **Uma fonte pública por tipo, lida direto pelo Atlas, sem revisão nem cópia** (no lugar de
+     "cada item entra por um PR que ele revisa", da Loja, acima):
+     - **MCPs:** o MCP Registry oficial (`registry.modelcontextprotocol.io`), feito para ser lido
+       por outras lojas: nome verificado pelo domínio ou pelo GitHub do autor, descrição, versão,
+       pacote ou remoto, e as datas.
+     - **Plugins:** o diretório oficial de plugins do Claude Code (`anthropics/claude-plugins-official`,
+       315 plugins em 03/11), no formato que os plugins do Atlas já usam; muitos são do dono do
+       serviço.
+     - **Skills:** o skills.sh. A busca devolve só o que se pediu, já com as instalações (em 03/11:
+       "gmail" deu o `gws-gmail` com 83.307, em 0,2 s): abrir a aba é uma consulta (as mais
+       instaladas), cada busca é outra, e instalar baixa só aquela skill do GitHub. A varredura
+       contra texto malicioso (passo 7) roda ao instalar. A API não é documentada: o Atlas guarda a
+       última lista lida e avisa quando a busca quebra.
+     - **O `atlas-marketplace` fica com o que é do Atlas** (os executores, a voz, o Telegram, o gh e
+       o gws), aberto: um PR entra quando o CI passa.
+     - **O cartão mostra o que a fonte dá:** as instalações (só nas skills), a categoria, o autor,
+       a licença, a data da última versão e de onde veio. Nada de contador próprio (pelo usuário:
+       contar pelo Worker do site seria remendo).
+     - O que já protege continua: o consentimento ao ligar um plugin, o portão, a lista de
+       retirados e a pergunta quando é o agente quem instala.
+  2. **O gh e o gws saem do núcleo para plugins na loja** (no lugar das skills embutidas do 14b).
+     As regras de pergunta (`gws gmail send`, `gh pr merge` e as outras) vão na declaração do
+     plugin, aceitas no consentimento ao ligar e fora do alcance do agente, nunca na skill. O passo
+     Conexões da primeira abertura (18d) passa a instalar o plugin. Para o GitHub, conferir antes o
+     plugin oficial do diretório.
+- **O ajuste no login:** o Atlas se apresenta aos servidores MCP pelo documento de cliente publicado
+  num endereço dele (CIMD, a forma que a especificação de 2026-07-28 prefere), no atlasv4.com, e
+  continua com o registro a cada login (RFC 7591, o de hoje) onde o servidor ainda não aceita.
+- **O Google segue como hoje:** cada um com o seu projeto, pelo `gws` (agora plugin). Um projeto
+  único do Atlas pede ao Google uma auditoria de segurança todo ano (o Gmail é escopo restrito;
+  as fontes de 03/11 dão de US$ 540 a US$ 15 mil ou mais), e sem ela fica com o aviso e o teto de
+  100 usuários. Volta com o Atlas Cloud.
+- **Fora do núcleo, como plugin se alguém quiser:** o intermediário de apps (os tokens do usuário
+  numa empresa de fora, cobrado por chamada) e o índice dos dados conectados.
+- Os termos novos (fonte da loja, CIMD) entram no `docs/GLOSSARY.md` antes do código.
+
+#### As rotinas num executor e os modelos (pedidos e decididos em 03/11, passo 25)
+
+O usuário mostrou em 03/11 a tela de laços de um ADE como referência: uma visão geral com o que
+rodou sozinho, o que precisou dele e o que falhou; uma aba de modelos por categoria, em três níveis
+(essencial, recomendado, útil), cada cartão com o modelo, o esforço, a frequência e o Adicionar; e
+o detalhe com o prompt editável, a agenda, o agente, onde roda, os segredos e o Rodar agora. Lá,
+cada laço roda um harness dentro de um repositório.
+
+- **A rotina passa a rodar também num executor, numa pasta** (decidido pelo usuário em 03/11): além
+  do Atlas e de um bot, a rotina escolhe um executor (o Claude Code, o Codex...) e a pasta, e cada
+  execução é uma sessão dele ali. É opcional, e o Atlas também cria uma assim: ao criar, mostra uma
+  vez a pasta, o executor e o modo de permissão e pergunta, como já pergunta pela rotina com
+  comando, porque ela vai rodar sem ninguém olhando com as permissões do harness. Casa com a
+  workspace (passo 21).
+- **Uma aba Modelos na tela de Rotinas,** e não um tipo da loja (pelo usuário): categorias, os três
+  níveis, o cartão com o modelo, o esforço e a frequência, e o Adicionar, que abre a rotina pronta
+  para ajustar. Nenhum catálogo público tem modelos de rotina, então os primeiros são escritos pelo
+  Atlas, em português, em dois grupos:
+  - **de projeto,** num executor: varredura de segurança, PRs parados há 3 dias, testes faltando;
+  - **pessoais,** no Atlas ou num bot: o resumo dos e-mails às 8h, a agenda de amanhã às 20h, o
+    backup diário.
+- **Um placar no alto da tela de Rotinas:** "esta semana: 12 rodaram sozinhas · 2 precisaram de
+  você · 1 falhou", contado das execuções que o Atlas já guarda. Não é o diário da base B, que é de
+  plugin.
+- Os termos novos (modelo de rotina, placar) entram no `docs/GLOSSARY.md` antes do código.
+
 ## Assuntos de desenho ainda abertos
 
 A arquitetura do código foi decidida em 07/10 e está em `docs/ARCHITECTURE.md`: laço próprio sem
@@ -4330,6 +4406,9 @@ servidor em Starlette.
 
 11. Os gatilhos. Decidido em 03/11 (A base B, os gatilhos, acima): só os eventos no núcleo, pela
     sonda; o webhook com o relé; metas, atenção e diário em plugins.
+
+12. Os conectores e a loja. Decidido em 03/11 (A base D, a loja aberta, acima): uma fonte pública
+    por tipo lida direto, sem revisão; o gh e o gws como plugins; o CIMD; o Google como hoje.
 
 Cada um é decidido quando o passo que depende dele chegar.
 
@@ -4381,7 +4460,9 @@ passos que faltam:
    Roda local e vem antes do 20, pelo usuário em 03/11.
 6. O 23, os gatilhos por sonda (a base B, só os eventos), decididos pelo usuário em 03/11. Roda
    local e vem antes do 20.
-7. O 20, o Atlas Cloud, com o webhook do 23 chegando pelo relé.
+7. O 24, a loja aberta (a base D), e o 25, as rotinas num executor e os modelos, decididos pelo
+   usuário em 03/11. Rodam locais e vêm antes do 20.
+8. O 20, o Atlas Cloud, com o webhook do 23 chegando pelo relé.
 
 | Passo | O quê | Só depois de | Status |
 |---|---|---|---|
@@ -4447,3 +4528,5 @@ passos que faltam:
 | 21 | A workspace, a base A (decidida em 03/11: Uma casa, três faces, acima): uma tarefa numa worktree da casa, com sessões de qualquer harness, o diff comentado na linha, os pontos de volta por turno, o git e o PR por botões no app, e a issue que vira workspace. Em fatias, cada uma com o seu commit: A1 a workspace, A2 o diff comentado, A3 os pontos de volta, A4 git, PR e checks, A5 a issue | 18g | |
 | 22 | Uma conta por harness (decidido em 03/11: O futuro dos executores, acima): trocar de conta é entrar de novo na mesma pasta, e as sessões continuam; no limite do plano, o aviso e a mesma sessão retomada quando o plano volta; as pastas por conta, a cópia da sessão entre contas e a troca automática saem do núcleo para um plugin da loja, sem apagar nenhuma sessão de quem já usa | 16h | |
 | 23 | Os gatilhos por sonda (decididos em 03/11: A base B, os gatilhos, acima): a rotina dispara também por evento, por um comando sem modelo que roda de tempos em tempos e só acorda o agente quando imprime algo; o que ele traz chega marcado como texto de fora; uma abertura no SDK para o plugin trazer a sua fonte de evento. O webhook vem com o relé do 20; metas, atenção e diário ficam para plugins | 21 | |
+| 24 | A loja aberta, a base D (decidida em 03/11: A base D, a loja aberta, acima): uma fonte pública por tipo lida direto pelo Atlas, sem revisão (o MCP Registry oficial, o diretório oficial de plugins do Claude Code e a busca do skills.sh, com as instalações); o `atlas-marketplace` só com o que é do Atlas, aberto a PR que passa no CI; o gh e o gws como plugins, com as regras de pergunta na declaração; o CIMD no login dos MCPs | 23 | |
+| 25 | As rotinas num executor e os modelos (decididos em 03/11: As rotinas num executor e os modelos, acima): a rotina roda também num executor numa pasta, e o Atlas pergunta ao criar uma assim; a aba Modelos na tela de Rotinas, de projeto e pessoais, em português; e o placar do que rodou sozinho, precisou do usuário ou falhou | 24 | |
