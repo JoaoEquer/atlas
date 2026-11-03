@@ -4091,7 +4091,7 @@ A e B rodam locais e não esperam a nuvem.
 | Base | O que fecha |
 |---|---|
 | **A. Workspace, revisão e PR** | uma worktree por tarefa, o diff com comentário na linha que volta ao agente, checkpoints por turno, git, PR e CI no app, a issue que vira tarefa |
-| **B. Gatilhos e metas** | gatilhos por evento (e-mail, agenda, webhook), metas duradouras com progresso para os bots, um laço de atenção que sabe ficar quieto, e o registro do que cada um fez sem ninguém olhando |
+| **B. Gatilhos e metas** | gatilhos por evento (e-mail, agenda, webhook), metas duradouras com progresso para os bots, um laço de atenção que sabe ficar quieto, e o registro do que cada um fez sem ninguém olhando (decidido em 03/11: só os eventos no núcleo, o resto em plugins) |
 | **C. Atlas Cloud** | o passo 20, abaixo |
 | **D. Conectores** | o login de um clique, um intermediário de apps no lugar do MCP à mão, e o índice dos dados conectados |
 | **E. Canais** | SMS, ligação, o app no celular e o bot chamado pelo nome num canal de equipe |
@@ -4263,6 +4263,39 @@ com ele numa sessão e decidido na seguinte, no mesmo dia.
   4. As sessões que o próprio harness apaga depois de 30 dias sem uso (`cleanupPeriodDays`).
   5. A tarefa longa na máquina do usuário quando o plano acaba de madrugada.
 
+#### A base B, os gatilhos (estudada e decidida em 03/11)
+
+Proposta em 03/11 com quatro fatias: gatilhos por evento, metas duradouras, um laço de atenção e
+um diário do que foi feito sem ninguém olhando. **Decidido pelo usuário em 03/11: só os eventos
+entram no núcleo; metas, atenção e diário são caso de plugin.**
+
+- **O que a pesquisa mostrou, para quem escrever esses plugins:**
+  - **O pulso fixo é pior que nada.** No V3, de 100 reflexões medidas em 02/10, o único valor real
+    foi resgatar a rotina atrasada, que já é regra do cron no V4. No PM-Bench (arXiv 2607.12385), o
+    pulso de 30 ou 60 min ficou abaixo de pulso nenhum (57,8 contra 60,0) e deu o dobro de alarmes
+    falsos (489 contra 199). O melhor resultado foi o despertar que o próprio agente marca (65,1), e
+    a lista de pendências teve a melhor precisão (73,2%).
+  - **Perguntar "preciso agir?" antes de agir** derrubou as ações desnecessárias de 93,4% para 40,8%
+    (ProEvent, arXiv 2607.17701).
+  - **O registro sai das chamadas de ferramenta, não do relato do modelo.** No V3, uma rodada que
+    respondeu "nada a fazer" tinha disparado 14 rotinas.
+- **No núcleo, os eventos (decididos pelo usuário em 03/11, passo 23):** a rotina passa a disparar
+  também por evento, e não só por horário.
+  - **A sonda:** um comando barato, sem modelo, que roda de tempos em tempos e só acorda o agente
+    quando imprime alguma coisa. Exemplo: o `gws gmail` a cada 5 min; chegou e-mail do fornecedor, o
+    bot de compras acorda com ele; não chegou, nada se gasta. É o "script que decide se acorda o
+    agente" que as rotinas deixaram de fora em 11/10.
+  - **O webhook vem com o relé** (pelo usuário, em 03/11), no passo 20: um endereço por rotina,
+    com segredo próprio, que o relé entrega à casa. Sem webhook só local antes disso.
+  - **A execução é a de uma rotina:** conversa nova, ou a conversa fixa do bot dono; sem ninguém
+    para aprovar (`cron_mode: deny`); com as guardas de laço. O que o evento traz é texto de fora:
+    marcado e varrido como a saída do `gh` e do `gws` (passo 14b).
+  - **Uma abertura no SDK** para o plugin trazer a sua fonte de evento (o GitHub, a agenda) e ser
+    chamado quando um evento chega: é sobre ela que os plugins de metas, de atenção e de diário se
+    apoiam.
+- **Na linha:** passo 23, depois do 21 e antes do 20, porque roda local (pelo usuário, em 03/11).
+  Os termos novos (gatilho, sonda) entram no `docs/GLOSSARY.md` antes do código.
+
 ## Assuntos de desenho ainda abertos
 
 A arquitetura do código foi decidida em 07/10 e está em `docs/ARCHITECTURE.md`: laço próprio sem
@@ -4294,6 +4327,9 @@ servidor em Starlette.
 10. Os executores e as contas. Decidido em 03/11 (O futuro dos executores, acima): uma conta por
     harness no núcleo, várias contas num plugin e a troca no limite no Atlas Cloud; a memória de
     cada projeto na casa fica para depois.
+
+11. Os gatilhos. Decidido em 03/11 (A base B, os gatilhos, acima): só os eventos no núcleo, pela
+    sonda; o webhook com o relé; metas, atenção e diário em plugins.
 
 Cada um é decidido quando o passo que depende dele chegar.
 
@@ -4343,7 +4379,9 @@ passos que faltam:
    e o uso da tela do 15b.
 5. O 21, a workspace (a base A), decidida pelo usuário em 03/11 (Uma casa, três faces, acima).
    Roda local e vem antes do 20, pelo usuário em 03/11.
-6. O 20, o Atlas Cloud.
+6. O 23, os gatilhos por sonda (a base B, só os eventos), decididos pelo usuário em 03/11. Roda
+   local e vem antes do 20.
+7. O 20, o Atlas Cloud, com o webhook do 23 chegando pelo relé.
 
 | Passo | O quê | Só depois de | Status |
 |---|---|---|---|
@@ -4408,3 +4446,4 @@ passos que faltam:
 | 20 | Atlas Cloud (estudado em 01/11 e decidido em 03/11: Uma casa, três faces, acima): a casa inteira numa microVM que dorme, o relé na Cloudflare cifrado de ponta a ponta, créditos em reais, e o executor com crédito ou com a assinatura onde o fornecedor permitir | 19 | |
 | 21 | A workspace, a base A (decidida em 03/11: Uma casa, três faces, acima): uma tarefa numa worktree da casa, com sessões de qualquer harness, o diff comentado na linha, os pontos de volta por turno, o git e o PR por botões no app, e a issue que vira workspace. Em fatias, cada uma com o seu commit: A1 a workspace, A2 o diff comentado, A3 os pontos de volta, A4 git, PR e checks, A5 a issue | 18g | |
 | 22 | Uma conta por harness (decidido em 03/11: O futuro dos executores, acima): trocar de conta é entrar de novo na mesma pasta, e as sessões continuam; no limite do plano, o aviso e a mesma sessão retomada quando o plano volta; as pastas por conta, a cópia da sessão entre contas e a troca automática saem do núcleo para um plugin da loja, sem apagar nenhuma sessão de quem já usa | 16h | |
+| 23 | Os gatilhos por sonda (decididos em 03/11: A base B, os gatilhos, acima): a rotina dispara também por evento, por um comando sem modelo que roda de tempos em tempos e só acorda o agente quando imprime algo; o que ele traz chega marcado como texto de fora; uma abertura no SDK para o plugin trazer a sua fonte de evento. O webhook vem com o relé do 20; metas, atenção e diário ficam para plugins | 21 | |
