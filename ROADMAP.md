@@ -4076,9 +4076,9 @@ assistente delega aos bots e aos executores, os bots usam as mesmas skills e con
 executores entram nas mesmas contas e rotas. Os produtos comparados em 01/11 cobrem uma face cada.
 
 - **O que vale para as três:** seguro por padrão (o portão, os pisos e a loja revisada, onde os
-  outros vêm com tudo liberado); seu (código aberto, na sua máquina, memória em texto); todas as
-  contas e todos os harnesses, com a troca no limite; e o Brasil (português, Pix e reais no Atlas
-  Cloud).
+  outros vêm com tudo liberado); seu (código aberto, na sua máquina, memória em texto); todos os
+  harnesses, cada um com a conta do usuário (várias contas num plugin da loja, decidido em 03/11);
+  e o Brasil (português, Pix e reais no Atlas Cloud).
 - **Um teste para cada recurso novo:** se só faz sentido com o usuário olhando a tela, é coisa de
   ADE; se faz sentido com ele longe, é coisa do Atlas. A aba Executores fica boa, mas como janela
   para acompanhar e intervir; o diferencial é quem segura o fio entre uma sessão e outra.
@@ -4100,7 +4100,7 @@ A e B rodam locais e não esperam a nuvem.
 #### A base A, a workspace (desenhada em 01/11, decidida em 03/11, passo 21)
 
 Uma workspace é uma tarefa: uma cópia isolada do repositório (worktree), uma branch e um PR. Dentro
-dela rodam sessões de qualquer harness e conta, e a rota entre harnesses continua na mesma
+dela rodam sessões de qualquer harness, e a rota entre harnesses continua na mesma
 worktree. Serve para agentes em paralelo sem pisar um no outro, revisar sem sair do Atlas,
 comentar uma linha em vez de descrever o problema, voltar atrás e entregar.
 
@@ -4117,8 +4117,8 @@ comentar uma linha em vez de descrever o problema, voltar atrás e entregar.
   - **Nada de workspace criada sozinha ao delegar:** a `delegate` ganha a opção explícita
     `workspace: "new"`; sem ela, roda na pasta como hoje, e o resultado avisa se outro agente
     trabalhava ali.
-  - **O projeto de uma worktree vem do git** (`git rev-parse --git-common-dir`, com cache), para a
-    conta por projeto e para agrupar na lista, inclusive as worktrees criadas por fora.
+  - **O projeto de uma worktree vem do git** (`git rev-parse --git-common-dir`, com cache), para
+    agrupar na lista, inclusive as worktrees criadas por fora.
   - **Os arquivos locais copiados** são só os listados no `.worktreeinclude`, na criação, nunca de
     volta.
   - **O "o que mudou" pelo git** só dentro de uma workspace, onde a base é conhecida.
@@ -4208,9 +4208,60 @@ pagos em reais, para o Atlas, os bots e os executores na nuvem). Uma carteira s�
      embaralhados.
 - **A conferir antes do código:** com o roteador de modelos, se a revenda de crédito é permitida.
   Os nomes (Atlas Cloud, crédito, computador) entram no GLOSSARY antes do código.
-- **Em aberto, sem decisão:** a troca automática de conta no limite do plano, na máquina do
-  usuário, é a parte da aba Executores mais perto do que os termos de uso apertam ("uso comum e
-  individual"); rodar o harness e ter várias pastas de configuração está do lado permitido.
+- **A troca automática de conta no limite do plano**, na máquina do usuário, era a parte da aba
+  Executores mais perto do que os termos apertam ("uso comum e individual"). Decidido em 03/11 (O
+  futuro dos executores, abaixo): sai do núcleo para um plugin da loja, e na nuvem a troca é com
+  crédito Atlas.
+
+#### O futuro dos executores (estudado e decidido em 03/11, passo 22)
+
+Em 03/11 o usuário pôs em dúvida as várias contas da aba Executores (passo 16h, a troca no limite e
+as rotas): pareciam remendo, não algo seguro e consistente para tarefas curtas e longas. Estudado
+com ele numa sessão e decidido na seguinte, no mesmo dia.
+
+- **O que se viu na máquina dele:**
+  - a troca de conta copia a sessão para a pasta da outra conta (`--fork-session`) e depois apaga
+    a original: 42 sessões apagadas, e com elas o histórico de edições que o "voltar atrás" usa;
+  - a memória automática de um projeto ficou espalhada por cinco pastas de conta, com arquivos que
+    só uma delas tinha e outros que divergiram; uma decisão de produto inteira estava numa só;
+  - as pastas das outras contas tinham configurações diferentes da principal: sem os hooks, sem as
+    permissões e sem as instruções do usuário;
+  - mover o projeto de pasta deixou sete memórias no caminho antigo, que nenhuma sessão lê mais.
+- **A raiz:** cada conta tem a sua pasta, e a pasta guarda o login junto com o trabalho. Trocar de
+  conta virou trocar de pasta, e trocar de pasta é copiar.
+- **Os pares, estudados em 03/11:** nenhum produto grande põe várias contas de assinatura, com
+  troca no limite, no núcleo. Os que rodam o harness do usuário usam o login dele, uma conta, e
+  trocar é entrar de novo; os que cobram créditos próprios trocam de fornecedor dentro da
+  capacidade que compraram; a troca entre contas só aparece em plugins e em programas pequenos de
+  terminal.
+- **Decidido pelo usuário em 03/11:**
+  - **No núcleo:** uma conta por harness, a do login dele (trocar é entrar de novo, na mesma pasta,
+    e as sessões continuam); e, no limite do plano, a mesma sessão retomada sozinha quando o plano
+    volta.
+  - **Num plugin da loja:** várias contas e a troca entre elas no limite, para quem quiser (o
+    usuário acha que vale criar). O núcleo daria só o aviso de limite e o "continuar esta sessão".
+  - **No Atlas Cloud:** as tarefas longas e a troca no limite que os termos permitem, com créditos
+    Atlas: a mesma sessão segue por outra chave ou outro provedor do mesmo modelo.
+  - **O diferencial** passa a ser as três faces sobre a mesma casa, e a nuvem; não "toda conta,
+    todo harness".
+  - **A memória de cada projeto num lugar só, na casa, fica para depois** (pelo usuário, em 03/11):
+    pela configuração `autoMemoryDirectory` do Claude Code no `.claude/settings.local.json` do
+    projeto, que vale também fora do Atlas. Por ora ela fica onde o harness guarda, e a prova abaixo
+    vem antes de mudar.
+- **Por que a memória num lugar só, mesmo com uma conta:** o caminho do projeto muda (pasta movida,
+  worktree, outro clone); a nuvem precisa da memória dentro da casa; o assistente e os bots passam
+  a ler o que os executores aprenderam; e o plugin de contas volta a ter várias pastas.
+- **A provar antes de mudar a memória:** o `autoMemoryDirectory` na versão do usuário, contra o
+  `claude` de verdade, perguntando antes do gasto. Houve relatos, de março a junho de 2026, de ele gravar no
+  lugar novo enquanto o modelo ainda ouvia o caminho antigo.
+- **Em aberto:**
+  1. A passagem entre harnesses (do Claude Code para o Codex), que perde por natureza: elaborar
+     depois.
+  2. O que o núcleo oferece ao plugin de contas.
+  3. Juntar as memórias espalhadas, arquivo por arquivo, com o usuário, antes de remover qualquer
+     coisa.
+  4. As sessões que o próprio harness apaga depois de 30 dias sem uso (`cleanupPeriodDays`).
+  5. A tarefa longa na máquina do usuário quando o plano acaba de madrugada.
 
 ## Assuntos de desenho ainda abertos
 
@@ -4239,6 +4290,10 @@ servidor em Starlette.
 
 9. As faces do Atlas. Estudadas em 01/11 (Uma casa, três faces, acima): as bases A a F, a
    workspace desenhada e o Atlas Cloud, cada uma com as decisões que são do usuário.
+
+10. Os executores e as contas. Decidido em 03/11 (O futuro dos executores, acima): uma conta por
+    harness no núcleo, várias contas num plugin e a troca no limite no Atlas Cloud; a memória de
+    cada projeto na casa fica para depois.
 
 Cada um é decidido quando o passo que depende dele chegar.
 
@@ -4352,3 +4407,4 @@ passos que faltam:
 | 19 | Site e documentação pública (decididos em 25/10: Site e documentação pública, acima): Astro com Starlight em `site/`, na Cloudflare; a home, as Versões e as News, e a documentação de quem usa, que vai também dentro de cada versão para o Atlas responder sobre si; pronto para agentes. Pedido do usuário em 25/10 | 18 | **Parte 1, código pronto em 25/10:** o site em `site/`, com Astro 7 e Starlight 0.42. A home é o planetário em WebGL2 próprio, sem biblioteca: as linhas são calculadas no shader, e a esfera, as órbitas e o caminho entre as duas não custam CPU por quadro. Ela tem seis capítulos (as contas, a rota com o cometa e os medidores da janela de cinco horas, as máquinas, a memória e o fecho), e depois o portão de aprovação com comandos e vereditos de verdade, o resto do Atlas, a instalação com as abas do sistema de quem visita, e as últimas mudanças. Sem WebGL fica o primeiro quadro desenhado em SVG no build, pela mesma fórmula; com movimento reduzido, a câmera troca de plano sem voar. No celular a cena é um painel no alto e o texto passa por baixo dele. A documentação tem quatro páginas (O que é o Atlas, Instalar, Executores e contas, Várias máquinas), conferidas contra o código e as telas do app. As News saem vazias, com o formato do item escrito, e o Changelog é o `git log` da `main` no formato da atualização; os dois têm RSS. Para agentes: cada página tem o gêmeo em Markdown, `llms.txt` e `llms-full.txt` na ordem da barra lateral, `robots.txt` com `Content-Signal` e os robôs de IA, a skill `atlas` em `/.well-known/agent-skills/` com o digest dos bytes, e um Worker que responde Markdown a `Accept: text/markdown` e põe os cabeçalhos `Link`. O CI ganha o job `site`. **Escolhas próprias, marcadas:** o `Content-Signal` libera busca, resposta e treino (decidir antes de publicar); a skill publicada e o gêmeo em Markdown entram já, antes do item 4; a instalação ainda aponta para o gist; o domínio é um marcador (`SITE_URL`). Provado: `npm run check` (astro check, tipos do Worker, eslint, prettier e 32 testes); o build com a conferência do `dist` (toda página com gêmeo, o digest da skill, nenhum link interno quebrado); o Worker no runtime da Cloudflare (`wrangler dev`), respondendo Markdown com `Vary` e `Content-Signal` e pondo os `Link` na home; a home vista no Edge em 1920, 1440, 1024 e 390 px, capítulo por capítulo; e o Lighthouse com renderização por software: 98 de desempenho e 100 de acessibilidade e de boas práticas na home, e SEO 92, porque o Lighthouse não conhece a linha `Content-Signal` que o Is It Agent Ready pede. **Parte 2, código pronto em 25/10 (docs/ARCHITECTURE.md, The documentation):** as páginas no pacote (`atlas.docs`, assunto novo com o seu contrato no import-linter), lidas pelo site e pelo `atlas docs`; a skill embutida `atlas`; a referência gerada dos comandos e das configurações (três campos sem comentário ganharam o seu); as cinco referências de `docs/` viradas páginas, mais o portão de aprovação e a origem dos dados do Claude Code; 12 páginas ao todo. O guia de plugins, que a 16t aumentou no mesmo dia, veio inteiro para a página, e a cópia da skill `write-plugin`, os testes dos dois lados e o link do app foram junto com ele. O plugin de validação de links do site saiu (ele calcula o id da página pela pasta `src/content/docs` e dava todos os links por quebrados) e o `check-dist.mjs` passou a conferir também cada `#` de seção, provado com uma âncora quebrada de propósito. Provado: os testes de `tests/docs` (o cabeçalho, a ordem, achar, buscar, o comando, a referência atual, cada comando que a skill dá rodando, e a página chegando inteira pelo `run_command` do agente, com acentos), ruff, pyright, import-linter, deptry e a suíte inteira; no site, `npm run check` e o build. **O ícone do app, código pronto em 25/10 (pedido do usuário):** a marca do Atlas no lugar do ícone do Electron, na janela, na barra de tarefas, no Dock, no atalho do Menu Iniciar e na entrada do Linux. Provado: o `.ico` lido pelo carregador do próprio Windows em cada tamanho, de 16 a 256 px, com os cantos transparentes no fundo claro e no escuro; o teste do atalho lendo o ícone que ele guarda; e o e2e do app inteiro. **Parte 3, o site e a documentação revistos, código pronto em 25/10 (pedido do usuário: mais bonito, animações melhores, texto estratégico, documentação impecável, rápido e bem posicionado nas buscas):** a home ganhou um texto novo, conferido contra o código e as telas do app (o título "Every coding agent. Every account. One window.", quatro fatos sob a instalação, a comparação "sozinhos × no Atlas", cartões que levam ao guia de cada recurso e oito perguntas frequentes); animações sem JavaScript (a entrada do hero em sequência, as seções subindo com a rolagem por `animation-timeline: view()`, a transição entre páginas por `@view-transition`, as respostas que deslizam) e uma luz que segue o ponteiro nos cartões, com um só ouvinte, tudo parado com movimento reduzido; para as buscas, JSON-LD (Organization, WebSite, SoftwareApplication, FAQPage, e TechArticle com BreadcrumbList em cada página da documentação), o título de busca de cada página com as palavras que se procuram (`site/src/lib/seo-titles.ts`, pelo `routeMiddleware` do Starlight), a imagem de compartilhamento nova e em toda página, `noindex` na 404 e um rodapé com os guias; o logo de 17 KB passou a 7,7 KB, os shaders do planetário compilam em paralelo onde o navegador deixa, e as fontes da documentação vêm antes do primeiro quadro (o CLS de 0,187 foi a 0). A documentação ganhou dez páginas (Modelos e chaves, Rotinas, Telegram, Voz e ditado, O navegador, Skills e o marketplace, Privacidade, Backups/atualizações/homes, Solução de problemas e Perguntas e respostas) e um mapa na página inicial, e três trechos que o app já tinha deixado para trás foram corrigidos (os executores ligam em Configurações → Executores; a memória e a alma se editam em Configurações → Personalização). Provado: `npm run check` (44 testes, os de SEO novos), o build com a conferência de cada link e âncora, `tests/docs`, as telas em 1440, 1280 e 390 px, e o Lighthouse com renderização por software: home 93 de desempenho e 100 de acessibilidade e boas práticas, documentação 99 de desempenho; SEO 92 nas duas pelo mesmo `Content-Signal`. **Falta:** a prova com um modelo de verdade (perguntar antes: centavos), o domínio e o projeto na Cloudflare (o usuário), a nota do Is It Agent Ready no ar, a rotina das News e o português do resto da documentação. O link do guia de plugins no app passou para o site em 01/11. **O português, começado em 01/11 (docs/ARCHITECTURE.md, The documentation):** a home inteira em `/pt-br/` (o texto, o menu, o rodapé, as abas de instalação, os rótulos do planetário e as mudanças pelo `Notes-pt-BR`), e o Começar da documentação (O que é o Atlas e Instalar) no idioma `pt-br` do Starlight, com a barra lateral traduzida e as outras páginas em inglês com o aviso; `hreflang` e o seletor de idioma no menu, sem redirecionar; o gêmeo em Markdown de cada página nova; os termos do glossário (casa, loja) e os nomes de tela do app em português. Provado: `npm run check` (144 testes; os novos conferem a forma da home contra a inglesa, as palavras do menu nos dois idiomas e o hash da página inglesa de cada tradução), o build com o `check-dist` (104 páginas, nenhum link quebrado) e as telas no Edge, a home inglesa igual |
 | 20 | Atlas Cloud (estudado em 01/11 e decidido em 03/11: Uma casa, três faces, acima): a casa inteira numa microVM que dorme, o relé na Cloudflare cifrado de ponta a ponta, créditos em reais, e o executor com crédito ou com a assinatura onde o fornecedor permitir | 19 | |
 | 21 | A workspace, a base A (decidida em 03/11: Uma casa, três faces, acima): uma tarefa numa worktree da casa, com sessões de qualquer harness, o diff comentado na linha, os pontos de volta por turno, o git e o PR por botões no app, e a issue que vira workspace. Em fatias, cada uma com o seu commit: A1 a workspace, A2 o diff comentado, A3 os pontos de volta, A4 git, PR e checks, A5 a issue | 18g | |
+| 22 | Uma conta por harness (decidido em 03/11: O futuro dos executores, acima): trocar de conta é entrar de novo na mesma pasta, e as sessões continuam; no limite do plano, o aviso e a mesma sessão retomada quando o plano volta; as pastas por conta, a cópia da sessão entre contas e a troca automática saem do núcleo para um plugin da loja, sem apagar nenhuma sessão de quem já usa | 16h | |
