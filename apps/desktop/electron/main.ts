@@ -23,6 +23,7 @@
  * machine's. This machine's switches run the terminal's own commands (`atlas always-on`), and its
  * connection code goes to the clipboard from here: the window never holds a token.
  */
+import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -248,6 +249,34 @@ if (process.platform !== 'darwin') {
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_ID)
+}
+
+/** The taskbar draws a window by the Start Menu shortcut that carries its id, whatever opened it.
+ * The one `atlas desktop` writes (`atlas.installation.store`) carries none, so it is given the id;
+ * and a shortcut named after Electron that carries the id with Electron's own icon, left there by
+ * runs from the checkout, is removed, or the taskbar would take its icon. */
+function claimStartMenu(): void {
+  const programs = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+  const own = path.join(programs, 'Atlas.lnk')
+  const stray = path.join(programs, 'Electron.lnk')
+
+  try {
+    const details = shell.readShortcutLink(own)
+
+    if (details.appUserModelId !== APP_ID) {
+      shell.writeShortcutLink(own, 'update', { ...details, appUserModelId: APP_ID })
+    }
+  } catch {
+    // No shortcut: the app was not installed by `atlas desktop`.
+  }
+
+  try {
+    if (shell.readShortcutLink(stray).appUserModelId === APP_ID) {
+      void fs.rm(stray, { force: true })
+    }
+  } catch {
+    // No such shortcut, or another program's.
+  }
 }
 
 // No title bar on Windows (asked for by the user on 01/11/2026): the tab strip's row is the top of
@@ -629,6 +658,10 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(() => {
     // Opened from the checkout, macOS shows Electron's own icon in the Dock until told otherwise.
     app.dock?.setIcon(icon)
+
+    if (process.platform === 'win32' && !e2e) {
+      claimStartMenu()
+    }
 
     if (updateRunning(updates)) {
       // The update replaces what this app runs from: it starts no server, and waits it out.
