@@ -508,11 +508,16 @@ test('both sides open at the same width, and their edges drag them wider or narr
   const panel = page.getByTestId('side-panel')
   const width = (where: typeof nav) => where.evaluate(element => element.getBoundingClientRect().width)
   const conversation = () => page.locator('.main-pane').evaluate(element => element.getBoundingClientRect().width)
-  /** Drag an edge `by` pixels to the right, a step at a time, as a hand does. */
+  /**
+   * Drag an edge `by` pixels to the right, a step at a time, as a hand does, stopping at the
+   * window's border: a busy renderer merges the moves of one frame into the last, and a last move
+   * past the border was dropped with the ones before it.
+   */
   const drag = async (edge: string, by: number) => {
     const box = await page.getByTestId(edge).boundingBox()
+    const view = page.viewportSize()
 
-    if (!box) {
+    if (!box || !view) {
       throw new Error(`${edge} is not on screen`)
     }
 
@@ -520,7 +525,7 @@ test('both sides open at the same width, and their edges drag them wider or narr
     const y = box.y + box.height / 2
     await page.mouse.move(x, y)
     await page.mouse.down()
-    await page.mouse.move(x + by, y, { steps: 8 })
+    await page.mouse.move(Math.min(view.width - 1, Math.max(1, x + by)), y, { steps: 8 })
     await page.mouse.up()
   }
 

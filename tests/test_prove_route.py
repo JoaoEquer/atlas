@@ -95,7 +95,9 @@ def test_the_proofs_steps_pass_on_the_fakes(
     ledger = CallLedger(Database(home.database_file))
     models = connect(fake, "openrouter", settings=ModelSettings(), ledger=ledger)
     proof = _proof()
-    monkeypatch.setattr(proof, "STEP_SECONDS", 20.0)
+    # A step takes about a second here; a busy Windows runner, starting each fake harness through
+    # its launcher, once took more than 20 s for one.
+    monkeypatch.setattr(proof, "STEP_SECONDS", 90.0)
 
     code = asyncio.run(
         proof.prove(
