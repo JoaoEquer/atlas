@@ -213,10 +213,10 @@ class InstanceActivity:
     requests for the user), `compacted` (it compacted its session), `account` (its account
     reached its plan's limit and it went on on the account `text` names or, `failed`, why it
     could not go on anywhere, by a route or not), `route` (it went on, by its session's route,
-    in a new session of the executor and account `text` names, or, `failed`, why that failed), `note` (what the screen says of
-    such a switch: the model it went on with, a compaction that failed) or `resume` (it stopped at
-    its plan's limit and goes on by itself at the UTC time `text` says or, `failed`, the limit
-    said no reset and it waits for the user)."""
+    in a new session of the executor and account `text` names, or, `failed`, why that failed),
+    `note` (what the screen says of such a switch: the model it went on with, a compaction that
+    failed) or `resume` (it stopped at its plan's limit and goes on by itself at the UTC time
+    `text` says or, `failed`, the limit said no reset and it waits for the user)."""
 
     instance_id: str
     kind: str
