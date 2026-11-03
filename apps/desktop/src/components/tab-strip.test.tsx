@@ -45,6 +45,29 @@ const approval = (conversationId: string): app.Card => ({
 })
 
 describe('the tabs above the central area', () => {
+  it('moves a tab dropped before the frame that marks where it lands (found by the CI on 03/11/2026)', () => {
+    app.$tabs.set([tab('a', 'Groceries'), tab('b', 'Trip')])
+    const moved = vi.spyOn(app, 'moveTab').mockImplementation(() => undefined)
+    render(<TabStrip />)
+    const [, last] = screen.getAllByTestId('tab') as [HTMLElement, HTMLElement]
+    const carried = new Map<string, string>([['application/x-atlas-tab', 'a']])
+    const data = {
+      effectAllowed: 'move',
+      getData: (kind: string) => carried.get(kind) ?? '',
+      setData: (kind: string, value: string) => carried.set(kind, value),
+      types: [...carried.keys()]
+    }
+
+    // A quick hand: the first tab over the last one's right half (jsdom draws it with no width), and
+    // dropped, with no render between.
+    act(() => {
+      fireEvent.dragOver(last, { dataTransfer: data })
+      fireEvent.drop(last, { dataTransfer: data })
+    })
+
+    expect(moved).toHaveBeenCalledWith('a', 1)
+  })
+
   it('show each tab, the passing one in italic and the one on screen chosen, and a new conversation not made yet', () => {
     app.$tabs.set([tab('a', 'Groceries'), tab('b', 'Trip', true)])
     app.$selected.set('b')

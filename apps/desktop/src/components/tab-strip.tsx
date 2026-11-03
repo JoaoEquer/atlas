@@ -60,7 +60,14 @@ export function TabStrip() {
       (view === 'conversation' ? selected === null : view === 'session' && open !== null && !named(open)))
   const waiting = away(cards, view, selected, open)
   const list = useRef<HTMLDivElement>(null)
-  const [dropAt, setDropAt] = useState<null | number>(null)
+  const [dropAt, setDropAtState] = useState<null | number>(null)
+  // Where a drop lands, as the last drag over a tab said: kept apart from the render too, since a
+  // quick hand drops before the frame that shows the mark, and the drop read the place before it.
+  const dropping = useRef<null | number>(null)
+  const setDropAt = (at: null | number) => {
+    dropping.current = at
+    setDropAtState(at)
+  }
   const panel = usePanelState()
 
   useEffect(() => {
@@ -127,11 +134,12 @@ export function TabStrip() {
 
   const drop = (event: DragEvent<HTMLElement>) => {
     const id = event.dataTransfer.getData(DRAGGED)
+    const at = dropping.current
 
-    if (id && dropAt !== null) {
+    if (id && at !== null) {
       event.preventDefault()
       const from = tabs.findIndex(tab => tab.id === id)
-      moveTab(id, from >= 0 && from < dropAt ? dropAt - 1 : dropAt)
+      moveTab(id, from >= 0 && from < at ? at - 1 : at)
     }
 
     setDropAt(null)

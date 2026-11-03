@@ -33,11 +33,15 @@ async function pickModel(page: Page, name: string): Promise<void> {
   await expect(page.getByTestId('model-menu')).toBeHidden()
 }
 
-/** Pick an effort from the pill's Effort menu. */
+/** Pick an effort from the pill's Effort menu, by the keyboard: the pointer moved at once from the
+ * menu's row to an option of the submenu not placed yet left its grace area on a busy runner, and
+ * the submenu closed under it (found by the CI on 03/11/2026). */
 async function pickEffort(page: Page, label: string): Promise<void> {
   await page.getByTestId('model-select').click()
-  await page.getByTestId('effort-menu').click()
-  await page.getByTestId('effort-option').filter({ hasText: label }).click()
+  await page.getByTestId('effort-menu').press('ArrowRight')
+  const option = page.getByTestId('effort-option').filter({ hasText: label })
+  await option.focus()
+  await option.press('Enter')
   await expect(page.getByTestId('model-menu')).toBeHidden()
 }
 
