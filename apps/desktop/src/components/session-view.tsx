@@ -19,7 +19,6 @@ import {
   $executorUsage,
   $openSession,
   $read,
-  $remote,
   $sessionError,
   $sessionFolders,
   $sessionRoute,
@@ -58,9 +57,8 @@ import { HarnessAutoWarning, useHarnessAuto } from './harness-auto'
 import { MessageBox } from './message-box'
 import { ModeMenu } from './mode-menu'
 import { PlanRing } from './plan-ring'
-import { TerminalButton } from './side-panel'
 import { ThreadView } from './thread-view'
-import { ArrowDown, ArrowUp, Close, Route, VsCode } from './ui/icons'
+import { ArrowDown, ArrowUp, Close, Route } from './ui/icons'
 import { PILL, PILL_ON, PillSelect } from './ui/pill'
 import { IconButton } from './ui/tip'
 
@@ -109,7 +107,6 @@ export function SessionView() {
   if (stopped) {
     return (
       <>
-        <SessionHeader account={executor?.account ?? ''} open={open} title={title} />
         <NotRunning own={own} title={title} />
       </>
     )
@@ -117,7 +114,6 @@ export function SessionView() {
 
   return (
     <>
-      <SessionHeader account={instance?.account || executor?.account || ''} open={open} title={title} />
       {elsewhere && <Elsewhere where={open.elsewhere} />}
       <ThreadView
         empty={
@@ -189,45 +185,6 @@ function NotRunning({ own, title }: { own: ExecutorRow | undefined; title: strin
         )}
       </div>
     </div>
-  )
-}
-
-/** The session's title and where it works; switching account is the executor's, in the sidebar,
- * and stopping is the box's (asked for by the user on 18/10/2026). Beside them, its folder opens in
- * VS Code, to read the project's code (asked for by the user on 18/10/2026), where the folder is on
- * this machine. */
-function SessionHeader({ account, open, title }: { account: string; open: OpenSession; title: string }) {
-  const [failed, setFailed] = useState('')
-  const local = !useStore($remote) && open.folder !== ''
-
-  return (
-    <header className="border-b border-border px-6 py-3" data-testid="session-header">
-      <div className="mx-auto flex max-w-3xl items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate font-semibold">{open.title || t.executors.untitled}</h1>
-          <p className="truncate text-xs text-muted-foreground" title={open.folder}>
-            {[title, baseName(open.folder), account].filter(Boolean).join(' · ')}
-          </p>
-          {failed && (
-            <p className="truncate text-xs text-failed-text" data-testid="open-in-editor-error" title={failed}>
-              {failed}
-            </p>
-          )}
-        </div>
-        {local && (
-          <IconButton
-            icon={VsCode}
-            label={t.executors.openInEditor}
-            onClick={() => {
-              setFailed('')
-              void window.atlas.openInEditor(open.folder).then(setFailed)
-            }}
-            side="bottom"
-            testId="open-in-editor"
-          />
-        )}
-      </div>
-    </header>
   )
 }
 
@@ -410,7 +367,6 @@ function SessionComposer({
               }}
             />
           )}
-          <TerminalButton />
           <span className="ml-auto">
             <PlanRing executor={usageKey(executors, instance, open, settings.account)} />
           </span>

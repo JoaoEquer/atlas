@@ -21,6 +21,8 @@ import { level, resetsIn, windowName } from '@/store/usage'
 
 import { ContextSection, EnvironmentSection } from './environment'
 import { baseName } from './executors-list'
+import { McpServer, Refresh, Sparkles } from './ui/icons'
+import { IconButton } from './ui/tip'
 import { useNow } from './use-now'
 
 /** The origins in the order Claude Code's `/mcp` lists them: the user's own first, the account's
@@ -31,8 +33,8 @@ const ORIGINS = ['user', 'project', 'local', 'managed', 'account']
  * outside an opened plugin (asked for by the user on 22/10/2026). */
 const DOWN = new Set(['disabled', 'failed', 'needs-auth'])
 
-/** The skills listed before the rest is asked for. */
-const SKILLS_SHOWN = 8
+/** The skills shown before the rest is asked for: pills, so a few rows of them. */
+const SKILLS_SHOWN = 16
 
 const DOTS: Record<string, string> = {
   connected: 'bg-muted-foreground',
@@ -49,7 +51,9 @@ const BARS: Record<ReturnType<typeof level>, string> = {
 }
 
 const HEADING = 'text-xs font-semibold tracking-wide text-muted-foreground uppercase'
-const REFRESH = 'rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-selected disabled:opacity-50'
+
+/** A skill by its name, as a pill: what it does is its tooltip. */
+const SKILL_PILL = 'max-w-full truncate rounded-full border border-border px-2 py-0.5 text-xs text-soft'
 
 /** One of the harness's plugins as the panel lists it: the skills and MCP servers it brings. */
 interface PluginGroup {
@@ -177,17 +181,15 @@ function SkillsSection({
           {t.executorPanel.skills}
           {skills.length > 0 && <span className="ml-1 font-normal">{skills.length}</span>}
         </h3>
-        <button
-          className={REFRESH}
-          data-testid="skills-refresh"
+        <IconButton
           disabled={read?.reading}
+          icon={Refresh}
+          label={t.executorPanel.refresh}
           onClick={() => {
             readPanelCommands(executor.name, folder, true)
           }}
-          type="button"
-        >
-          ↻ {t.executorPanel.refresh}
-        </button>
+          testId="skills-refresh"
+        />
       </div>
       {read?.reading && !listed && (
         <p className="text-xs text-muted-foreground" role="status">
@@ -200,13 +202,7 @@ function SkillsSection({
         </p>
       )}
       {listed && skills.length === 0 && <p className="text-xs text-muted-foreground">{t.executorPanel.skillsEmpty}</p>}
-      {shown.length > 0 && (
-        <ul>
-          {shown.map(skill => (
-            <SkillRow key={skill.name} skill={skill} />
-          ))}
-        </ul>
-      )}
+      {shown.length > 0 && <SkillPills skills={shown} />}
       {!all && skills.length > SKILLS_SHOWN && (
         <MoreButton
           label={t.executorPanel.moreSkills(skills.length - SKILLS_SHOWN)}
@@ -220,12 +216,23 @@ function SkillsSection({
   )
 }
 
-function SkillRow({ skill }: { skill: SlashCommandRow }) {
+/** Skills as pills by their names (asked for by the user on 03/11/2026): no `/`, and a plugin's
+ * without the plugin's name, which its row already says; what each does is its tooltip. */
+function SkillPills({ skills }: { skills: SlashCommandRow[] }) {
   return (
-    <li className="rounded px-1 py-0.5" data-testid="skill-row" title={skill.description || undefined}>
-      <span className="block truncate">/{skill.name}</span>
-      {skill.description && <span className="block truncate text-xs text-muted-foreground">{skill.description}</span>}
-    </li>
+    <ul className="flex flex-wrap gap-1">
+      {skills.map(skill => (
+        <li
+          className={SKILL_PILL}
+          data-skill={skill.name}
+          data-testid="skill-row"
+          key={skill.name}
+          title={skill.description || undefined}
+        >
+          {pluginOf(skill) ? skill.name.slice(pluginOf(skill).length + 1) : skill.name}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -250,15 +257,13 @@ function ServersSection({ executor }: { executor: ExecutorRow }) {
             <span className="ml-1 font-normal">{t.executorPanel.active(up.length, servers.length)}</span>
           )}
         </h3>
-        <button
-          className={REFRESH}
-          data-testid="connectors-refresh"
+        <IconButton
           disabled={read?.reading}
+          icon={Refresh}
+          label={t.executorPanel.refresh}
           onClick={() => void refreshExecutorConnectors(executor.name)}
-          type="button"
-        >
-          ↻ {t.executorPanel.refresh}
-        </button>
+          testId="connectors-refresh"
+        />
       </div>
       {read?.reading && (
         <p className="text-xs text-muted-foreground" data-testid="connectors-reading" role="status">
@@ -305,13 +310,11 @@ function ServersSection({ executor }: { executor: ExecutorRow }) {
   )
 }
 
-/** A plugin, closed to a line with what it brings; opened, its skills and all of its servers. */
+/** A plugin, closed to a line with how many skills and servers it brings, as counts by an icon
+ * whose words are their tooltip (asked for by the user on 03/11/2026); opened, its skills as pills
+ * and all of its servers. */
 function PluginRow({ plugin }: { plugin: PluginGroup }) {
   const up = plugin.servers.filter(row => !DOWN.has(row.status)).length
-  const summary = [
-    plugin.skills.length > 0 ? t.executorPanel.pluginSkills(plugin.skills.length) : '',
-    plugin.servers.length > 0 ? t.executorPanel.pluginServers(up, plugin.servers.length) : ''
-  ].filter(Boolean)
 
   return (
     <li data-plugin={plugin.name} data-testid="plugin-row">
@@ -321,16 +324,19 @@ function PluginRow({ plugin }: { plugin: PluginGroup }) {
             ›
           </span>
           <span className="min-w-0 flex-1 truncate">{plugin.name}</span>
-          <span className="shrink-0 text-xs text-muted-foreground">{summary.join(' · ')}</span>
-        </summary>
-        <div className="pb-1 pl-4">
           {plugin.skills.length > 0 && (
-            <ul>
-              {plugin.skills.map(skill => (
-                <SkillRow key={skill.name} skill={skill} />
-              ))}
-            </ul>
+            <Count icon={Sparkles} label={t.executorPanel.pluginSkills(plugin.skills.length)}>
+              {plugin.skills.length}
+            </Count>
           )}
+          {plugin.servers.length > 0 && (
+            <Count icon={McpServer} label={t.executorPanel.pluginServers(up, plugin.servers.length)}>
+              {up === plugin.servers.length ? up : `${String(up)}/${String(plugin.servers.length)}`}
+            </Count>
+          )}
+        </summary>
+        <div className="space-y-1 pt-0.5 pb-1 pl-4">
+          {plugin.skills.length > 0 && <SkillPills skills={plugin.skills} />}
           {plugin.servers.length > 0 && (
             <ul>
               {plugin.servers.map(row => (
@@ -341,6 +347,17 @@ function PluginRow({ plugin }: { plugin: PluginGroup }) {
         </div>
       </details>
     </li>
+  )
+}
+
+/** A count by its icon, its words the tooltip and what a screen reader says. */
+function Count({ children, icon: Glyph, label }: { children: number | string; icon: typeof Sparkles; label: string }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 self-center text-xs text-muted-foreground" title={label}>
+      <Glyph aria-hidden size={12} stroke={1.75} />
+      <span aria-hidden>{children}</span>
+      <span className="sr-only">{label}</span>
+    </span>
   )
 }
 
@@ -398,15 +415,13 @@ function PlanUsage({ executor }: { executor: ExecutorRow }) {
           {t.executorPanel.usage}
           {usage?.plan && <span className="ml-1 font-normal normal-case">{usage.plan}</span>}
         </h3>
-        <button
-          className={REFRESH}
-          data-testid="usage-refresh"
+        <IconButton
           disabled={read?.reading}
+          icon={Refresh}
+          label={t.executorPanel.refresh}
           onClick={() => void refreshExecutorUsage(executor.name)}
-          type="button"
-        >
-          ↻ {t.executorPanel.refresh}
-        </button>
+          testId="usage-refresh"
+        />
       </div>
       {read?.reading && !usage && (
         <p className="text-xs text-muted-foreground" data-testid="usage-reading" role="status">

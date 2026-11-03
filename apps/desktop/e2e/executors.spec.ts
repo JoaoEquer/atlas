@@ -132,8 +132,7 @@ test('a task Atlas delegates opens from its line as a session, marked by Atlas, 
   const delegated = page.getByTestId('tool-row').filter({ hasText: 'Fix the failing test.' })
   await expect(delegated.locator('summary')).toContainText(/Delegat\w+: Fix the failing test\./)
   await delegated.getByTestId('open-delegated').click()
-  await expect(page.getByTestId('session-header')).toContainText('Claude Code')
-  await expect(page.getByTestId('session-header')).toContainText('someone@example.com')
+  await expect(page.getByTestId('session-box')).toBeVisible()
 
   const approval = page.getByTestId('executor-approval-card')
   await expect(approval).toContainText('Claude Code wants to run a command')
@@ -188,7 +187,7 @@ test('a session begun in a terminal is listed under its folder, opens as a conve
   await expect(page.getByTestId('tool-row').filter({ hasText: 'Bash' })).toHaveAttribute('data-status', 'failed')
   await expect(page.getByTestId('assistant-message').last()).toContainText('The code rounds now; the test passes.')
 
-  // The header opens the session's folder in VS Code, by VS Code's own link: kept here, not opened.
+  // The title bar opens the session's folder in VS Code, by VS Code's own link: kept here, not opened.
   await desktop.app.evaluate(({ shell }) => {
     const opened: string[] = []
     Object.assign(globalThis, { openedLinks: opened })
@@ -198,11 +197,10 @@ test('a session begun in a terminal is listed under its folder, opens as a conve
       return Promise.resolve()
     }
   })
-  await page.getByTestId('open-in-editor').click()
+  await page.getByTestId('title-open-editor').click()
   await expect
     .poll(() => desktop?.app.evaluate(() => (globalThis as unknown as { openedLinks: string[] }).openedLinks))
     .toEqual([vscodeLink(folder)])
-  await expect(page.getByTestId('open-in-editor-error')).toBeHidden()
 
   const box = page.getByTestId('session-box')
   await box.fill('Run the tests again.')
@@ -210,9 +208,7 @@ test('a session begun in a terminal is listed under its folder, opens as a conve
   await expect(page.getByTestId('session-row').first()).toHaveAttribute('data-state', 'working')
   // While it works, the box steers the turn, and its send is the stop while it is empty.
   await expect(box).toHaveAttribute('placeholder', 'It is working: this enters the turn running')
-  // Its header's only control opens the project in VS Code; stopping is the box's.
-  await expect(page.getByTestId('session-header').getByRole('button')).toHaveCount(1)
-  await expect(page.getByTestId('open-in-editor')).toBeVisible()
+  // Stopping is the box's.
   await expect(page.getByTestId('stop')).toBeVisible()
   await box.fill('Use Vitest.')
   await expect(page.getByTestId('stop')).toBeHidden()
@@ -456,7 +452,7 @@ test('an executor has its connectors beside, and both sides of the window hide a
   await expect(account.getByTestId('connector-row')).toHaveCount(2)
   await expect(panel).toContainText('done in Claude Code itself (/mcp)')
   const marketing = panel.getByTestId('plugin-row').filter({ hasText: 'marketing' })
-  await expect(marketing).toContainText('0 of 1 MCP server')
+  await expect(marketing.locator('summary [title="0 of 1 MCP server"]')).toBeVisible()
   await marketing.locator('summary').click()
   await expect(marketing.getByTestId('connector-row')).toHaveAttribute('data-status', 'needs-auth')
   const design = panel.getByTestId('plugin-row').filter({ hasText: 'design' })
@@ -464,7 +460,7 @@ test('an executor has its connectors beside, and both sides of the window hide a
   await expect(design.getByTestId('connector-row')).toContainText('No URL configured for this server')
 
   // Its skills, read in the folder with no prompt.
-  await expect(panel.getByTestId('executor-skills').getByTestId('skill-row')).toContainText('/review')
+  await expect(panel.getByTestId('executor-skills').getByTestId('skill-row')).toHaveText('review')
 
   // Read again, on asking.
   await servers.getByTestId('connectors-refresh').click()
@@ -803,7 +799,7 @@ test('another account is added by its nickname, logs in in its own folder, and a
   await expect(note).toContainText('Go on on work (other@example.com)?', STARTED)
   await expect(note.getByTestId('account-switch-missing')).toContainText('files')
   await note.getByTestId('account-switch-confirm').click()
-  await expect(page.getByTestId('session-header')).toContainText('other@example.com', STARTED)
+  await expect(page.getByTestId('session-route')).toContainText('work', STARTED)
   expect(readFileSync(original, 'utf8')).toBe(before)
   await box.fill('Again.')
   await box.press('Enter')
