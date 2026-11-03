@@ -23,6 +23,10 @@ When a newer version of a coding agent is out, its row says **Update available**
 
 An agent older than the oldest version Atlas drives stays in the list, saying it is too old, with the same **Update** button when Atlas knows how it updates, and does not run until it is updated.
 
+## When a plan runs out
+
+A session that stops mid-task at its plan's limit goes on by itself, once, a minute after the harness says the limit resets, with "Continue the task from where you stopped." The session says when ("The plan's limit came: it goes on by itself at 15:05"). If the computer is asleep then, it goes on when it wakes. It does not if you wrote to it in the meantime, switched its account or stopped it. A harness that does not say when its limit resets leaves the session to you, and the session says so.
+
 ## Several accounts
 
 Each account is its own executor, such as **Claude Code · personal** and **Claude Code · company B**, and keeps its own world: its own folder, login, settings, MCP servers, plugins and history. Accounts run at the same time, and each project folder starts its new sessions on the account you chose for it.

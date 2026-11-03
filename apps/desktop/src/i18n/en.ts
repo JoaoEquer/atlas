@@ -754,8 +754,10 @@ export const en = {
     answer: 'Answer',
     asks: (name: string) => `${name} asks`,
     deny: 'Deny',
+    noReset: "The plan's limit came, and it did not say when it resets: go on when you want.",
     other: 'Other',
     reason: 'Why not? (optional, it reads it)',
+    resumesAt: (time: string) => `The plan's limit came: it goes on by itself at ${time}.`,
     skip: 'Skip',
     wantsTo: (name: string, tool: string) => {
       const act = EXECUTOR_ACTS[tool]

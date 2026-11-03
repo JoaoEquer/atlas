@@ -27,10 +27,19 @@ from atlas.assistant import (
     InstanceChanged,
     WorkbenchEvent,
 )
+from atlas.assistant import workbench as workbench_module
 from atlas.assistant.model import UsageWindowView
 from atlas.assistant.workbench import not_compacted
 from atlas.conversations import WORKBENCH
-from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
+from atlas.home import (
+    Database,
+    Home,
+    ModelSettings,
+    Settings,
+    WorkspaceSettings,
+    format_utc,
+    migrate,
+)
 from atlas.jobs import InstanceRecord, RouteTarget
 from atlas.models import CallLedger, UserMessage
 from atlas.plugins import (
@@ -1391,6 +1400,90 @@ def test_with_the_hand_over_off_a_session_at_its_limit_stays_on_its_account(
 
     assert kept.name == "claude-code", "the main account still"
     assert all(kind != "account" for kind, _text in b.activity(kept.id))
+
+
+# -- going on when the plan's limit resets (decided with the user on 03/11/2026) -----------------
+
+
+def _turns(b: Bench, folder: str, *turns: list[dict[str, Any]]) -> Path:
+    """What the fake `claude` does in `folder`, a turn after another, the last one again after."""
+    project = b.root / "work" / folder
+    project.mkdir(parents=True, exist_ok=True)
+    (b.scripts / f"{folder}.json").write_text(json.dumps({"turns": list(turns)}), encoding="utf-8")
+    return project
+
+
+async def _resumed(bench: Bench, instance_id: str) -> None:
+    """Until a second turn ran on the instance and ended."""
+    for _ in range(500):
+        if sum(kind == "prompted" for kind, _text in bench.activity(instance_id)) >= 2:
+            break
+        await asyncio.sleep(0.02)
+    else:
+        raise AssertionError("The session did not go on.")
+    await _idle(bench, instance_id)
+
+
+def test_a_session_stopped_at_its_plans_limit_goes_on_once_a_minute_after_it_resets(
+    bench: Callable[[Screen | None], Bench], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(workbench_module, "RESUME_CHECK_SECONDS", 0.02)
+    b = bench(Screen())
+    # Reset two minutes ago: a computer that slept past it goes on as it wakes.
+    reset = int(datetime.now(UTC).timestamp()) - 120
+    site = _turns(b, "site", [{"say": "Half of it."}, {"limit": reset}], [{"result": "All of it."}])
+
+    async def scenario() -> ExecutorRun:
+        workbench = b.workbench
+        run = await workbench.start("claude-code", site)
+        await workbench.prompt(run.id, "Build the site.")
+        await _resumed(b, run.id)
+        await asyncio.sleep(0.1)
+        kept = workbench.get(run.id)
+        await b.assistant.close()
+        return kept
+
+    kept = _run(scenario)
+
+    assert kept.name == "claude-code", "where it was"
+    assert _said(kept) == "All of it."
+    prompts = [e["message"]["content"] for e in b.log() if e.get("type") == "user"]
+    assert prompts == ["Build the site.", "Continue the task from where you stopped."], "once"
+    told = [text for kind, text in b.activity(kept.id) if kind == "resume"]
+    assert told == [format_utc(datetime.fromtimestamp(reset + 60, UTC))], "the card says when"
+
+
+def test_a_session_taken_up_by_hand_or_whose_limit_says_no_reset_does_not_go_on_by_itself(
+    bench: Callable[[Screen | None], Bench], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(workbench_module, "RESUME_CHECK_SECONDS", 0.02)
+    monkeypatch.setattr(workbench_module, "RESUME_AFTER_SECONDS", 0)
+    b = bench(Screen())
+    soon = int(datetime.now(UTC).timestamp()) + 1
+    site = _turns(b, "site", [{"limit": soon}], [{"result": "Done by hand."}])
+    docs = b.script("docs", {"say": "Stopped."}, {"limit": None})
+
+    async def scenario() -> tuple[ExecutorRun, ExecutorRun]:
+        workbench = b.workbench
+        run = await workbench.start("claude-code", site)
+        await workbench.prompt(run.id, "Build the site.")
+        await _idle(b, run.id)
+        await workbench.prompt(run.id, "Go on, please.")
+        await _idle(b, run.id)
+        unsaid = await workbench.start("claude-code", docs)
+        await workbench.prompt(unsaid.id, "Write the docs.")
+        await _idle(b, unsaid.id)
+        await asyncio.sleep(1.5)  # past the reset
+        kept = workbench.get(run.id), workbench.get(unsaid.id)
+        await b.assistant.close()
+        return kept
+
+    by_hand, unsaid = _run(scenario)
+
+    prompts = [e["message"]["content"] for e in b.log() if e.get("type") == "user"]
+    assert prompts == ["Build the site.", "Go on, please.", "Write the docs."], "never again"
+    assert ("resume", "") not in b.activity(by_hand.id)
+    assert ("resume", "") in b.activity(unsaid.id), "the card says it waits for the user"
 
 
 # -- a session's own route, across executors (asked for by the user on 21/10/2026) ---------------

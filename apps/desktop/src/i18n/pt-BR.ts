@@ -741,8 +741,10 @@ export const ptBR: Override<Messages> = {
     answer: 'Responder',
     asks: (name: string) => `${name} pergunta`,
     deny: 'Recusar',
+    noReset: 'O limite do plano chegou sem dizer quando volta: continue quando quiser.',
     other: 'Outro',
     reason: 'Por que não? (opcional, ele lê)',
+    resumesAt: (time: string) => `O limite do plano chegou: continua sozinho às ${time}.`,
     skip: 'Pular',
     wantsTo: (name: string, tool: string) => {
       const act = EXECUTOR_ACTS[tool]

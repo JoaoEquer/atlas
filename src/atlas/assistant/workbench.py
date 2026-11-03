@@ -42,6 +42,9 @@ better:
   open the session, so a new one starts there, on the same card, its first prompt a `handoff
   packet` put together from what the first one kept, with no model call (`handoff.py`). A
   session with a route follows it instead of its executor's order.
+- **A session at its plan's limit that nothing takes over goes on by itself** (decided with the
+  user on 03/11/2026): once, a minute after the limit resets, with the prompt to continue; never
+  when the user took it up meanwhile.
 - **An instance of Atlas's** runs one delegated task (the subagents start and end it); the user
   sees it on the workbench too, and may steer it. Atlas steers or stops the user's own only when
   the user asks (part 3).
@@ -143,6 +146,12 @@ ACCOUNT_NICKNAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,39}")
 CONTINUE = "Continue the task from where you stopped."
 #: How long an account that reached its limit without saying when it resets is passed over.
 LIMIT_UNSAID_SECONDS = 3600
+#: How long after its plan's limit resets a session that stopped at it goes on: the harness's
+#: clock and this one may differ by some seconds.
+RESUME_AFTER_SECONDS = 60
+#: How often a session waiting for its plan reads the time. By the wall clock, not by a timer: a
+#: computer that slept past the reset goes on when it wakes.
+RESUME_CHECK_SECONDS = 30.0
 
 
 async def answer_for_user(
@@ -219,6 +228,8 @@ class Workbench:
         #: The hand-overs of the user's sessions under way, and the deletions of the sessions
         #: their copies replaced.
         self._handing: set[asyncio.Task[None]] = set()
+        #: The user's sessions waiting for their plan's limit to reset, to go on then.
+        self._resuming: set[asyncio.Task[None]] = set()
 
     def notify(self, event: WorkbenchEvent) -> None:
         """Hears every change of every instance, and tells the screens. What an instance says of
@@ -489,10 +500,48 @@ class Workbench:
         return False
 
     def _limit_reached(self, run: ExecutorRun) -> None:
-        """A user's session stopped at its account's plan limit: it is handed over."""
+        """A user's session stopped at its account's plan limit: it is handed over; when nothing
+        takes it, it goes on where it is once the limit resets."""
         task = asyncio.create_task(self._hand_over(run))
         self._handing.add(task)
         task.add_done_callback(self._handing.discard)
+
+        def handed(done: asyncio.Task[None]) -> None:
+            if done.cancelled() or self._runs.get(run.id) is not run:
+                return  # closing, or it went on elsewhere
+            waiting = asyncio.create_task(self._resume_at_reset(run))
+            self._resuming.add(waiting)
+            waiting.add_done_callback(self._resuming.discard)
+
+        task.add_done_callback(handed)
+
+    async def _resume_at_reset(self, run: ExecutorRun) -> None:
+        """Go on with `run`'s session, once, a minute after its plan's limit resets, with the
+        prompt to continue (decided with the user on 03/11/2026): only when it stopped mid-turn,
+        and only when nobody took it up meanwhile (a prompt, another account, a stop). A limit
+        that does not say when it resets is told and left to the user."""
+        limit = run.limited
+        if limit is None or run.state is not InstanceState.IDLE:
+            return
+        if limit.resets_at is None:
+            self.notify(InstanceActivity(run.id, "resume", "", failed=True))
+            return
+        at = limit.resets_at + RESUME_AFTER_SECONDS
+        said = len(run.history)
+        self.notify(InstanceActivity(run.id, "resume", format_utc(datetime.fromtimestamp(at, UTC))))
+        while self._assistant.clock().timestamp() < at:
+            await asyncio.sleep(RESUME_CHECK_SECONDS)
+            if self._runs.get(run.id) is not run:
+                return
+        if self._runs.get(run.id) is not run or run.state is not InstanceState.IDLE:
+            return
+        if len(run.history) != said:
+            return  # the user went on by hand
+        _logger.info("A session went on after its plan's limit reset.", extra={"instance": run.id})
+        try:
+            await run.prompt(CONTINUE)
+        except ExecutorError as error:
+            _logger.warning("A session could not go on after its plan's limit: %s", error)
 
     def copy_kept(self, run: ExecutorRun) -> None:
         """A turn of `run`, a copy of another account's session, ended: the session it replaces
@@ -1107,9 +1156,10 @@ class Workbench:
         self.drop(found)
 
     async def close(self) -> None:
-        for task in list(self._handing):
+        waiting = [*self._handing, *self._resuming]
+        for task in waiting:
             task.cancel()
-        await asyncio.gather(*self._handing, return_exceptions=True)
+        await asyncio.gather(*waiting, return_exceptions=True)
         for run in list(self._runs.values()):
             if run.owner is Owner.USER:
                 await run.stop()
