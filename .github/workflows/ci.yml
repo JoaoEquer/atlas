@@ -57,12 +57,17 @@ jobs:
         run: uv run pytest
 
   # The desktop app's gates, on both systems too: the app is used on Windows, and starting and
-  # stopping its server is what differs between them (docs/ARCHITECTURE.md, Desktop app).
+  # stopping its server is what differs between them (docs/ARCHITECTURE.md, Desktop app). Windows
+  # runs the end-to-end files about twice as slowly, so it splits them between two machines; the
+  # app's other gates run on the first.
   desktop:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - { os: ubuntu-latest, shard: "" }
+          - { os: windows-latest, shard: "1/2" }
+          - { os: windows-latest, shard: "2/2" }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -87,12 +92,16 @@ jobs:
           sudo apt-get install -y -qq xvfb libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6             xdg-utils libatspi2.0-0 libdrm2 libgbm1 libasound2t64
       - run: npm ci
       - name: Types
+        if: matrix.shard != '2/2'
         run: npm run typecheck
       - name: Lint
+        if: matrix.shard != '2/2'
         run: npm run lint
       - name: Format
+        if: matrix.shard != '2/2'
         run: npm run format:check
       - name: Tests
+        if: matrix.shard != '2/2'
         run: npm test
       - name: Build
         run: npm run build
@@ -101,16 +110,23 @@ jobs:
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" npx playwright test
         env:
           CI: "true"
+      # A dependency project runs in full on every shard, so the files that run alone are a step of
+      # their own, on the last machine, after its share of the others.
       - name: End to end (Windows)
         if: runner.os == 'Windows'
-        run: npx playwright test
+        run: npx playwright test --project=app --shard=${{ matrix.shard }}
+        env:
+          CI: "true"
+      - name: End to end, alone (Windows)
+        if: runner.os == 'Windows' && matrix.shard == '2/2'
+        run: npx playwright test --project=alone --no-deps
         env:
           CI: "true"
       - name: Failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-e2e-${{ matrix.os }}
+          name: desktop-e2e-${{ matrix.os }}-${{ strategy.job-index }}
           path: |
             apps/desktop/test-results
             apps/desktop/playwright-report
