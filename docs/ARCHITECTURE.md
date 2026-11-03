@@ -1215,8 +1215,8 @@ Cut to what a first screen needs: about 6 runtime packages.
 - **Packages are pinned exactly**: React, Vite, TypeScript,
   Tailwind, `nanostores` for state and `streamdown` for Markdown that arrives in pieces. The
   `.npmrc` asks for exact versions, and no package younger than 14 days. Electron is
-  43.7.5, since 40 is out of support (Electron keeps the last three) and carries a high
-  advisory (GHSA-9f4c-93c8-jc8g); and ESLint is 10.11.0, 10.12.0 being younger than the 14
+  43.8.1, since 40 is out of support (Electron keeps the last three) and carries a high
+  advisory (GHSA-9f4c-93c8-jc8g), and 43.8.1 fixes the high and the medium ones of 43.7.5; and ESLint is 10.11.0, 10.12.0 being younger than the 14
   days. A library that owns the thread's state is left out: here that state is the
   server's event stream. Since 18/10/2026 two more: `@tabler/icons-react`
   for the icons, outlined and minimal (asked for by the user), named by their use in one file
