@@ -3575,6 +3575,10 @@ another conversation shows none of its tabs; a mermaid block opens as its drawin
 
 ## Several accounts at once — decided 2026-10-18, redone 2026-10-19
 
+Since step 22 (03/11/2026) the accounts, their order and the routes below are the accounts
+plugin's, and Atlas deletes no session (The other accounts in a plugin, below); what carries a
+session from one account to another is as this section says.
+
 Step 16h, asked for by the user in three parts on 18/10: the same executor running on two accounts
 at once, each project on its account, and a session that switches accounts and goes on in its
 project. On 19/10 the user added a fourth, which changed the design: **each account keeps its own
@@ -3684,6 +3688,65 @@ other (that `--fork-session` writes the copy in the other account's folder is wh
 assumes, and the real one must show); the way back; the missing tool's warning; the leaks above;
 archive and delete on the other account, the first untouched.
 
+### The other accounts in a plugin — decided 2026-11-03
+
+Step 22. On 03/11/2026 the user doubted the several accounts of step 16h: on their machine the
+switch at a plan's limit had copied sessions to other accounts' folders and deleted 42 originals,
+a project's automatic memory was spread over five accounts' folders, and the other folders lacked
+the main one's hooks, permissions and instructions. No large product puts several subscription
+accounts, switched at a limit, in its core. Decided with the user: **the core runs each harness on
+the user's own login, one account; several accounts, and a session moving between them, are a
+plugin's**, the `accounts plugin` Atlas ships, for whoever wants them.
+
+- **Mechanism in the core, policy in the plugin.** The core keeps what carries a session: an
+  account's executor named `<executor>@<id>` and made by the harness's plugin on that folder
+  (`for_account`), the copy on another account (`ExecutorSpec.resume_from`), the `handoff packet`
+  to another harness, the model and effort carried, the login of an executor, and the preview of
+  a switch. The plugin keeps what the user chooses: the accounts (a nickname, a folder), the order
+  they take over in and whether they do, a folder's account, and each session's route; and it
+  says where a session goes at a limit (`Accounts.next_stop`, a `next stop`). SDK version 29:
+  `Accounts`, `OtherAccount`, `HandOver`, `NextStop`, `PluginContext.register_accounts`, and the
+  `WorkbenchHost` Atlas lends it (`ctx.workbench`: the executors, which may take a session, which
+  are at their limit, which run, and the word that the accounts changed, which every screen
+  hears). One plugin a home brings it.
+- **The plugin keeps one JSON file in its data folder**, read again when another load of it wrote
+  it (its screen's calls and what Atlas asks run in two loads), never written over when it cannot
+  be read. Atlas's tables of step 16h (`jobs_executor_accounts`, `jobs_folder_accounts`,
+  `jobs_account_failover`, `jobs_session_routes`) are read once, when an update finds them filled:
+  their rows go to the plugin's folder (`from-atlas.json`, adopted on its first start and left for
+  the user to look at) and the plugin is turned on, as the update's own doing, since it is what
+  that user used. No account's folder is touched. The tables stay, unread: taking a table back is
+  a riskier migration than leaving one behind.
+- **Atlas deletes no session.** The deletion of the session a copy replaced (22/10/2026) is gone
+  with nothing in its place: the original stays on its account, and deleting a session is the
+  user's, from its row.
+- **At a plan's limit**, a session the plugin hands over goes on as before; one it does not (no
+  plugin, no other account, the hand-over off, or none that can) goes on where it is, once, a
+  minute after the limit resets, with the prompt to continue (`resume at reset`, decided with the
+  user on 03/11/2026). The wall clock is read every 30 s, so a computer that slept past the reset
+  goes on when it wakes; a prompt, a switch or a stop meanwhile cancels it, and a limit that does
+  not say when it resets is told and left to the user.
+- **The screens are the plugin's** (screen version 4): a `session` part by a session's box (the
+  account and route pill, the switch read before it happens, the route as a path) and an
+  `executor` part atop an executor's tree (add an account, a project's account, an account's
+  removal). The app keeps the login form and the switch itself (`host.sessionAccount`), and its
+  first run offers to turn the plugin on. The bundled screens' classes are compiled with the
+  app's own (`@source` in `styles.css`).
+- **Kept in the core, marked as our choice:** the `executor_accounts` tool, which lists the
+  accounts through the plugin (each account's folders left out); `executor.accounts`, read only; a
+  delegation's `route`, refused with its reason when no plugin keeps routes; and a hand-over that
+  finds no stop told as `account`, a route's or not.
+
+**Proved** by the plugin's file's tests (a write one load makes read by the other, a file that
+cannot be read never written over, `from-atlas.json` adopted once), the workbench's and the
+delegation's through the plugin on a temporary folder (every case of step 16h and the routes,
+the original left on its account, a session going on at its reset), the gateway's over the socket
+(the plugin turned on with its consent, an account added, logged in, a folder on it, a switch and
+its removal; a route set and read), the update's (a home with the old tables comes up with the
+plugin on, the accounts in the user's order, a folder and a route kept, the account's folder
+untouched; a home with none gets no plugin), Vitest on its screen as the app loads it, and the
+e2e scenario of step 16h with the plugin turned on in a terminal.
+
 ### A session's environment, mode and plan by its box — decided 2026-11-01
 
 Step 18g, from what the user brought on 01/11/2026 (decided with the user: a worktree is the
@@ -3709,6 +3772,9 @@ executors' alone, never Atlas's own conversation's or a bot's; the cloud waits f
   in VS Code, and in a terminal, which then shows or hides the terminals as Ctrl+` does.
 
 ### A session's route across executors — decided 2026-10-21
+
+Since step 22 the route is the accounts plugin's, kept in its data folder, and Atlas asks it for
+the next stop (The other accounts in a plugin, above); the rest holds.
 
 Asked for by the user on 21/10/2026, beside the `account failover` of the same day, which stays
 as it is: a session of its own may go on, at a plan's limit, to destinations the user orders,

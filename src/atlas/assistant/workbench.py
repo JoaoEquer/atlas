@@ -17,31 +17,19 @@ better:
   again on the user's browser, never while one of its instances on it works, and the instance goes
   on with the same session in the same folder (decided with the user on 12/10/2026).
 - **Other accounts run at once** (step 16h, decided with the user on 18/10/2026 and redone on
-  19/10/2026): each is the harness's own folder for it (Claude Code's `~/.claude-<nickname>`),
-  with its own login, settings and sessions, under a nickname the user gives; Atlas keeps no
-  credential. On the screens each is an executor of its own, `claude-code@<id>`, which its plugin
-  makes on that folder (`Executor.for_account`). A folder may name the account its new sessions
-  start on; one that names none starts on the main account. A session goes on from one account to
-  another in a copy (`use_account`): the other account's harness reads the first one's session and
-  keeps its copy (decided with the user on 19/10/2026).
-- **The session a copy replaced is deleted** (asked for by the user on 22/10/2026): the copy has
-  all it had, and going back to its account copies the copy, so it would be left dead there. It
-  goes once the copy's harness lists the copy, and only when no instance here and no other program
-  has it open; a fork the user asked for, and a session that went on with another executor, whose
-  handoff packet is not the whole of it, keep theirs. Claude Code's and Codex's session files keep
-  what a compaction replaced (checked on 22/10/2026), and the card keeps every message in Atlas.
-- **An account at its plan's limit hands over to the next** (asked for by the user on
-  21/10/2026): the session goes on in a copy on the next account in the order the user set under
-  the session's box, passing over one not logged in or at its own limit, and continues from where
-  it stopped, after compacting there when the user asked for it. The user's sessions and Atlas's
-  delegations alike.
-- **A session's own route goes across executors** (asked for by the user on 21/10/2026): the
-  user may give a session the destinations it goes on to at a plan's limit, in their order,
-  accounts of its executor and of others (Claude Code · main, Claude Code · company B, Codex ·
-  main). An account of the same executor goes on in a copy, as above; another executor cannot
-  open the session, so a new one starts there, on the same card, its first prompt a `handoff
-  packet` put together from what the first one kept, with no model call (`handoff.py`). A
-  session with a route follows it instead of its executor's order.
+  19/10/2026; the accounts plugin's since step 22, 03/11/2026): each is the harness's own folder
+  for it (Claude Code's `~/.claude-<nickname>`), with its own login, settings and sessions, under a
+  nickname the user gives; Atlas keeps no credential. On the screens each is an executor of its
+  own, `claude-code@<id>`, which its plugin makes on that folder (`Executor.for_account`), the
+  plugin naming the accounts (`Accounts`). A folder may name the account its new sessions start
+  on. A session goes on from one account to another in a copy (`use_account`): the other
+  account's harness reads the first one's session and keeps its copy, and the original stays as
+  it was (Atlas deletes no session, decided with the user on 03/11/2026).
+- **At a plan's limit the accounts plugin says where the session goes** (`next_stop`): on the
+  next account of its executor in a copy, compacted first when asked, or, by the session's own
+  route, on another executor in a new session on the same card, whose first prompt is a `handoff
+  packet` put together from what the first one kept, with no model call (`handoff.py`). The
+  user's sessions and Atlas's delegations alike; carrying the session is this module's.
 - **A session at its plan's limit that nothing takes over goes on by itself** (decided with the
   user on 03/11/2026): once, a minute after the limit resets, with the prompt to continue; never
   when the user took it up meanwhile.
@@ -59,7 +47,6 @@ import asyncio
 import dataclasses
 import logging
 import os
-import re
 import secrets
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
@@ -133,9 +120,6 @@ ANSWER_CONTEXT_MESSAGES = 30
 EXECUTOR_ANSWER_PURPOSE = "executor_answer"
 #: The main account's id: the harness's own login.
 MAIN_ACCOUNT = ""
-#: A nickname for another account, which names its folder too (`~/.claude-company-b`): letters,
-#: digits, `-` and `_`, at most 40.
-ACCOUNT_NICKNAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,39}")
 #: What a session is told when it goes on on another account after a plan's limit.
 CONTINUE = "Continue the task from where you stopped."
 #: How long an account that reached its limit without saying when it resets is passed over.

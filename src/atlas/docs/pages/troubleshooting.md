@@ -46,8 +46,9 @@ what causes each and the way out. Each guide also has a section of its own for i
 - **"Not logged in"**: choose **Log in**, which opens the harness's own login in your browser.
 - **"This session is open in a terminal"**: the same session is still open in another program.
   **Continue in a copy** is the safe choice; two programs writing one session mix up its messages.
-- **The session stopped at its plan's limit**: give it a route, or switch its account
-  ([Coding agents and accounts](/docs/guides/coding-agents/#a-route-for-each-session)).
+- **The session stopped at its plan's limit**: it goes on by itself a minute after the limit
+  resets, and says when; or, with the Accounts plugin, give it a route or switch its account
+  ([Coding agents and accounts](/docs/guides/coding-agents/#when-a-plan-runs-out)).
 
 ## Updating
 

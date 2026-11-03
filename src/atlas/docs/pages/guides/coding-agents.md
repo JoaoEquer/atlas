@@ -25,17 +25,21 @@ An agent older than the oldest version Atlas drives stays in the list, saying it
 
 ## When a plan runs out
 
-A session that stops mid-task at its plan's limit goes on by itself, once, a minute after the harness says the limit resets, with "Continue the task from where you stopped." The session says when ("The plan's limit came: it goes on by itself at 15:05"). If the computer is asleep then, it goes on when it wakes. It does not if you wrote to it in the meantime, switched its account or stopped it. A harness that does not say when its limit resets leaves the session to you, and the session says so.
+A session that stops mid-task at its plan's limit, with no other account to take it, goes on by itself, once, a minute after the harness says the limit resets, with "Continue the task from where you stopped." The session says when ("The plan's limit came: it goes on by itself at 15:05"). If the computer is asleep then, it goes on when it wakes. It does not if you wrote to it in the meantime, switched its account or stopped it. A harness that does not say when its limit resets leaves the session to you, and the session says so.
 
 ## Several accounts
 
+Atlas runs each coding agent on your own login. To use more than one account, turn on the **Accounts** plugin, in **Extensions**, on the **Plugins** tab; the first run offers it too. Everything below in this section, switching accounts and routes, comes with it.
+
 Each account is its own executor, such as **Claude Code · personal** and **Claude Code · company B**, and keeps its own world: its own folder, login, settings, MCP servers, plugins and history. Accounts run at the same time, and each project folder starts its new sessions on the account you chose for it.
 
-To add one, choose **Add an account** in the Executors tab and give it a nickname. Atlas makes a folder for it beside your main one and opens the harness's own login in your browser: sign in there with that account. Atlas never sees, keeps or passes a credential. Removing an account leaves its folder as it is, with its login and its sessions.
+To add one, open the harness in the Executors tab, choose **Add an account** at the top of its list and give it a nickname. Atlas makes a folder for it beside your main one; its row's menu then opens the harness's own login in your browser: sign in there with that account. Atlas never sees, keeps or passes a credential. Opened, an account's list shows the projects that start on it, where you add or take one back, and **Remove**, which leaves its folder as it is, with its login and its sessions.
+
+If you used several accounts before this plugin existed, the update turned it on for you, with your accounts, their order and your routes; no folder was touched.
 
 ## Switch accounts in a conversation
 
-Out of credit on one account? Switch the session to another. The conversation goes on in a copy on that account, and the first account keeps it as it was.
+Out of credit on one account? Switch the session to another. The conversation goes on in a copy on that account, and the first account keeps it as it was: Atlas deletes no session.
 
 Before the switch, the app tells you what changes: the tools the other account lacks, and that the first message reads the whole conversation again on that account's plan. Compacting first (`/compact`) reads less.
 
