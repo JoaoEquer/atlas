@@ -4081,15 +4081,18 @@ especialistas** e a **aba Executores**, que é um ambiente de desenvolvimento co
 assistente delega aos bots e aos executores, os bots usam as mesmas skills e conectores, e os
 executores entram nas mesmas contas e rotas. Os produtos comparados em 01/11 cobrem uma face cada.
 
-- **O que vale para as três:** seguro por padrão (o portão, os pisos e a loja revisada, onde os
-  outros vêm com tudo liberado); seu (código aberto, na sua máquina, memória em texto); todos os
+- **O que vale para as três:** seguro por padrão (o portão, os pisos e o consentimento ao ligar um
+  plugin, onde os outros vêm com tudo liberado; a loja deixou de ser revisada pelo usuário em
+  03/11, A base D, abaixo, e a segurança passa a morar no portão, na varredura e no
+  consentimento); seu (código aberto, na sua máquina, memória em texto); todos os
   harnesses, cada um com a conta do usuário (várias contas num plugin da loja, decidido em 03/11);
   e o Brasil (português, Pix e reais no Atlas Cloud).
 - **Um teste para cada recurso novo:** se só faz sentido com o usuário olhando a tela, é coisa de
   ADE; se faz sentido com ele longe, é coisa do Atlas. A aba Executores fica boa, mas como janela
   para acompanhar e intervir; o diferencial é quem segura o fio entre uma sessão e outra.
-- **De fora, de propósito:** agir com dinheiro sem o usuário, liberar tudo por padrão, loja sem
-  revisão e um sistema só.
+- **De fora, de propósito:** agir com dinheiro sem o usuário, liberar tudo por padrão e um sistema
+  só. A "loja sem revisão", que estava nesta lista, foi escolhida pelo usuário em 03/11 (A base D,
+  abaixo), com as defesas da revisão da sequência.
 
 **As lacunas, por base, na ordem proposta (A → B → C → D → E; F só com uma decisão de mercado).**
 A e B rodam locais e não esperam a nuvem.
@@ -4140,7 +4143,9 @@ comentar uma linha em vez de descrever o problema, voltar atrás e entregar.
      turno, o commit e o PR. O agente só mexe nos arquivos, e qualquer harness funciona igual;
      pedir um commit ao agente pelo chat continua possível.
   2. **Entregar:** abre um PR, com o CI no app, quando o remoto é o GitHub; nos outros casos junta
-     as mudanças na branch de origem, perguntando antes.
+     as mudanças na branch de origem, perguntando antes. (Revisto em 03/11, A revisão da sequência,
+     abaixo: o PR, os checks e a issue vêm do plugin do GitHub; sem ele, a workspace junta na
+     branch de origem e envia a branch.)
   3. **As worktrees que já existem se agrupam sob o projeto, todas:** as do Atlas, as do harness e
      as criadas por fora, pelo `git rev-parse --git-common-dir`.
   4. **Na delegação, só a opção explícita** `workspace: "new"`, sem trava na pasta; sem ela, roda na
@@ -4439,11 +4444,13 @@ do gh e do gws.
   (18d) vira o convite do plugin de contas na loja; a tarefa "adicionar uma segunda conta" dos
   Primeiros passos (18e) vira "instalar algo da loja"; a página Ditados sai da tela do plugin e
   vira do app.
-- **O gh e o gws saem aqui, não no 24:** a regra de pergunta deles (`gws gmail send`, `gh pr
-  merge`) passa a ser declarada pelo plugin, aceita no consentimento ao ligar e fora do alcance do
-  agente. É uma abertura nova no SDK, a primeira do passo. Para o GitHub, o plugin oficial do
-  diretório do Claude Code é conferido antes; se servir, a loja aponta para ele, como fez com o da
-  Cloudflare.
+- **O gh e o gws saem aqui, não no 24:** saem as skills, a instalação do programa e o passo de
+  conexão. **As defesas ficam no núcleo** (corrigido na revisão de 03/11, abaixo): a lista de ações
+  para fora (`atlas.trust.outward`), a saída marcada como texto de fora e o login dos programas
+  fora do backup são do portão e da casa, e valem venha o programa de onde vier, inclusive das
+  skills do `gws` pelo skills.sh. Um plugin pode acrescentar regras na declaração dele, nunca tirar.
+  Para o GitHub, o plugin oficial do diretório do Claude Code é conferido antes; se servir, a loja
+  aponta para ele, como fez com o da Cloudflare.
 - **Como fica:** os plugins oficiais continuam no repositório do Atlas, numa pasta própria, testados
   no mesmo CI, e a loja os oferece fixados no commit da versão; a primeira abertura (18d) instala da
   loja o que o usuário escolhe; a atualização instala da loja o que já estava ligado, sem perder
@@ -4460,6 +4467,131 @@ do gh e do gws.
   - o Atlas Cloud (20) instala os plugins da loja como qualquer casa.
 - **Na linha:** antes do 21 (pelo usuário), porque cada passo construído antes dela põe mais coisa
   no núcleo. O 22 vem junto, antes dele, para os executores irem à loja já com uma conta só.
+
+#### A revisão da sequência (pedida e feita em 03/11)
+
+O usuário pediu, antes de ligar a sequência, uma revisão atrás de incoerências, regras que brigam
+entre si, problemas não mapeados e cenários específicos, para a sequência rodar inteira sem nova
+revisão. Conferida contra o texto e contra o código em 03/11. O que ela resolveu sem o usuário vai
+como **escolha própria, marcada**, para ele vetar quando quiser; nada aqui muda uma decisão dele.
+
+**As regras que valem para toda a sequência:**
+- **A prova de cada passo, sem gastar crédito:** os fiscais nos dois sistemas, os testes contra os
+  falsos (modelo, harnesses, GitHub, loja) e o e2e. A prova com modelo ou conta real de cada passo
+  entra na lista do dia de provas (item 4 da linha) e não segura o passo seguinte. **Escolha
+  própria, marcada:** sem ela, "cada passo fecha com prova" pararia a sequência a cada passo para
+  perguntar pelo crédito.
+- **Cada passo:** os termos novos no `docs/GLOSSARY.md` antes do código; a página do usuário em
+  `src/atlas/docs/pages/` no mesmo commit; `gen_protocol` e `gen_docs` quando o protocolo ou um
+  comando mudam; um commit por fatia, direto na `main` depois dos fiscais, conferindo o CI.
+- **Nunca contra a casa real:** a sessão pode estar rodando dentro do Atlas instalado; nada da
+  sequência reinicia, atualiza ou migra a casa de `~/.atlas`. A prova no app usa uma instalação
+  temporária com `APPDATA` próprio.
+- **Uma parada também acontece** quando um passo esbarra numa decisão de produto que esta revisão
+  não previu: a sequência anota a pergunta com o exemplo concreto e segue para o que não depende
+  dela, se houver.
+
+**As incoerências achadas e corrigidas:**
+1. **A loja sem revisão estava na lista do que fica de fora de propósito** (Uma casa, três faces) e
+   o "seguro por padrão" citava a loja revisada. Corrigidas para a decisão de 03/11.
+2. **As regras de pergunta do gh e do gws iriam para a declaração do plugin**, e assim o `gws` que
+   chegasse pelas skills do skills.sh (o `gws-gmail` com 83 mil instalações) mandaria e-mail sem
+   perguntar. Ficam no núcleo (A poda do núcleo, acima).
+3. **A detecção dos executores mora no plugin** (`Executor.detect`): um executor que ainda não foi
+   instalado não pode ser detectado. **Escolha própria, marcada:** o item de executor da loja
+   declara o programa que procura (`bins`, como a skill já declara), e o núcleo procura esses
+   programas para oferecer o plugin na primeira abertura e na tela de Executores.
+4. **O PR, os checks e a issue da workspace (A4, A5) falam com o GitHub**, que pela regra do núcleo
+   é plugin. **Escolha própria, marcada:** a workspace do núcleo entrega juntando na branch de
+   origem e enviando a branch (`git push`, perguntando, que é ação para fora); o plugin do GitHub
+   acrescenta o "abrir PR", os checks no app e a issue que vira workspace. A decisão 2 do 21 continua
+   valendo quando o plugin está ligado.
+5. **"Atualizar é um botão, nunca sozinho" (Loja) e os plugins oficiais**, que falam o protocolo
+   interno de cada versão do Atlas. **Escolha própria, marcada:** os plugins oficiais se atualizam
+   junto com o Atlas, no commit da mesma versão; os de fora continuam no botão.
+6. **O 22 ficava sem lugar** na ordem e a base saudável sem número: ela vira o passo 28.
+
+**Os cenários, passo a passo, com o que fazer:**
+- **28, a base saudável:**
+  - pronto quando dez rodadas seguidas do CI na `main` passam sem nova tentativa; um teste
+    instável é consertado na causa (tempo, ordem, recurso preso), nunca pulado nem marcado para
+    tentar de novo;
+  - um alerta de dependência sem conserto publicado (o katex, que espera o mermaid 12) fica aberto
+    e anotado, sem segurar o passo.
+- **22, uma conta por harness:**
+  - o `_drop_replaced` e a cópia da sessão para a pasta de outra conta saem já; nenhuma sessão é
+    apagada pelo Atlas;
+  - quem tem mais de uma pasta de conta hoje: a atualização instala o plugin de contas sozinha (é
+    o que ele já usava) e nenhuma pasta é mexida; sem o plugin, o núcleo lista só as sessões da
+    pasta principal do harness;
+  - vale para o Codex (cada conta com o seu `CODEX_HOME`) como para o Claude Code;
+  - **retomar quando o plano volta:** só a sessão que parou no meio de um turno pelo limite; na
+    hora em que o harness diz que o limite acaba, mais um minuto, uma vez, com a mensagem
+    "continue"; com o computador dormindo, na volta, se ainda fizer sentido (o turno não foi
+    retomado à mão). A rotina que bateu no limite segue a mesma regra;
+  - o apagamento de sessões pelo próprio harness depois de 30 dias (`cleanupPeriodDays`) fica como
+    está: o Atlas não mexe na configuração do harness (regra do 21).
+- **26, a poda:**
+  - **para quem desenvolve:** rodando do repositório (`uv run atlas serve`), os plugins oficiais
+    carregam da pasta local, sem rede, e o e2e usa a mesma pasta;
+  - **sem rede na primeira abertura:** os passos que instalam dizem que não conseguiram e ficam
+    para depois em Configurações; o resto da primeira abertura segue;
+  - **a transcrição** vem como um extra (`transcribe`), instalado com o modelo no primeiro áudio,
+    depois de perguntar uma vez com o tamanho, como o `anthropic` já é carregado só quando preciso;
+    o Telegram passa o áudio ao núcleo, que transcreve com ou sem o plugin `voice`;
+  - **o ditado:** no Linux com Wayland, que não deixa ouvir o teclado de fora, a tela diz que não
+    há ditado em qualquer lugar ali; no Mac, pede a permissão de Acessibilidade; o ouvinte de teclado
+    e mouse é opcional como o `node-pty`, e sem ele o atalho aceita só o que o Electron ouve.
+- **21, a workspace:**
+  - as duas em aberto (o preparo num arquivo do repositório e o arquivar) seguem pela recomendação
+    marcada; o usuário troca na parada depois da A1;
+  - a pasta que não é repositório git não tem workspace: a sessão roda nela como hoje.
+- **23, os gatilhos:**
+  - **a sonda que repete:** um comando que lista os e-mails não lidos imprime os mesmos a cada 5
+    min. O Atlas guarda a última saída de cada sonda e só acorda quando ela muda; a sonda recebe
+    também uma pasta própria (`ATLAS_PROBE_STATE`) para guardar o seu cursor;
+  - **o evento que chega com a rotina rodando:** fica para uma execução logo depois, com todos os
+    que chegaram juntos, nunca perdido e nunca uma execução por evento;
+  - **enxurrada:** no máximo uma execução por minuto por rotina, juntando o resto;
+  - **a sonda que falha:** saída de erro não acorda o agente; na terceira falha seguida, avisa o
+    usuário uma vez, e o aviso volta só se ela voltar a funcionar e falhar de novo;
+  - **o intervalo** mínimo é 1 minuto; com o computador dormindo, a sonda roda uma vez na volta, sem
+    recuperar as perdidas;
+  - o comando da sonda passa pelo portão ao ser criado e ao ser mudado, como o da rotina sem modelo,
+    e o bot não cria sonda.
+- **24, a loja aberta:**
+  - **plugin de fora que o Atlas não carrega** (os 12 do diretório com servidor LSP, por exemplo):
+    um teste no CI da loja, de noite, instala cada item das fontes e grava num arquivo do
+    `atlas-marketplace` só o resultado (compatível ou o motivo); o cartão mostra "não funciona no
+    Atlas" e não instala. Nenhum código de fora é copiado;
+  - **o PR de fora no `atlas-marketplace`:** o CI roda o `check` sem segredo nenhum, e quem junta é
+    outro fluxo, que não roda o código do PR; o selo de oficial e a lista de retirados mudam só pelo
+    dono do repositório, e o CI recusa o PR que mexe neles;
+  - **a skill instalada do skills.sh** é fixada no commit que estava no GitHub na hora, e o
+    Atualizar aparece quando o repositório andou;
+  - **o MCP do registro** com versão de pacote exata entra como está; o remoto com OAuth ganha o
+    Entrar; o que pede chave pede pelo cofre; o retirado vale também para os de fora, pelo nome;
+  - a lista dos MCPs, sem número de uso, mostra primeiro os do próprio fornecedor (o nome
+    verificado pelo domínio dele) e depois os atualizados há menos tempo.
+- **25, as rotinas num executor:**
+  - **o executor pede permissão sem ninguém olhando:** a execução para ali, a sessão fica guardada
+    para continuar à mão, e conta no placar como "precisou de você", que é exatamente isso; nunca
+    aprova sozinho além do modo de permissão escolhido na criação;
+  - **onde roda:** a rotina que só lê (a varredura) roda na pasta; a que muda código roda numa
+    workspace nova a cada execução, arquivada sozinha quando termina sem mudança;
+  - **entregar:** a rotina não abre PR sozinha. **Escolha própria, marcada:** na criação, o usuário
+    pode marcar "abrir PR em rascunho ao terminar" (com o plugin do GitHub), desligado de fábrica;
+  - **o modelo de rotina que precisa de um plugin** ("PRs parados" precisa do gh) diz isso no
+    cartão, e o Adicionar oferece instalar antes;
+  - o bot continua só com rotina de prompt: não cria rotina de executor nem sonda;
+  - **o placar:** "sozinha" é a execução que terminou sem pedir nada; "precisou de você" é a que
+    parou numa pergunta ou numa aprovação negada por falta de quem aprovasse; "falhou" é erro.
+- **14c:** parada para o desenho novo, já marcada na linha.
+- **20, o Atlas Cloud:** a parte do Atlas é provada contra um relé falso local, com a cifra de ponta a
+  ponta e o pareamento pelo código de conexão do passo 15; subir o Worker na Cloudflare é da parada,
+  como o site.
+- **27, o app no celular:** sem desenho de tela ainda; entra quando o 20 fechar, começando por
+  desenhar as poucas funções com o usuário (conversas, aprovações, sessões dos executores e o 🎤).
 
 ## Assuntos de desenho ainda abertos
 
@@ -4555,7 +4687,7 @@ depois do outro, e sim ligar o agente e seguir construindo até o fim. Cada item
 anterior fecha com prova; só as **paradas** marcadas esperam o usuário. Conferida passo a passo em
 03/11 (A poda do núcleo, acima: o que cada passo muda nos outros).
 
-5. **A base saudável.** O CI da `main` verde de forma estável: em 03/11, três das seis últimas
+5. **O 28, a base saudável.** O CI da `main` verde de forma estável: em 03/11, três das seis últimas
    rodadas falharam sem defeito no que mudou (um teste de plugin com tempo curto no Windows, o
    desktop no Linux e o e2e do Windows). Junto, o plano dos testes de 01/11 e os alertas de
    dependência (12 em 03/11, com o Electron 43.8.1 liberado no mesmo dia). Uma sequência longa
@@ -4643,9 +4775,10 @@ falta.
 | 19 | Site e documentação pública (decididos em 25/10: Site e documentação pública, acima): Astro com Starlight em `site/`, na Cloudflare; a home, as Versões e as News, e a documentação de quem usa, que vai também dentro de cada versão para o Atlas responder sobre si; pronto para agentes. Pedido do usuário em 25/10 | 18 | **Parte 1, código pronto em 25/10:** o site em `site/`, com Astro 7 e Starlight 0.42. A home é o planetário em WebGL2 próprio, sem biblioteca: as linhas são calculadas no shader, e a esfera, as órbitas e o caminho entre as duas não custam CPU por quadro. Ela tem seis capítulos (as contas, a rota com o cometa e os medidores da janela de cinco horas, as máquinas, a memória e o fecho), e depois o portão de aprovação com comandos e vereditos de verdade, o resto do Atlas, a instalação com as abas do sistema de quem visita, e as últimas mudanças. Sem WebGL fica o primeiro quadro desenhado em SVG no build, pela mesma fórmula; com movimento reduzido, a câmera troca de plano sem voar. No celular a cena é um painel no alto e o texto passa por baixo dele. A documentação tem quatro páginas (O que é o Atlas, Instalar, Executores e contas, Várias máquinas), conferidas contra o código e as telas do app. As News saem vazias, com o formato do item escrito, e o Changelog é o `git log` da `main` no formato da atualização; os dois têm RSS. Para agentes: cada página tem o gêmeo em Markdown, `llms.txt` e `llms-full.txt` na ordem da barra lateral, `robots.txt` com `Content-Signal` e os robôs de IA, a skill `atlas` em `/.well-known/agent-skills/` com o digest dos bytes, e um Worker que responde Markdown a `Accept: text/markdown` e põe os cabeçalhos `Link`. O CI ganha o job `site`. **Escolhas próprias, marcadas:** o `Content-Signal` libera busca, resposta e treino (decidir antes de publicar); a skill publicada e o gêmeo em Markdown entram já, antes do item 4; a instalação ainda aponta para o gist; o domínio é um marcador (`SITE_URL`). Provado: `npm run check` (astro check, tipos do Worker, eslint, prettier e 32 testes); o build com a conferência do `dist` (toda página com gêmeo, o digest da skill, nenhum link interno quebrado); o Worker no runtime da Cloudflare (`wrangler dev`), respondendo Markdown com `Vary` e `Content-Signal` e pondo os `Link` na home; a home vista no Edge em 1920, 1440, 1024 e 390 px, capítulo por capítulo; e o Lighthouse com renderização por software: 98 de desempenho e 100 de acessibilidade e de boas práticas na home, e SEO 92, porque o Lighthouse não conhece a linha `Content-Signal` que o Is It Agent Ready pede. **Parte 2, código pronto em 25/10 (docs/ARCHITECTURE.md, The documentation):** as páginas no pacote (`atlas.docs`, assunto novo com o seu contrato no import-linter), lidas pelo site e pelo `atlas docs`; a skill embutida `atlas`; a referência gerada dos comandos e das configurações (três campos sem comentário ganharam o seu); as cinco referências de `docs/` viradas páginas, mais o portão de aprovação e a origem dos dados do Claude Code; 12 páginas ao todo. O guia de plugins, que a 16t aumentou no mesmo dia, veio inteiro para a página, e a cópia da skill `write-plugin`, os testes dos dois lados e o link do app foram junto com ele. O plugin de validação de links do site saiu (ele calcula o id da página pela pasta `src/content/docs` e dava todos os links por quebrados) e o `check-dist.mjs` passou a conferir também cada `#` de seção, provado com uma âncora quebrada de propósito. Provado: os testes de `tests/docs` (o cabeçalho, a ordem, achar, buscar, o comando, a referência atual, cada comando que a skill dá rodando, e a página chegando inteira pelo `run_command` do agente, com acentos), ruff, pyright, import-linter, deptry e a suíte inteira; no site, `npm run check` e o build. **O ícone do app, código pronto em 25/10 (pedido do usuário):** a marca do Atlas no lugar do ícone do Electron, na janela, na barra de tarefas, no Dock, no atalho do Menu Iniciar e na entrada do Linux. Provado: o `.ico` lido pelo carregador do próprio Windows em cada tamanho, de 16 a 256 px, com os cantos transparentes no fundo claro e no escuro; o teste do atalho lendo o ícone que ele guarda; e o e2e do app inteiro. **Parte 3, o site e a documentação revistos, código pronto em 25/10 (pedido do usuário: mais bonito, animações melhores, texto estratégico, documentação impecável, rápido e bem posicionado nas buscas):** a home ganhou um texto novo, conferido contra o código e as telas do app (o título "Every coding agent. Every account. One window.", quatro fatos sob a instalação, a comparação "sozinhos × no Atlas", cartões que levam ao guia de cada recurso e oito perguntas frequentes); animações sem JavaScript (a entrada do hero em sequência, as seções subindo com a rolagem por `animation-timeline: view()`, a transição entre páginas por `@view-transition`, as respostas que deslizam) e uma luz que segue o ponteiro nos cartões, com um só ouvinte, tudo parado com movimento reduzido; para as buscas, JSON-LD (Organization, WebSite, SoftwareApplication, FAQPage, e TechArticle com BreadcrumbList em cada página da documentação), o título de busca de cada página com as palavras que se procuram (`site/src/lib/seo-titles.ts`, pelo `routeMiddleware` do Starlight), a imagem de compartilhamento nova e em toda página, `noindex` na 404 e um rodapé com os guias; o logo de 17 KB passou a 7,7 KB, os shaders do planetário compilam em paralelo onde o navegador deixa, e as fontes da documentação vêm antes do primeiro quadro (o CLS de 0,187 foi a 0). A documentação ganhou dez páginas (Modelos e chaves, Rotinas, Telegram, Voz e ditado, O navegador, Skills e o marketplace, Privacidade, Backups/atualizações/homes, Solução de problemas e Perguntas e respostas) e um mapa na página inicial, e três trechos que o app já tinha deixado para trás foram corrigidos (os executores ligam em Configurações → Executores; a memória e a alma se editam em Configurações → Personalização). Provado: `npm run check` (44 testes, os de SEO novos), o build com a conferência de cada link e âncora, `tests/docs`, as telas em 1440, 1280 e 390 px, e o Lighthouse com renderização por software: home 93 de desempenho e 100 de acessibilidade e boas práticas, documentação 99 de desempenho; SEO 92 nas duas pelo mesmo `Content-Signal`. **Falta:** a prova com um modelo de verdade (perguntar antes: centavos), o domínio e o projeto na Cloudflare (o usuário), a nota do Is It Agent Ready no ar, a rotina das News e o português do resto da documentação. O link do guia de plugins no app passou para o site em 01/11. **O português, começado em 01/11 (docs/ARCHITECTURE.md, The documentation):** a home inteira em `/pt-br/` (o texto, o menu, o rodapé, as abas de instalação, os rótulos do planetário e as mudanças pelo `Notes-pt-BR`), e o Começar da documentação (O que é o Atlas e Instalar) no idioma `pt-br` do Starlight, com a barra lateral traduzida e as outras páginas em inglês com o aviso; `hreflang` e o seletor de idioma no menu, sem redirecionar; o gêmeo em Markdown de cada página nova; os termos do glossário (casa, loja) e os nomes de tela do app em português. Provado: `npm run check` (144 testes; os novos conferem a forma da home contra a inglesa, as palavras do menu nos dois idiomas e o hash da página inglesa de cada tradução), o build com o `check-dist` (104 páginas, nenhum link quebrado) e as telas no Edge, a home inglesa igual |
 | 20 | Atlas Cloud (estudado em 01/11 e decidido em 03/11: Uma casa, três faces, acima): a casa inteira numa microVM que dorme, o relé na Cloudflare cifrado de ponta a ponta, créditos em reais, e o executor com crédito ou com a assinatura onde o fornecedor permitir | 19 | |
 | 21 | A workspace, a base A (decidida em 03/11: Uma casa, três faces, acima): uma tarefa numa worktree da casa, com sessões de qualquer harness, o diff comentado na linha, os pontos de volta por turno, o git e o PR por botões no app, e a issue que vira workspace. Em fatias, cada uma com o seu commit: A1 a workspace, A2 o diff comentado, A3 os pontos de volta, A4 git, PR e checks, A5 a issue | 18g, 26 | |
-| 22 | Uma conta por harness (decidido em 03/11: O futuro dos executores, acima): trocar de conta é entrar de novo na mesma pasta, e as sessões continuam; no limite do plano, o aviso e a mesma sessão retomada quando o plano volta; as pastas por conta, a cópia da sessão entre contas e a troca automática saem do núcleo para um plugin da loja, sem apagar nenhuma sessão de quem já usa | 16h, base saudável | |
+| 22 | Uma conta por harness (decidido em 03/11: O futuro dos executores, acima): trocar de conta é entrar de novo na mesma pasta, e as sessões continuam; no limite do plano, o aviso e a mesma sessão retomada quando o plano volta; as pastas por conta, a cópia da sessão entre contas e a troca automática saem do núcleo para um plugin da loja, sem apagar nenhuma sessão de quem já usa | 16h, 28 | |
 | 23 | Os gatilhos por sonda (decididos em 03/11: A base B, os gatilhos, acima): a rotina dispara também por evento, por um comando sem modelo que roda de tempos em tempos e só acorda o agente quando imprime algo; o que ele traz chega marcado como texto de fora; uma abertura no SDK para o plugin trazer a sua fonte de evento. O webhook vem com o relé do 20; metas, atenção e diário ficam para plugins | 21 | |
 | 24 | A loja aberta, a base D (decidida em 03/11: A base D, a loja aberta, acima): uma fonte pública por tipo lida direto pelo Atlas, sem revisão (o MCP Registry oficial, o diretório oficial de plugins do Claude Code e a busca do skills.sh, com as instalações); o `atlas-marketplace` só com o que é do Atlas, aberto a PR que passa no CI; o MCP com OAuth aceito no item `mcp`; o CIMD no login dos MCPs | 26 | |
 | 25 | As rotinas num executor e os modelos (decididos em 03/11: As rotinas num executor e os modelos, acima): a rotina roda também num executor numa pasta, e o Atlas pergunta ao criar uma assim; a aba Modelos na tela de Rotinas, de projeto e pessoais, em português; e o placar do que rodou sozinho, precisou do usuário ou falhou | 21, 24 | |
 | 26 | A poda do núcleo (decidida em 03/11: A poda do núcleo, acima): a regra do núcleo no `docs/ARCHITECTURE.md` (as capacidades do agente, com o navegador e o computador nativos, ficam; a ligação com um serviço, uma conta ou um programa específico é plugin); os quatro executores, o `voice`, o `telegram`, o gh e o gws saem da instalação para a loja como oficiais, sem quem já usa perder nada; as skills `atlas` e `write-plugin` ficam; a transcrição local e grátis e o ditado em qualquer lugar (opcional, desligado de fábrica, com o atalho que aceita botão do mouse) vêm do `voice` para o núcleo | 22 | |
 | 27 | O app no celular (decidido em 03/11: A base E, os canais, acima): um PWA com poucas funções, alcançando a casa pelo relé, sem Tailscale, com a notificação pelo relé | 20 | |
+| 28 | A base saudável (decidida na revisão da sequência em 03/11: A revisão da sequência, acima): o CI da `main` verde em dez rodadas seguidas sem nova tentativa, cada teste instável consertado na causa; o plano dos testes de 01/11; os alertas de dependência que têm conserto | — | |
