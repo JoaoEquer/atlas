@@ -4267,10 +4267,9 @@ passos que faltam:
 4. Um dia de provas, as adiadas todas juntas, perguntando antes de gastar crédito: o 15, o 17a e o
    17b na OpenAI, o 16q com uma chave da DeepSeek, o 19 com um modelo real, o Cmd+W do 9d num Mac
    e o uso da tela do 15b.
-5. O 20, o Atlas Cloud.
-
-**A base A (a workspace) foi decidida pelo usuário em 03/11 e virou o passo 21** (Uma casa, três
-faces, acima); o lugar dele nesta ordem é do usuário. Roda local e não espera o 20.
+5. O 21, a workspace (a base A), decidida pelo usuário em 03/11 (Uma casa, três faces, acima).
+   Roda local e vem antes do 20, pelo usuário em 03/11.
+6. O 20, o Atlas Cloud.
 
 | Passo | O quê | Só depois de | Status |
 |---|---|---|---|
