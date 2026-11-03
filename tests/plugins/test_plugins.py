@@ -422,7 +422,7 @@ def test_an_enabled_plugin_s_channels_load_with_what_it_declares(
         ("    ctx.secret('BANK_PASSWORD')", "BANK_PASSWORD, which it does not declare"),
         ("    ctx.setting('other')", "the setting other, which it does not declare"),
         ("    ctx.register_channel('sms', object)", "the channel sms, which it does not declare"),
-        ("    import time; time.sleep(1)", "It took more than 0 s to load."),
+        ("    import time; time.sleep(5)", "It took more than 2 s to load."),
     ],
 )
 def test_a_plugin_that_fails_or_hangs_while_loading_is_marked_and_the_rest_goes_on(
@@ -430,7 +430,12 @@ def test_a_plugin_that_fails_or_hangs_while_loading_is_marked_and_the_rest_goes_
 ) -> None:
     database = Database(home.database_file)
     migrate(database, (SCHEMA,))
-    plugins = Plugins(home, database, vault, bundled_folder=tmp_path / "none", load_seconds=0.3)
+    # A slow runner takes more than a fraction of a second to import a plugin that is fine: only
+    # the hanging case gets a short limit, and it hangs well past it.
+    hangs = "sleep" in body
+    plugins = Plugins(
+        home, database, vault, bundled_folder=tmp_path / "none", load_seconds=2 if hangs else 30
+    )
     _plugin(home.plugins_folder, code=f"def register(ctx):\n{body}\n")
     _plugin(home.plugins_folder, "fine", {**_manifest(), "name": "fine"})
     _on(plugins)
