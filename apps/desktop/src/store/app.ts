@@ -60,7 +60,6 @@ import type {
   ProposalRow,
   ProviderConnected,
   RequestCancel,
-  RouteTargetParams,
   RoutineFinished,
   RoutineRow,
   RunRow,
@@ -68,7 +67,6 @@ import type {
   SecretParams,
   SecretResult,
   SessionFolderRow,
-  SessionRouteRow,
   SessionRow,
   SettingChange,
   SettingsList,
@@ -261,15 +259,6 @@ export interface OpenSession {
   title: string
 }
 
-/** A session's route as the screen sets it: its stops in order, each with the model and the
- * effort the session goes on with there, whether it is followed, and whether a copy compacts
- * first. */
-export interface SessionRouteSet {
-  compact: boolean
-  enabled: boolean
-  targets: RouteTargetParams[]
-}
-
 /** What opening a session needs to know of it: its row in the list, its tab, or its instance. */
 type SessionShown = Pick<SessionRow, 'elsewhere' | 'executor' | 'folder' | 'instance_id' | 'session_id' | 'title'>
 
@@ -450,9 +439,6 @@ export class HomeSession {
   readonly $sessionThread = atom<Thread>(EMPTY_THREAD)
   readonly $sessionSettings = atom<SessionSettings>(NO_SESSION_SETTINGS)
   readonly $sessionError = atom<null | string>(null)
-  /** The route of the session on screen (asked for by the user on 21/10/2026), read when its
-   * instance opens; `null` before it is read or with no instance. */
-  readonly $sessionRoute = atom<null | SessionRouteRow>(null)
   /** The tabs of the central area (store/tabs.ts). */
   readonly tabs = new Tabs()
   /** Where the window keeps them, its machine and name, once the home said its name. */
@@ -1441,44 +1427,6 @@ export class HomeSession {
     }
   }
 
-  /** Keep another account under a nickname, in a folder of its own; its row then logs it in. */
-  async addAccount(executor: string, nickname: string): Promise<boolean> {
-    const row = await this.onWorkbench(`accounts:${executor}`, client =>
-      client.call('executor.add_account', { executor, nickname })
-    )
-
-    if (row) {
-      await Promise.all([this.refreshAccounts(executor), this.refreshExecutors()])
-    }
-
-    return row !== undefined
-  }
-
-  /** Forget another account; its folder stays, with its login and its sessions. */
-  async removeAccount(executor: string, account: string): Promise<boolean> {
-    const done = await this.onWorkbench(`accounts:${executor}`, client =>
-      client.call('executor.remove_account', { account_id: account, executor })
-    )
-
-    if (done) {
-      await Promise.all([this.refreshAccounts(executor), this.refreshExecutors()])
-      void this.refreshFolders(executor)
-    }
-
-    return done !== undefined
-  }
-
-  /** The account a folder's new sessions start on (`''`, the main one). */
-  async setFolderAccount(executor: string, folder: string, account: string): Promise<void> {
-    const done = await this.onWorkbench(`folder-account:${executor}`, client =>
-      client.call('executor.folder_account', { account_id: account, executor, folder })
-    )
-
-    if (done) {
-      await this.refreshFolders(executor)
-    }
-  }
-
   /** What changes if the session on screen goes on on `account` (`''`, the main one), for the user
    * to read before switching; `undefined` with no instance running on it, whose next one simply
    * starts on that account. */
@@ -1523,32 +1471,6 @@ export class HomeSession {
 
       this.applyInstance(row)
       this.followInstance(row, instance)
-    }
-  }
-
-  /** The route of the session on the instance `instanceId`: where it goes on at a plan's limit. */
-  async readSessionRoute(instanceId: string): Promise<void> {
-    if (this.$sessionRoute.get()?.instance_id !== instanceId) {
-      this.$sessionRoute.set(null)
-    }
-
-    const row = await this.onSession(client => client.call('workbench.route', { instance_id: instanceId }))
-
-    if (row) {
-      this.$sessionRoute.set(row)
-    }
-  }
-
-  /** The session's route, in order, each stop with the model and the effort it goes on with,
-   * whether it is followed and whether a copy compacts first: kept for its card, so the instances
-   * that take its place follow it too. */
-  async setSessionRoute(instanceId: string, route: SessionRouteSet): Promise<void> {
-    const row = await this.onSession(client =>
-      client.call('workbench.set_route', { ...route, instance_id: instanceId })
-    )
-
-    if (row) {
-      this.$sessionRoute.set(row)
     }
   }
 
@@ -2941,7 +2863,6 @@ export const $openSession = atom<OpenSession | null>(null)
 export const $sessionThread = atom<Thread>(EMPTY_THREAD)
 export const $sessionSettings = atom<SessionSettings>(NO_SESSION_SETTINGS)
 export const $sessionError = atom<null | string>(null)
-export const $sessionRoute = atom<null | SessionRouteRow>(null)
 export const $executorModels = map<Record<string, ExecutorModel[] | undefined>>({})
 export const $executorConnectors = map<Record<string, ConnectorsRead | undefined>>({})
 export const $executorUsage = map<Record<string, undefined | UsageRead>>({})
@@ -3035,7 +2956,6 @@ const MIRRORS: Mirror[] = [
   mirror($sessionThread, s => s.$sessionThread),
   mirror($sessionSettings, s => s.$sessionSettings),
   mirror($sessionError, s => s.$sessionError),
-  mirror($sessionRoute, s => s.$sessionRoute),
   mirror($executorModels, s => s.$executorModels),
   mirror($executorConnectors, s => s.$executorConnectors),
   mirror($executorUsage, s => s.$executorUsage),
@@ -3766,16 +3686,9 @@ export function readExecutorModels(executor: string): void {
   }
 }
 
-export function addAccount(executor: string, nickname: string): Promise<boolean> {
-  return current().addAccount(executor, nickname)
-}
-
-export function removeAccount(executor: string, account: string): Promise<boolean> {
-  return current().removeAccount(executor, account)
-}
-
-export function setFolderAccount(executor: string, folder: string, account: string): Promise<void> {
-  return current().setFolderAccount(executor, folder, account)
+/** Read an executor's accounts again, for the accounts plugin's screen (screen version 4). */
+export function refreshAccounts(executor: string): Promise<void> {
+  return current().refreshAccounts(executor)
 }
 
 export function checkSessionAccount(account: string): Promise<AccountSwitchRow | undefined> {
@@ -3784,14 +3697,6 @@ export function checkSessionAccount(account: string): Promise<AccountSwitchRow |
 
 export function switchSessionAccount(account: string, note?: string): Promise<void> {
   return current().switchSessionAccount(account, note)
-}
-
-export function readSessionRoute(instanceId: string): Promise<void> {
-  return current().readSessionRoute(instanceId)
-}
-
-export function setSessionRoute(instanceId: string, route: SessionRouteSet): Promise<void> {
-  return current().setSessionRoute(instanceId, route)
 }
 
 export function deleteSession(row: SessionRow): Promise<boolean> {

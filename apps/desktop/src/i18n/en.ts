@@ -349,7 +349,8 @@ export const en = {
   firstRun: {
     accounts: 'More than one account?',
     accountsIntro:
-      "Add your other accounts here: when one reaches its plan's limit, Atlas goes on in the next by itself.",
+      "The Accounts plugin runs your coding agents on your other accounts: when one reaches its plan's limit, the session goes on in the next by itself.",
+    accountsPlugin: 'Turn on the Accounts plugin',
     bring: 'Bring my sessions from',
     bringAll: 'Bring everything',
     bringCount: (count: number) => (count === 1 ? 'Bring 1 session' : `Bring ${String(count)} sessions`),
@@ -896,72 +897,17 @@ export const en = {
     untitled: 'New session'
   },
   accounts: {
-    add: 'Add an account',
-    adding: 'Add',
     cancel: 'Cancel',
-    folder: (folder: string) => `The account ${folder}'s new sessions start on`,
     logIn: 'Log in',
     login: 'Its email (optional)',
     loginNote: (title: string) => `${title} opens its login on your browser: sign in with this account.`,
-    main: 'main',
-    mainAccount: 'Main account',
-    nickname: 'Its nickname',
-    nicknameNote:
-      'It gets a folder of its own beside yours, with its own login, settings and sessions: letters, digits, - or _.',
-    nicknamePlaceholder: 'company-b, personal…',
-    of: 'The harness it is an account of',
-    remove: (name: string) => `Remove ${name}`,
-    removeNote: (name: string, folder: string) =>
-      `Remove ${name}? Its folder (${folder}) stays as it is, with its login and its sessions; its projects start on the main account.`,
-    session: 'Account: switching goes on in a copy of this conversation on the other account',
-    sessionBusy: 'The account can be switched once the session stops working.',
-    sessionTitle: "The session's account",
-    switchChecking: 'Looking at that account…',
-    switched: (name: string, tokens: null | number) =>
-      tokens === null
-        ? `Now on ${name}. The first message on this account loads the whole history; compacting first (/compact) loads less.`
-        : `Now on ${name}. The first message on this account loads the whole history, about ${tokens.toLocaleString('en')} tokens at once; compacting first (/compact) loads less.`,
-    switchCopy: 'The conversation goes on in a copy on that account; this account keeps it as it is.',
-    switchCost: (tokens: null | number) =>
-      tokens === null
-        ? "The first message reads the whole conversation again, on that account's plan."
-        : `The first message reads the whole conversation again, about ${tokens.toLocaleString('en')} tokens at once, on that account's plan. Compacting first (/compact) reads less.`,
-    switchGo: 'Switch',
-    switchMissing: (names: string) => `That account does not have: ${names}.`,
-    switchTitle: (name: string) => `Go on on ${name}?`,
-    switchUnknown: 'What that account has could not be compared.',
-    title: 'Accounts'
+    mainAccount: 'Main account'
   },
+
   route: {
-    add: (name: string) => `Add ${name} to the route`,
-    addStop: 'Add a stop…',
-    atLimit: 'at its limit',
-    close: 'Close',
-    compact: 'Compact before going on',
-    compactHint:
-      'In the copy on another account of the same harness, where it has /compact: the copy reads less and costs less.',
-    down: (name: string) => `${name} later`,
-    effort: (name: string) => `Effort on ${name}`,
-    here: 'here',
-    itsDefault: 'its default',
-    model: (name: string) => `Model on ${name}`,
-    notLoggedIn: 'not logged in',
-    ready: 'ready',
-    same: 'as now',
-    used: (percent: number) => `${String(percent)}% used`,
-    empty: "No destination yet: at a plan limit, the executor's own accounts take over.",
-    enabled: 'At a plan limit, follow this route',
-    main: 'main account',
-    note: 'At a plan limit the session goes on to the next destination logged in and not at its own limit, in this order. On another account of the same harness it goes on in a copy; on another harness a new session starts there with what this one did.',
-    notInstalled: 'not installed',
-    pill: (count: number) => (count ? `Route · ${String(count)}` : 'Route'),
-    pillOn: (account: string, count: number) => (count ? `${account} · route ${String(count)}` : account),
-    remove: (name: string) => `Take ${name} out of the route`,
-    title: "The session's route: where it goes on at a plan limit",
-    titleOn: "The session's account, and where it goes on at a plan limit",
-    up: (name: string) => `${name} sooner`,
     wentOn: (name: string) => `The plan limit was reached: it went on on ${name}.`
   },
+
   environment: {
     context: 'Context',
     local: 'Local',

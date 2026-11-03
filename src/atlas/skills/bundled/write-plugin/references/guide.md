@@ -640,6 +640,16 @@ export default {
 - `area: 'page'` is a page of the main area, with an entry in the sidebar; `area: 'panel'` is a tab
   of the side panel; `area: 'box'` is a button beside the words of the conversation's box, as the
   voice plugin's microphone.
+- With `"api": 29` (screen version 4), `area: 'session'` sits by an executor's session box and
+  `area: 'executor'` atop an executor's tree in the sidebar, once opened; `render(place)` gets where
+  it is: `{ executor, folder, instance, conversation }` for a session (`instance` and
+  `conversation` are `null` before it starts), `{ executor, base, account, title }` for an
+  executor. The accounts plugin puts its pill and its accounts there.
+- `host.state.workbench` (the executors and their instances) and `host.state.accounts` (each
+  harness's accounts, once read) are the app's, `host.readAccounts(executor)` reads an executor's
+  accounts again, and `host.sessionAccount` moves the session on screen to another account of its
+  executor: `check(account)` says what changes (or, with no instance running, makes it the account
+  its next start runs on), and `switch(account, note)` goes on there in a copy.
 - `host.insertText(text)` puts words after what the conversation's box holds, for the user to read
   and send (a dictation); `host.send(text)` sends a message as the box does, making the
   conversation when none is open.
@@ -753,7 +763,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 29), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
-(`SCREEN_API` 3). Each name below has its section above. A test keeps this list whole: a name the
+(`SCREEN_API` 4). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
 
 **`register(ctx)` gets a `PluginContext`:**
@@ -793,8 +803,9 @@ SDK adds and the guide does not name fails it.
 **A screen's `register(ctx)` gets:** `ctx.plugin`, `ctx.register`, `ctx.call`, `ctx.onEvent`,
 `ctx.onDispose`, `ctx.setInterval`, `ctx.setTimeout`, `ctx.storage` (`get`, `set`, `remove`), and
 with `desktop` declared `ctx.shortcut`, `ctx.paste` and `ctx.bar`. From `@atlas/plugin-sdk` it
-imports `useValue` and `host`: `host.state` (`connection`, `conversation`, `home`),
-`host.request`, `host.openPage`, `host.send`, `host.insertText` and `host.togglePanel`.
+imports `useValue` and `host`: `host.state` (`connection`, `conversation`, `home`, `workbench`,
+`accounts`), `host.request`, `host.openPage`, `host.send`, `host.insertText`, `host.togglePanel`,
+`host.readAccounts` and `host.sessionAccount`.
 
 ## Themes
 
@@ -834,5 +845,5 @@ sees the system's look until it is on again.
 ## Not yet
 
 Atlas lists a plugin that brings any of these, and refuses to turn it on: LSP servers, output
-styles and workflows. A screen has a page and a panel; a status bar and a palette are not in the
-app.
+styles and workflows. A screen has a page, a panel, a button in the box and a part of an
+executor's session and sidebar place; a status bar and a palette are not in the app.

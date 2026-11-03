@@ -3,6 +3,7 @@ import { DropdownMenu } from 'radix-ui'
 import { type DragEvent, useRef, useState } from 'react'
 
 import { t } from '@/i18n'
+import { PlaceContributions } from '@/plugins/view'
 import type { ExecutorRow, SessionFolderRow, SessionRow } from '@/protocol/protocol.generated'
 import {
   $home,
@@ -44,7 +45,7 @@ import {
 import { $executorOrder, inOrder, moveBlock, setExecutorOrder } from '@/store/order'
 import { byLastUse, instanceKey, lastUse } from '@/store/status'
 
-import { AddAccount, FolderAccount, LoginForm, RemoveAccount } from './executor-accounts'
+import { LoginForm } from './executor-accounts'
 import { ExecutorAvatar } from './executor-avatar'
 import { ReadFailed } from './read-failed'
 import { rowDot, StatusDot, useInstancesDot, useSessionDot, useSessionInstance } from './status-dot'
@@ -100,7 +101,6 @@ export function ExecutorsList() {
   const waiting = executors.filter(row => row.consent_again && !row.base)
   // Turned on and found, but older than its plugin drives: said, with its update when there is one.
   const old = executors.filter(row => row.enabled && row.installed && !row.supported && !row.base)
-  const takeAccounts = on.filter(row => row.account_folders && !row.base)
   const harnesses = [...new Set(on.map(harnessOf))].map(name => on.filter(row => harnessOf(row) === name))
   const reorder = useReorder(home, harnesses)
 
@@ -109,8 +109,6 @@ export function ExecutorsList() {
       {on.length > 0 && (
         <div className="space-y-1.5 px-3 pb-2">
           <NewSessionTop executors={on} />
-          {/* Above the executors' list too (asked for by the user on 19/10/2026). */}
-          {takeAccounts.length > 0 && <AddAccount executors={takeAccounts} />}
         </div>
       )}
       <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
@@ -405,7 +403,7 @@ function ExecutorNode({
   const dragged = account && reorder.drag?.account === true && reorder.drag.names[0] === row.name
   const open = useStore($openExecutors)[row.name] === true
   const dot = useInstancesDot(instance => instance.executor === row.name)
-  const [doing, setDoing] = useState<'' | 'login' | 'new' | 'remove'>('')
+  const [doing, setDoing] = useState<'' | 'login' | 'new'>('')
   const Chevron = open ? ChevronDown : ChevronRight
   const title = account ? row.nickname || t.accounts.mainAccount : row.title
   const detail = [account ? '' : row.version, row.logged_in ? '' : t.executors.notLoggedIn].filter(Boolean).join(' · ')
@@ -472,9 +470,6 @@ function ExecutorNode({
           onNewSession={() => {
             setDoing('new')
           }}
-          onRemove={() => {
-            setDoing('remove')
-          }}
           row={row}
           title={title}
         />
@@ -502,7 +497,14 @@ function ExecutorNode({
         </div>
       )}
       {doing === 'login' && <LoginForm executor={row} onDone={done} />}
-      {doing === 'remove' && <RemoveAccount executor={row} onDone={done} />}
+      {/* The accounts plugin's part (step 22), atop its tree once opened: its accounts, added and
+          removed there. */}
+      {open && (
+        <PlaceContributions
+          area="executor"
+          place={{ account: row.account_id, base: row.base || row.name, executor: row.name, title: row.title }}
+        />
+      )}
       {open && <ExecutorTree executor={row} />}
     </section>
   )
@@ -511,17 +513,15 @@ function ExecutorNode({
 /** A row's menu, behind its three dots (asked for by the user on 21/10/2026, to keep the sidebar
  * clean): who it is logged in as, a new session (asked for by the user on 22/10/2026, where it was a
  * row of its tree), the switch to another login, whether its archived folders and sessions are
- * listed (off until turned on), and an account's removal, in red. */
+ * listed (off until turned on). An account's removal is the accounts plugin's (step 22). */
 function ExecutorMenu({
   onLogin,
   onNewSession,
-  onRemove,
   row,
   title
 }: {
   onLogin: () => void
   onNewSession: () => void
-  onRemove: () => void
   row: ExecutorRow
   title: string
 }) {
@@ -602,19 +602,6 @@ function ExecutorMenu({
               <Check aria-hidden size={14} stroke={2} />
             </DropdownMenu.ItemIndicator>
           </DropdownMenu.CheckboxItem>
-          {row.base && (
-            <>
-              <DropdownMenu.Separator className={SEPARATOR} />
-              <DropdownMenu.Item
-                className={`${MENU_ITEM} text-failed-text data-highlighted:bg-failed/10`}
-                data-testid="remove-account"
-                onSelect={onRemove}
-              >
-                <Trash aria-hidden size={15} stroke={1.75} />
-                {t.accounts.remove(row.nickname)}
-              </DropdownMenu.Item>
-            </>
-          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -740,10 +727,8 @@ function Folder({ executor: node, row }: { executor: ExecutorRow; row: SessionFo
           <span className="truncate font-medium">{baseName(row.folder)}</span>
           {!open && <StatusDot dot={dot} />}
         </button>
-        {row.account_id && <FolderAccount account={row.account_id} executor={node} folder={row.folder} />}
         <span className={`shrink-0 text-xs text-muted-foreground ${HIDE_ON_HOVER}`}>{when(row.updated_at)}</span>
         <span className={`${ROW_ACTIONS} top-1/2 -translate-y-1/2 bg-muted`}>
-          {!row.account_id && <FolderAccount account={row.account_id} executor={node} folder={row.folder} />}
           <IconButton
             icon={Archive}
             label={t.executors.archive(baseName(row.folder))}

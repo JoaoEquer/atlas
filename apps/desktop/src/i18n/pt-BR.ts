@@ -328,7 +328,8 @@ export const ptBR: Override<Messages> = {
   firstRun: {
     accounts: 'Tem mais de uma conta?',
     accountsIntro:
-      'Adicione as outras contas aqui: quando uma bater o limite do plano, o Atlas segue na outra sozinho.',
+      'O plugin Contas roda seus agentes de código nas outras contas: quando uma bater o limite do plano, a sessão segue na próxima sozinha.',
+    accountsPlugin: 'Ligar o plugin Contas',
     bring: 'Trazer minhas sessões do',
     bringAll: 'Trazer tudo',
     bringCount: (count: number) => (count === 1 ? 'Trazer 1 sessão' : `Trazer ${String(count)} sessões`),
@@ -882,71 +883,17 @@ export const ptBR: Override<Messages> = {
     untitled: 'Nova sessão'
   },
   accounts: {
-    add: 'Adicionar conta',
-    adding: 'Adicionar',
     cancel: 'Cancelar',
-    folder: (folder: string) => `A conta em que as sessões novas de ${folder} começam`,
     logIn: 'Fazer login',
     login: 'O e-mail dela (opcional)',
     loginNote: (title: string) => `O ${title} abre o login dele no navegador: entre com esta conta.`,
-    main: 'principal',
-    mainAccount: 'Conta principal',
-    nickname: 'O apelido dela',
-    nicknameNote:
-      'Ela ganha uma pasta própria ao lado da sua, com login, configurações e conversas próprios: letras, números, - ou _.',
-    nicknamePlaceholder: 'empresa-b, pessoal…',
-    of: 'O harness de que ela é conta',
-    remove: (name: string) => `Remover ${name}`,
-    removeNote: (name: string, folder: string) =>
-      `Remover ${name}? A pasta dela (${folder}) fica como está, com o login e as conversas; os projetos dela voltam para a conta principal.`,
-    session: 'Conta: trocar continua uma cópia desta conversa na outra conta',
-    sessionBusy: 'A conta pode ser trocada quando a sessão parar de trabalhar.',
-    sessionTitle: 'Conta da sessão',
-    switchChecking: 'Olhando a outra conta…',
-    switched: (name: string, tokens: null | number) =>
-      tokens === null
-        ? `Agora em ${name}. A primeira mensagem nesta conta carrega o histórico inteiro; compactar antes (/compact) carrega menos.`
-        : `Agora em ${name}. A primeira mensagem nesta conta carrega o histórico inteiro, cerca de ${tokens.toLocaleString('pt-BR')} tokens de uma vez; compactar antes (/compact) carrega menos.`,
-    switchCopy: 'A conversa continua numa cópia nessa conta; esta conta fica com ela como está.',
-    switchCost: (tokens: null | number) =>
-      tokens === null
-        ? 'A primeira mensagem relê a conversa inteira, no plano dessa conta.'
-        : `A primeira mensagem relê a conversa inteira, cerca de ${tokens.toLocaleString('pt-BR')} tokens de uma vez, no plano dessa conta. Compactar antes (/compact) carrega menos.`,
-    switchGo: 'Trocar',
-    switchMissing: (names: string) => `Essa conta não tem: ${names}.`,
-    switchTitle: (name: string) => `Continuar em ${name}?`,
-    switchUnknown: 'Não deu para comparar o que essa conta tem.',
-    title: 'Contas'
+    mainAccount: 'Conta principal'
   },
+
   route: {
-    add: (name: string) => `Pôr ${name} na rota`,
-    addStop: 'Adicionar uma parada…',
-    atLimit: 'no limite',
-    close: 'Fechar',
-    compact: 'Compactar antes de seguir',
-    compactHint: 'Na cópia em outra conta do mesmo harness, onde ele tiver /compact: a cópia lê menos e custa menos.',
-    down: (name: string) => `${name} depois`,
-    effort: (name: string) => `Esforço em ${name}`,
-    here: 'aqui',
-    itsDefault: 'o padrão dele',
-    model: (name: string) => `Modelo em ${name}`,
-    notLoggedIn: 'sem login',
-    ready: 'pronta',
-    same: 'como agora',
-    used: (percent: number) => `${String(percent)}% usado`,
-    empty: 'Nenhum destino ainda: no limite do plano, valem as contas do próprio executor.',
-    enabled: 'No limite do plano, seguir esta rota',
-    main: 'conta principal',
-    note: 'No limite do plano a sessão segue para o próximo destino com login e fora do próprio limite, nesta ordem. Noutra conta do mesmo harness ela continua numa cópia; noutro harness começa lá uma sessão nova com o que esta fez.',
-    notInstalled: 'não instalado',
-    pill: (count: number) => (count ? `Rota · ${String(count)}` : 'Rota'),
-    pillOn: (account: string, count: number) => (count ? `${account} · rota ${String(count)}` : account),
-    remove: (name: string) => `Tirar ${name} da rota`,
-    title: 'A rota da sessão: para onde ela segue no limite do plano',
-    titleOn: 'A conta da sessão, e para onde ela segue no limite do plano',
-    up: (name: string) => `${name} antes`,
     wentOn: (name: string) => `O limite do plano chegou: continuou em ${name}.`
   },
+
   environment: {
     context: 'Contexto',
     local: 'Local',

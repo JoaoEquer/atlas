@@ -8,7 +8,18 @@
 import { useStore } from '@nanostores/react'
 
 import type { RpcMethod, RpcMethods } from '@/protocol/protocol.generated'
-import { $connection, $home, $selected, current, send } from '@/store/app'
+import {
+  $connection,
+  $executorAccounts,
+  $home,
+  $selected,
+  $workbench,
+  checkSessionAccount,
+  current,
+  refreshAccounts,
+  send,
+  switchSessionAccount
+} from '@/store/app'
 import { togglePanel } from '@/store/terminals'
 
 import { $pluginPage, insertIntoBox } from './registry'
@@ -16,8 +27,11 @@ import { $pluginPage, insertIntoBox } from './registry'
 /** What this app offers screens: 1, panels and pages, the app's state, the server's methods; 2,
  *  buttons in the conversation's box, words put into it, and a message sent as the box sends
  *  one (step 17a); 3, a shortcut heard in every program, a text pasted where the user is, and the
- *  floating bar (`ctx.shortcut`, `ctx.paste`, `ctx.bar`, step 17b). */
-export const SCREEN_API = 3
+ *  floating bar (`ctx.shortcut`, `ctx.paste`, `ctx.bar`, step 17b); 4, a part of an executor's
+ *  session and of its place in the sidebar (`session`, `executor`), the executors and their
+ *  accounts as the app knows them, and the session on screen going on on another account (step
+ *  22, the accounts plugin). */
+export const SCREEN_API = 4
 
 /** Read a store and follow it, in a component: `useValue(host.state.conversation)`. */
 export const useValue = useStore
@@ -30,7 +44,24 @@ export const host = {
     /** The conversation on screen, or `null`. */
     conversation: $selected,
     /** The home on screen, by its name; `null` before the first answer. */
-    home: $home
+    home: $home,
+    /** The executors and their instances, as `workbench.list` lists them (version 4). */
+    workbench: $workbench,
+    /** Each executor's accounts, by its harness's name, as `executor.accounts` lists them, once
+     *  read (`host.readAccounts`, version 4). */
+    accounts: $executorAccounts
+  },
+  /** Read an executor's accounts again into `host.state.accounts` (version 4). */
+  readAccounts(executor: string): Promise<void> {
+    return refreshAccounts(executor)
+  },
+  /** The session on screen and another of its executor's accounts (version 4): `check` reads
+   *  what changes if it goes on there (`workbench.account_switch`), or, with no instance running,
+   *  makes it the one its next start runs on and answers `undefined`; `switch` goes on there, in a
+   *  copy, the screen following it, with `note` said in the session. */
+  sessionAccount: {
+    check: checkSessionAccount,
+    switch: switchSessionAccount
   },
   /** Call one of the server's methods, as the app does (docs: the protocol). Never the update's:
    *  only the owner, from the update button, updates Atlas (docs/ARCHITECTURE.md, The update of a

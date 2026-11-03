@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { contribute } from '@/plugins/registry'
 import type {
   ExecutorRow,
   KeyProvider,
@@ -142,7 +143,7 @@ describe('the first run (step 18d)', () => {
     expect(run().step).toBe('executors')
   })
 
-  it('offers the executors found, and accounts that take over from one another once one is on', () => {
+  it('offers the executors found, and the accounts plugin once one is on, its part once it runs', () => {
     openFirstRun(null)
     $firstRun.set({ '': { ...run(), step: 'executors' } })
     app.$workbench.set({ executors: [CLAUDE], instances: [] })
@@ -150,7 +151,20 @@ describe('the first run (step 18d)', () => {
 
     expect(screen.getByTestId('executor-offer').textContent).toContain('Claude Code')
     expect(screen.getByTestId('first-run-accounts').textContent).toContain('More than one account?')
-    expect(screen.getByTestId('add-account')).toBeTruthy()
+    // Off, the accounts plugin is offered (step 22); on, its part shows for each harness.
+    expect(screen.getByTestId('first-run-accounts-plugin').textContent).toBe('Turn on the Accounts plugin')
+    let undo: () => void = () => undefined
+    act(() => {
+      undo = contribute('accounts', {
+        area: 'executor',
+        id: 'accounts',
+        render: place => <p data-testid="plugin-part">{(place as { base: string }).base}</p>,
+        title: 'Accounts'
+      })
+    })
+    expect(screen.getByTestId('plugin-part').textContent).toBe('claude-code')
+    expect(screen.queryByTestId('first-run-accounts-plugin')).toBeNull()
+    act(undo)
     expect(screen.getByTestId('first-run-continue')).toHaveProperty('disabled', false)
   })
 })

@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'streamdown/styles.css';
 @source "../node_modules/streamdown/dist/*.js";
+/* The screens of the plugins Atlas ships are styled with the app's own classes: read them too. */
+@source "../../../src/atlas/plugins/bundled/*/desktop/plugin.js";
 
 /* Dark by the root's class, which the user's switch sets (store/theme.ts), not by the system's
    alone. */

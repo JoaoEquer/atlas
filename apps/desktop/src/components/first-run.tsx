@@ -2,6 +2,8 @@ import { useStore } from '@nanostores/react'
 import { type ReactNode, useEffect, useState } from 'react'
 
 import { t } from '@/i18n'
+import { $contributions, inArea } from '@/plugins/registry'
+import { PlaceContributions } from '@/plugins/view'
 import type { ExecutorRow } from '@/protocol/protocol.generated'
 import {
   $home,
@@ -26,6 +28,7 @@ import {
   refreshLogins,
   refreshPlugins,
   send,
+  showPluginConsent,
   storePluginSecret
 } from '@/store/app'
 import {
@@ -46,7 +49,7 @@ import { bringWork, readPlan, readWork } from '@/store/work'
 
 import icon from '../../resources/icon.png'
 
-import { AddAccount, LoginForm } from './executor-accounts'
+import { LoginForm } from './executor-accounts'
 import { ExecutorAvatar } from './executor-avatar'
 import { ExecutorOffers } from './executor-offers'
 import { Providers } from './key-screen'
@@ -248,12 +251,14 @@ function ModelStep({ onDone }: { onDone: (mark: Mark) => void }) {
 }
 
 /** The executors found on this computer, turned on with their consent right there; and the
- * accounts that take over from one another, which only Atlas does. */
+ * accounts that take over from one another, the accounts plugin's (step 22): its part shows here
+ * once it is on, and until then a button turns it on. */
 function ExecutorsStep({ onDone }: { onDone: (mark: Mark) => void }) {
   const { executors } = useStore($workbench)
   const on = executors.filter(row => row.enabled && row.installed && row.supported)
   const takeAccounts = on.filter(row => row.account_folders && !row.base)
   const accounts = on.filter(row => row.base)
+  const plugin = inArea(useStore($contributions), 'executor').length > 0
 
   return (
     <>
@@ -265,7 +270,26 @@ function ExecutorsStep({ onDone }: { onDone: (mark: Mark) => void }) {
           {accounts.map(row => (
             <Account key={row.name} row={row} />
           ))}
-          <AddAccount executors={takeAccounts} />
+          {plugin ? (
+            takeAccounts.map(row => (
+              <PlaceContributions
+                area="executor"
+                key={row.name}
+                place={{ account: '', base: row.name, executor: row.name, title: row.title }}
+              />
+            ))
+          ) : (
+            <button
+              className="rounded border border-border-strong px-2 py-0.5 text-xs"
+              data-testid="first-run-accounts-plugin"
+              onClick={() => {
+                showPluginConsent('accounts')
+              }}
+              type="button"
+            >
+              {t.firstRun.accountsPlugin}
+            </button>
+          )}
         </section>
       )}
       <Next done={on.length > 0} onDone={onDone} />

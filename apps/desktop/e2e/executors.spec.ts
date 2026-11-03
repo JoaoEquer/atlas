@@ -747,7 +747,15 @@ test('another account is added by its nickname, logs in in its own folder, and a
   // The user's home, beside which the other account's folder is made: the test's own.
   const user = path.join(path.dirname(scripts), 'user')
   mkdirSync(user)
-  desktop = await launch(withClaude(scripts, { HOME: user, USERPROFILE: user }))
+  // Other accounts are the accounts plugin's (step 22), turned on as a user does in a terminal.
+  const claudeOn = withClaude(scripts, { HOME: user, USERPROFILE: user })
+  desktop = await launch({
+    ...claudeOn,
+    setup: (home: string) => {
+      claudeOn.setup(home)
+      atlas(home, 'plugins', 'enable', 'accounts', '--yes')
+    }
+  })
   const { claude, folder, page } = desktop
   keepOldSession(claude, folder)
   writeFileSync(
@@ -756,7 +764,8 @@ test('another account is added by its nickname, logs in in its own folder, and a
   )
 
   await openClaudeCode(page)
-  await page.getByTestId('add-account').click()
+  // The plugin's part, atop Claude Code's tree once opened.
+  await page.locator('[data-testid="executor-node"][data-executor="claude-code"]').getByTestId('add-account').click()
   const form = page.getByTestId('add-account-form')
   await form.getByTestId('account-nickname').fill('work')
   await form.getByRole('button', { name: 'Add' }).click()
@@ -797,8 +806,7 @@ test('another account is added by its nickname, logs in in its own folder, and a
   await expect(workAccount).toBeEnabled(STARTED)
   const before = readFileSync(original, 'utf8')
 
-  // Switched, after the user read what changes: a copy on the other account, the original untouched
-  // until the copy is kept.
+  // Switched, after the user read what changes: a copy on the other account, the original untouched.
   await workAccount.click()
   const note = page.getByTestId('account-switch')
   await expect(note).toContainText('Go on on work (other@example.com)?', STARTED)
@@ -811,9 +819,8 @@ test('another account is added by its nickname, logs in in its own folder, and a
   await expect(page.getByTestId('assistant-message').last()).toContainText('Running on .claude-work.', STARTED)
   const copies = path.join(user, '.claude-work', 'projects', projectFolder(folder))
   expect(readdirSync(copies).filter(name => name.endsWith('.jsonl'))).toHaveLength(1)
-  // Once the copy is kept, the original is deleted on the main account, where it would be left
-  // dead (decided with the user on 22/10/2026). It goes in the background, after the turn.
-  await expect.poll(() => existsSync(original), STARTED).toBe(false)
+  // Atlas deletes no session (decided with the user on 03/11/2026): the original stays on its account.
+  expect(readFileSync(original, 'utf8')).toBe(before)
 })
 
 test('a file pasted or picked in a session goes to Claude Code as the SDK sends it, and stays on screen reopened', async () => {
