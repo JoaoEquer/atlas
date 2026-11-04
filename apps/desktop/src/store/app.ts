@@ -1559,6 +1559,14 @@ export class HomeSession {
     void this.openSession({ elsewhere: '', executor, folder, instance_id: '', session_id: '', title: '' })
   }
 
+  /** A new session of `executor` in `folder`, on screen, started with `prompt` once it is open
+   *  (step 21, A5: an issue that becomes a workspace); whether the prompt went. */
+  async newSessionWith(executor: string, folder: string, prompt: string): Promise<boolean> {
+    await this.openSession({ elsewhere: '', executor, folder, instance_id: '', session_id: '', title: '' })
+
+    return this.sendToSession(prompt)
+  }
+
   /** Read the session on screen again, as its harness keeps it now. As its turn ends (`ended`), the
    * read is taken only once the harness kept the last words on screen, tried again a few times. */
   async readSession(ended = false): Promise<void> {
@@ -3783,6 +3791,12 @@ export function refreshSessions(executor: string, folder: string): Promise<void>
 export function newSession(executor: string, folder: string): void {
   focusExecutor(executor)
   current().newSession(executor, folder)
+}
+
+export function newSessionWith(executor: string, folder: string, prompt: string): Promise<boolean> {
+  focusExecutor(executor)
+
+  return current().newSessionWith(executor, folder, prompt)
 }
 
 /** A folder from the system's dialog, when the app started its server; `null` otherwise. */

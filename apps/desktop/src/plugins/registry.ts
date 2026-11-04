@@ -4,7 +4,9 @@
  * 17a), a button beside the words of the conversation's box (`box`). Since screen version 4 (step
  * 22), a part of an executor's session, by its box (`session`), and of an executor's place in the
  * sidebar (`executor`), each rendered with the place it shows in; since version 5 (step 26), a
- * part of the first run's Connections (`connection`). The app keeps its own surfaces
+ * part of the first run's Connections (`connection`); since version 6 (step 21), a part of a
+ * workspace's Changes (`workspace`) and of a project's place among the workspaces (`project`).
+ * The app keeps its own surfaces
  * and adds these beside them. Pure stores.
  */
 import { atom } from 'nanostores'
@@ -13,7 +15,7 @@ import type { ReactNode } from 'react'
 import type { InstanceRow } from '@/protocol/protocol.generated'
 
 /** Where a contribution goes. */
-export type Area = 'box' | 'connection' | 'executor' | 'page' | 'panel' | 'session'
+export type Area = 'box' | 'connection' | 'executor' | 'page' | 'panel' | 'project' | 'session' | 'workspace'
 
 /** The executor session a `session` contribution shows by: its executor (on an account,
  *  `claude-code@1a2b3c4d`), its folder, the instance on it (`null` before it starts) and the
@@ -40,8 +42,28 @@ export interface ConnectionPlace {
   away: () => void
 }
 
-/** Where a contribution is rendered: its place, for `session`, `executor` and `connection`. */
-export type Place = ConnectionPlace | ExecutorPlace | SessionPlace
+/** The workspace a `workspace` contribution shows by, in its Changes (version 6): its id for
+ *  the server's `workspace.*` methods, its folder, its branch, the branch it came from, and its
+ *  project's main folder. */
+export interface WorkspacePlace {
+  base: string
+  branch: string
+  folder: string
+  id: string
+  root: string
+}
+
+/** The project a `project` contribution shows under, among the workspaces (version 6): its main
+ *  folder, and `start`, which makes a workspace of it named `name` and opens a session there that
+ *  begins with `prompt` (an issue that becomes a workspace). */
+export interface ProjectPlace {
+  root: string
+  start: (name: string, prompt: string) => Promise<void>
+}
+
+/** Where a contribution is rendered: its place, for `session`, `executor`, `connection`,
+ *  `workspace` and `project`. */
+export type Place = ConnectionPlace | ExecutorPlace | ProjectPlace | SessionPlace | WorkspacePlace
 
 /** A contribution as a plugin writes it: the host names it after the plugin. */
 export interface Contribution {
@@ -81,7 +103,7 @@ export function insertIntoBox(text: string): void {
 /** Why a plugin's screen did not load, by plugin, for the Plugins screen. */
 export const $screenErrors = atom<Record<string, string>>({})
 
-const AREAS: readonly Area[] = ['box', 'connection', 'executor', 'page', 'panel', 'session']
+const AREAS: readonly Area[] = ['box', 'connection', 'executor', 'page', 'panel', 'project', 'session', 'workspace']
 
 /** Add a contribution; returns what takes it away. The same key again replaces it. */
 export function contribute(plugin: string, contribution: Contribution): () => void {

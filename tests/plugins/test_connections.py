@@ -128,3 +128,54 @@ def test_a_login_refused_in_the_browser_ends_and_a_new_one_starts(state: Path) -
 
     assert asyncio.run(scenario())["code"] == CODE
     assert not (state / "gh-login").exists()
+
+
+def test_a_workspaces_pull_request_is_opened_and_read_with_its_checks(
+    state: Path, tmp_path: Path
+) -> None:
+    """Step 21, A4: the pull request of a workspace's branch, none at first, then opened into the
+    branch it came from with the user's title, its checks read as they stand."""
+    (state / "gh-login").write_text("example-user", "utf-8")
+    checks = [
+        {"name": "test", "conclusion": "SUCCESS", "status": "COMPLETED"},
+        {"name": "lint", "conclusion": "", "status": "IN_PROGRESS"},
+    ]
+    (state / "checks.json").write_text(json.dumps(checks), "utf-8")
+    plugin = github.Github()
+    where = {"folder": str(tmp_path), "branch": "atlas/cart"}
+
+    none = asyncio.run(plugin.pull_request(where))
+    made = asyncio.run(
+        plugin.open_pull_request({**where, "base": "main", "title": "Add the cart", "draft": True})
+    )
+
+    assert none == {"exists": False}
+    assert (made["number"], made["state"], made["title"], made["draft"]) == (
+        7,
+        "open",
+        "Add the cart",
+        True,
+    )
+    assert made["checks"] == [
+        {"name": "test", "state": "success"},
+        {"name": "lint", "state": "in_progress"},
+    ]
+    created = json.loads((state / "pr-created.json").read_text("utf-8"))
+    assert created[created.index("--base") + 1] == "main"
+    with pytest.raises(github_programs.GhError, match="needs branch"):
+        asyncio.run(plugin.pull_request({"folder": str(tmp_path)}))
+
+
+def test_a_projects_open_issues_are_listed(state: Path, tmp_path: Path) -> None:
+    """Step 21, A5: each issue that may become a workspace."""
+    issues = [
+        {"number": 12, "title": "The cart rounds wrong", "body": "1.005 shows 1.00.", "url": "u"},
+        "not an issue",
+    ]
+    (state / "issues.json").write_text(json.dumps(issues), "utf-8")
+
+    listed = asyncio.run(github.Github().issues({"folder": str(tmp_path)}))
+
+    assert listed == [
+        {"number": 12, "title": "The cart rounds wrong", "body": "1.005 shows 1.00.", "url": "u"}
+    ]

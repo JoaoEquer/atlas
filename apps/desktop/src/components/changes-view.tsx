@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { t } from '@/i18n'
+import { PlaceContributions } from '@/plugins/view'
 import type {
   CheckpointRow,
   DiffFileRow,
@@ -71,6 +72,17 @@ export function ChangesView({ workspace }: { workspace: WorkspaceRow }) {
         </p>
       )}
       {diff && <Deliver diff={diff} onDone={read} workspace={workspace} />}
+      {/* The plugins' part (screen version 6): the GitHub plugin's pull request and checks. */}
+      <PlaceContributions
+        area="workspace"
+        place={{
+          base: workspace.base,
+          branch: workspace.branch,
+          folder: workspace.folder,
+          id: workspace.id,
+          root: workspace.project_root
+        }}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto">
         {diff?.files.length === 0 && <p className="p-2 text-muted-foreground">{t.changes.none}</p>}
         {diff?.files.map(file => (

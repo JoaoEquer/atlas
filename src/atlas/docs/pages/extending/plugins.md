@@ -648,6 +648,12 @@ export default {
 - Screen version 5 adds `area: 'connection'`, a part of the first run's Connections step, given
   `{ away }`: calling it leaves the first run waiting a band away, in a new conversation, for a
   setup Atlas leads there. The GitHub and Google Workspace plugins draw their connections there.
+- Screen version 6 adds `area: 'workspace'`, atop a workspace's Changes in the side panel, given
+  `{ id, folder, branch, base, root }` (its id for the server's `workspace.*` methods, through
+  `host.request`); and `area: 'project'`, under a project among the workspaces, given
+  `{ root, start(name, prompt) }`: `start` makes a workspace of that project and opens a session
+  there that begins with `prompt`. The GitHub plugin puts a workspace's pull request and its checks
+  in the first, and the project's issues, each starting a workspace, in the second.
 - `host.state.workbench` (the executors and their instances) and `host.state.accounts` (each
   harness's accounts, once read) are the app's, `host.readAccounts(executor)` reads an executor's
   accounts again, and `host.sessionAccount` moves the session on screen to another account of its
@@ -766,7 +772,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 29), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
-(`SCREEN_API` 5). Each name below has its section above. A test keeps this list whole: a name the
+(`SCREEN_API` 6). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
 
 **`register(ctx)` gets a `PluginContext`:**

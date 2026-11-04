@@ -3877,6 +3877,12 @@ in any folder. `atlas.workspaces` (A1), decided with the user; how, our choice, 
   (`git merge-tree --write-tree`, git 2.38, then `commit-tree` and a compare-and-swap
   `update-ref`); `workspace.push` sends the branch to `origin`, setting its upstream. The app asks
   before a merge and before a push, the one outward act.
+- **The GitHub plugin's part** (A4, A5; screen version 6 adds the `workspace` and `project`
+  areas): beside a workspace's changes, its branch's pull request and how each check stands (`gh
+  pr view`), or one opened at the user's click (`workspace.push` through `host.request`, then
+  `gh pr create` into the branch of origin); under a project, its open issues (`gh issue list`),
+  each of which `start`s a workspace whose session begins with the issue. The calls are the
+  plugin's own, so its consent covers them: an update that adds one asks again.
 - **Checkpoints** (A3): before each prompt the server sends a session in a workspace
   (`workbench.prompt`), its folder is kept as a commit on top of its HEAD that no branch holds,
   under `refs/atlas/checkpoints/<workspace>/<time>` (a ref of Atlas's own, which a push leaves

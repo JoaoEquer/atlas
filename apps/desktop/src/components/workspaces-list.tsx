@@ -3,8 +3,9 @@ import { DropdownMenu } from 'radix-ui'
 import { useEffect, useState } from 'react'
 
 import { t } from '@/i18n'
+import { PlaceContributions } from '@/plugins/view'
 import type { ExecutorRow, WorkspaceRow } from '@/protocol/protocol.generated'
-import { $connection, $workspacesSeen, newSession } from '@/store/app'
+import { $connection, $workspacesSeen, newSession, newSessionWith } from '@/store/app'
 import {
   $workspaceRows,
   archiveWorkspace,
@@ -113,6 +114,17 @@ function Project({ executor, root, workspaces }: { executor: string; root: strin
         />
       </div>
       <div className="ml-3.5 border-l border-border pl-1.5">
+        {/* The plugins' part (screen version 6): the GitHub plugin's issues, each a workspace. */}
+        <PlaceContributions
+          area="project"
+          place={{
+            root,
+            start: async (name: string, prompt: string) => {
+              const made = await createWorkspace(root, name)
+              await newSessionWith(executor, made.folder, prompt)
+            }
+          }}
+        />
         {doing === 'new' && <NewWorkspace onDone={done} root={root} />}
         {doing === 'setup' && <ProjectSetup onDone={done} root={root} />}
         {workspaces.map(row => (

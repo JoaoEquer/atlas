@@ -31,8 +31,9 @@ import { $pluginPage, insertIntoBox } from './registry'
  *  session and of its place in the sidebar (`session`, `executor`), the executors and their
  *  accounts as the app knows them, and the session on screen going on on another account (step
  *  22, the accounts plugin); 5, a part of the first run's Connections (`connection`, step 26: the GitHub and
- *  Google Workspace plugins). */
-export const SCREEN_API = 5
+ *  Google Workspace plugins); 6, a part of a workspace's Changes and of a project among the
+ *  workspaces (`workspace`, `project`, step 21: the GitHub plugin's pull request and issues). */
+export const SCREEN_API = 6
 
 /** Read a store and follow it, in a component: `useValue(host.state.conversation)`. */
 export const useValue = useStore

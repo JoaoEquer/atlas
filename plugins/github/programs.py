@@ -9,7 +9,7 @@ import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import Any, cast
 
 #: What reads the login, without asking for anything.
 STATUS = ("auth", "status", "--hostname", "github.com", "--json", "hosts")
@@ -31,6 +31,14 @@ _URL = re.compile(r"https://\S+")
 
 class LoginError(Exception):
     """A login could not start or be read; the message says what to do."""
+
+
+class GhError(Exception):
+    """`gh` could not do what was asked; the message is what it said."""
+
+
+#: How long a call of `gh` about a pull request or the issues may take.
+CALL_SECONDS = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +92,11 @@ def parse_device_code(text: str) -> DeviceCode | None:
 
 
 async def _spawn(
-    argv: Sequence[str], environment: Mapping[str, str], *, stderr: int
+    argv: Sequence[str],
+    environment: Mapping[str, str],
+    *,
+    stderr: int,
+    folder: str | None = None,
 ) -> asyncio.subprocess.Process:
     try:
         return await asyncio.create_subprocess_exec(
@@ -93,6 +105,7 @@ async def _spawn(
             stdout=asyncio.subprocess.PIPE,
             stderr=stderr,
             env=dict(environment),
+            cwd=folder,
             creationflags=_NO_WINDOW,
         )
     except OSError as error:
@@ -109,6 +122,50 @@ async def read(argv: Sequence[str], environment: Mapping[str, str], seconds: flo
         await stop(process)
         return ""
     return output.decode("utf-8", errors="replace")
+
+
+async def call(
+    argv: Sequence[str], environment: Mapping[str, str], folder: str, seconds: float
+) -> tuple[bool, str, str]:
+    """`argv` run in `folder`: whether it succeeded, its output and its errors."""
+    process = await _spawn(argv, environment, stderr=asyncio.subprocess.PIPE, folder=folder)
+    try:
+        output, errors = await asyncio.wait_for(process.communicate(), seconds)
+    except TimeoutError:
+        await stop(process)
+        raise GhError(f"gh did not answer in {seconds:.0f} seconds.") from None
+    return (
+        process.returncode == 0,
+        output.decode("utf-8", errors="replace"),
+        errors.decode("utf-8", errors="replace"),
+    )
+
+
+def parse_pull_request(text: str) -> dict[str, Any]:
+    """What `gh pr view --json number,url,state,title,isDraft,statusCheckRollup` said, as the
+    screen shows it: each check by its name and how it stands (its conclusion once it ended, its
+    status until then), lower case."""
+    found = json.loads(text)
+    checks: list[dict[str, str]] = []
+    for each in cast("list[dict[str, Any]]", found.get("statusCheckRollup") or []):
+        name = each.get("name") or each.get("context") or ""
+        state = each.get("conclusion") or each.get("state") or each.get("status") or ""
+        checks.append({"name": str(name), "state": str(state).lower()})
+    return {
+        "exists": True,
+        "number": int(found.get("number") or 0),
+        "url": str(found.get("url") or ""),
+        "state": str(found.get("state") or "").lower(),
+        "title": str(found.get("title") or ""),
+        "draft": bool(found.get("isDraft")),
+        "checks": checks,
+    }
+
+
+def last_words(errors: str) -> str:
+    """What `gh` said last on its errors, for the screen."""
+    lines = [line.strip() for line in errors.splitlines() if line.strip()]
+    return lines[-1][:_OUTPUT_CHARS] if lines else "gh failed."
 
 
 async def start_login(

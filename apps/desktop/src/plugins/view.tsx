@@ -57,7 +57,7 @@ export function PlaceContributions({
   area,
   place
 }: {
-  area: Extract<Area, 'connection' | 'executor' | 'session'>
+  area: Extract<Area, 'connection' | 'executor' | 'project' | 'session' | 'workspace'>
   place: Place
 }) {
   const items = inArea(useStore($contributions), area)

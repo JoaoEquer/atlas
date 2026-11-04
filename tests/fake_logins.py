@@ -8,6 +8,9 @@ writes; `FAKE_LOGINS` names the folder their state lives in:
 - `gh auth login --web` prints its code as the real one does away from a terminal, then waits for
   `gh-approve` (the user said yes in the browser), writes its content as the login and exits;
   `gh-refuse` makes it fail instead.
+- `gh pr view <branch>` prints `pr-<branch>.json` (its `/` as `-`), or says there is none; `gh pr
+  create` writes it, number 7 with the checks `checks.json` holds, and keeps its arguments in
+  `pr-created.json` (step 21, A4). `gh issue list` prints `issues.json`, or none (A5).
 """
 
 import json
@@ -49,6 +52,33 @@ def _gh(state: Path, args: list[str]) -> int:
                 return 1
             time.sleep(0.1)
         return 1
+    if args[:2] == ["pr", "view"]:
+        kept = state / f"pr-{args[2].replace('/', '-')}.json"
+        if not kept.exists():
+            sys.stderr.write(f'no pull requests found for branch "{args[2]}"\n')
+            return 1
+        _say(kept.read_text("utf-8"))
+        return 0
+    if args[:2] == ["pr", "create"]:
+        head = args[args.index("--head") + 1]
+        title = args[args.index("--title") + 1]
+        checks = state / "checks.json"
+        made = {
+            "number": 7,
+            "url": "https://github.com/example/shop/pull/7",
+            "state": "OPEN",
+            "title": title,
+            "isDraft": "--draft" in args,
+            "statusCheckRollup": json.loads(checks.read_text("utf-8")) if checks.exists() else [],
+        }
+        (state / f"pr-{head.replace('/', '-')}.json").write_text(json.dumps(made), "utf-8")
+        (state / "pr-created.json").write_text(json.dumps(args), "utf-8")
+        _say(made["url"])
+        return 0
+    if args[:2] == ["issue", "list"]:
+        issues = state / "issues.json"
+        _say(issues.read_text("utf-8") if issues.exists() else "[]")
+        return 0
     sys.stderr.write(f"fake gh: {' '.join(args)} is not played\n")
     return 2
 

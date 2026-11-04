@@ -18,25 +18,29 @@ import type { Place } from './registry'
 import { host } from './sdk'
 
 interface Registered {
+  area: string
   render: (place: Place) => ReactNode
 }
 
-/** The screen's part, registered with a `ctx` whose calls answer as `answer` says. */
-function part(screenModule: unknown, answer: (name: string) => unknown) {
+/** The screen's part in `area` (its connection unless named), registered with a `ctx` whose calls
+ *  answer as `answer` says, with what they were given. */
+function part(screenModule: unknown, answer: (name: string, params: unknown) => unknown, area = 'connection') {
   const calls: string[] = []
-  let found: Registered | undefined
+  const given: unknown[] = []
+  const found: Registered[] = []
   ;(screenModule as { register: (ctx: unknown) => void }).register({
-    call: (name: string) => {
+    call: (name: string, params: unknown) => {
       calls.push(name)
+      given.push(params)
 
-      return Promise.resolve(answer(name))
+      return Promise.resolve(answer(name, params))
     },
     register: (registered: Registered) => {
-      found = registered
+      found.push(registered)
     }
   })
 
-  return { calls, part: found as Registered }
+  return { calls, given, part: found.find(item => item.area === area) as Registered }
 }
 
 beforeEach(() => {
@@ -96,5 +100,63 @@ describe('the Google Workspace plugin', () => {
     render(<>{google_.render({ away: () => undefined })}</>)
 
     expect((await screen.findByTestId('first-run-google-connected')).textContent).toBe('✓ Connected as me@example.com')
+  })
+})
+
+describe("the GitHub plugin's part of a workspace (step 21)", () => {
+  const WORKSPACE = { base: 'main', branch: 'atlas/cart', folder: '/w/cart', id: 'w-cart', root: '/work/shop' }
+
+  it('opens a pull request after Atlas sent the branch, then shows it with its checks', async () => {
+    const pushed = vi.spyOn(host, 'request').mockResolvedValue({ said: '' })
+    const made = {
+      checks: [
+        { name: 'test', state: 'success' },
+        { name: 'lint', state: 'in_progress' }
+      ],
+      draft: false,
+      exists: true,
+      number: 7,
+      state: 'open',
+      title: 'Add the cart',
+      url: 'https://github.com/example/shop/pull/7'
+    }
+    const { given, part: pr } = part(github, name => (name === 'pull_request' ? { exists: false } : made), 'workspace')
+    render(<>{pr.render(WORKSPACE)}</>)
+
+    fireEvent.click(await screen.findByTestId('github-open-pr'))
+    fireEvent.change(screen.getByTestId('github-pr-title'), { target: { value: 'Add the cart' } })
+    fireEvent.click(screen.getByTestId('github-pr-open'))
+
+    expect((await screen.findByTestId('github-pr-link')).textContent).toBe('#7 Add the cart · open')
+    expect(screen.getAllByTestId('github-check').map(check => check.textContent)).toEqual(['✓test', '…lint'])
+    expect(pushed).toHaveBeenCalledWith('workspace.push', { id: 'w-cart' })
+    expect(given.at(-1)).toEqual({
+      base: 'main',
+      branch: 'atlas/cart',
+      draft: false,
+      folder: '/w/cart',
+      title: 'Add the cart'
+    })
+  })
+
+  it("starts a workspace from one of the project's issues, the issue its first message", async () => {
+    const start = vi.fn().mockResolvedValue(undefined)
+    const issue = {
+      body: '1.005 shows 1.00.',
+      number: 12,
+      title: 'The cart rounds wrong',
+      url: 'https://github.com/example/shop/issues/12'
+    }
+    const { part: issues } = part(github, () => [issue], 'project')
+    render(<>{issues.render({ root: '/work/shop', start })}</>)
+
+    fireEvent.click(screen.getByTestId('github-issues-toggle'))
+    expect((await screen.findByTestId('github-issue')).textContent).toContain('#12 The cart rounds wrong')
+    fireEvent.click(screen.getByTestId('github-issue-start'))
+
+    expect(start).toHaveBeenCalledWith(
+      'issue-12',
+      'Resolve issue #12: The cart rounds wrong\n\n1.005 shows 1.00.\n\nhttps://github.com/example/shop/issues/12'
+    )
   })
 })
