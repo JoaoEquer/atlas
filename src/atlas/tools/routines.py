@@ -9,6 +9,9 @@ A command routine, which runs with no model, was the user's alone until 25/10/20
 asked for the agent to make one too: its command passes the approval gate as a `run_command` would,
 when it is made and when it is changed (`atlas.trust`), so the gate that would stop the command now
 stops it from being scheduled. A bot makes only prompt routines: a command runs as nobody.
+
+A prompt routine's probe (step 23) is a command too, so it passes the same gate, and a bot gives
+none.
 """
 
 from typing import Any
@@ -27,8 +30,10 @@ _DESCRIPTION = (
     "none of this one's context, so its prompt must stand alone, and its final reply is what the "
     "user sees; it cannot ask questions. A reply of [SILENT] notifies nobody. A command routine "
     "runs a shell command with no model, for a script or a check that needs no thinking: its "
-    "output is what the user gets, and an empty output notifies nobody. Prefer updating a "
-    "routine over making a near-duplicate."
+    "output is what the user gets, and an empty output notifies nobody. A probe, beside a prompt "
+    "and a repeating schedule, is a command run first with no model: the prompt runs only when "
+    "the probe prints something new, which it receives. Prefer updating a routine over making a "
+    "near-duplicate."
 )
 
 _SCHEDULE = (
@@ -57,6 +62,10 @@ def cronjob_manage(routines: Routines, *, bot: str | None = None) -> Tool:
         try:
             if action == "list":
                 return _listing([r for r in routines.store.all() if bot is None or r.bot == bot])
+            probe = arguments.get("probe")
+            probe = probe if isinstance(probe, str) else None
+            if probe and bot is not None:
+                return "[Atlas: a bot's routine has no probe: a probe is a command, run as nobody.]"
             if action == "create":
                 prompt = _optional(arguments.get("prompt"))
                 command = _optional(arguments.get("command"))
@@ -67,6 +76,7 @@ def cronjob_manage(routines: Routines, *, bot: str | None = None) -> Tool:
                     command=command,
                     created_by=Creator.AGENT,
                     bot=bot,
+                    probe=probe,
                 )
                 return f"Made routine {made.id} ({made.name}): {_line(made)}"
             if not isinstance(key, str) or not key.strip():
@@ -79,6 +89,7 @@ def cronjob_manage(routines: Routines, *, bot: str | None = None) -> Tool:
                     schedule=_optional(arguments.get("schedule")),
                     prompt=_optional(arguments.get("prompt")),
                     command=_optional(arguments.get("command")),
+                    probe=probe,
                 )
                 return f"Updated {changed.id}: {_line(changed)}"
             if action == "pause":
@@ -119,6 +130,12 @@ def cronjob_manage(routines: Routines, *, bot: str | None = None) -> Tool:
                     "description": "For a routine that runs no model: a command in the system's "
                     "shell, run in the working folder. Give it or prompt, not both.",
                 },
+                "probe": {
+                    "type": "string",
+                    "description": "With a prompt: a command whose new output wakes it, e.g. one "
+                    "that prints unread mail. It may keep state in $ATLAS_PROBE_STATE. Empty on "
+                    "update removes it.",
+                },
             },
             "required": ["action"],
             "additionalProperties": False,
@@ -149,7 +166,8 @@ def _line(routine: Routine) -> str:
     )
     last = "" if routine.last_status is None else f", last run {routine.last_status.value}"
     what = routine.prompt if routine.prompt is not None else f"command: {routine.command}"
-    return f"{routine.schedule.display}, {state}, {upcoming}{last}. {what}"
+    probe = "" if routine.probe is None else f" Woken by the probe: {routine.probe}"
+    return f"{routine.schedule.display}, {state}, {upcoming}{last}. {what}{probe}"
 
 
 def _text(value: object) -> str:

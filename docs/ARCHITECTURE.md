@@ -2056,8 +2056,25 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   deleted the folder another way. Kept as it is, decided with the user.
 - **Proved** by `tests/jobs`, `tests/assistant/test_routines.py`, the server's and the CLI's tests, an
   e2e scenario, and `scripts/prove_routines.py` against real models (OpenAI and Gemini, 12/10/2026).
-- **Left out** until use asks: URL monitors, wake scripts, the per-routine notepad, retrying an
-  unreachable model, and durable tasks (a kanban, goals, V3's task registry).
+- **Left out** until use asks: URL monitors, the per-routine notepad, retrying an unreachable
+  model, and durable tasks (a kanban, goals, V3's task registry). Wake scripts came as probes, in
+  step 23 (below).
+- **A probe** (step 23, 04/11/2026): a prompt routine on a schedule that repeats may have a command
+  (`probe`) that runs first, with no model, when the routine comes due; the prompt runs only when
+  the probe printed something new. *New* is a digest of its output against the one that last woke
+  the routine (`jobs_probes`), so the same output twice wakes once, and an empty output wakes
+  nothing; a probe that wants a cursor of its own keeps it in `ATLAS_PROBE_STATE`, a private folder
+  per routine in the home's `probes/` (USER: lost, a probe hears everything again). Nothing new,
+  and no run is written: the routine just looks again at its next time. The output reaches the
+  run as its `event` (its last 20,000 characters), and the prompt receives it wrapped as text from
+  outside (`untrusted`), never as the user's words. While a run goes on its probe does not run, so
+  what arrives meanwhile is heard by the next look, all at once, never lost and never a run per
+  event; a machine that slept looks once on waking. A probe may run two minutes; one that fails
+  wakes nothing, and at its third failure in a row the user is told once, as a failed run, then
+  again only after it worked and failed anew. Run now with nothing new is a silent run that says
+  so. The probe is a command, so the approval gate judges it as it judges a routine's command; a
+  bot gives none, since a command runs as nobody. `atlas routines create --probe`, the tool's
+  `probe`, and the Routines screen shows it and which runs it woke.
 
 ## Subagents — decided 2026-10-11
 

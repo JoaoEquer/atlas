@@ -28,6 +28,26 @@ shell and delivers its output. `--model openai/gpt-6-sol` pins a model to a rout
 on the default model. `--bot NAME` runs it as one of your [bots](/docs/guides/bots/), its result
 entering the bot's conversation.
 
+## Woken by something new
+
+A prompt routine may have a **probe**: a command that runs first, with no model and no cost, each
+time the routine comes due. The prompt runs only when the probe prints something it has not printed
+before, and it receives what the probe printed. A probe that prints nothing, or the same as last
+time, wakes nothing, and nothing is written.
+
+```bash
+atlas routines create mail --schedule "every 5m" --probe "python unread.py" --prompt "Triage the new mail below: answer what is simple, list the rest."
+```
+
+- The schedule must repeat: it is how often the probe looks.
+- A probe that wants to remember where it stopped (the last message it saw, say) keeps it in the
+  folder named by `ATLAS_PROBE_STATE`, one of its own in your Atlas folder.
+- What arrives while the prompt runs is heard by the next look, all at once.
+- A probe may run for 2 minutes. If it fails three times in a row you are notified once, as a
+  failed run.
+- What the probe printed reaches the agent marked as text from outside, so instructions inside an
+  email or a page it read are not taken as yours.
+
 ## Schedules
 
 | Written | Runs |
@@ -44,8 +64,8 @@ Times are in your system's time zone, or the one under **Settings**, then **Fold
 
 ## The Routines screen
 
-**Routines**, in the sidebar, lists each routine with its schedule, its next run and how its last
-one went. From there you can **Run now**, **Pause**, **Resume** and **Remove** a routine, and open
+**Routines**, in the sidebar, lists each routine with its schedule, its next run, how its last
+one went and its probe, if it has one; a run its probe woke says so. From there you can **Run now**, **Pause**, **Resume** and **Remove** a routine, and open
 its **Runs**: each run of a prompt opens as the conversation it was. Creating and changing a
 routine stays with the conversation and the terminal.
 
@@ -68,8 +88,9 @@ A run has nobody watching it, so it works with less:
 - it cannot make or change a routine;
 - it stops after 10 minutes without activity, with no limit on the whole run;
 - it has no background review, and it reads the memory as it was when it started;
-- a command routine made by the agent passes the [approval gate](/docs/guides/approval-gate/) when
-  it is made and when it is changed, since later it runs with nobody to approve it.
+- a command routine made by the agent, and a probe, pass the
+  [approval gate](/docs/guides/approval-gate/) when they are made and when they are changed, since
+  later they run with nobody to approve them.
 
 When a run repeats itself (the same failing call, a cycle of the same steps), Atlas stops it, where
 in a conversation it would only warn the agent.
@@ -79,7 +100,7 @@ in a conversation it would only warn the agent.
 | Command | What it does |
 |---|---|
 | `atlas routines list` | The routines, their schedules and their last run |
-| `atlas routines create NAME --schedule ... --prompt ...` | Make a prompt routine (or `--command`) |
+| `atlas routines create NAME --schedule ... --prompt ...` | Make a prompt routine (or `--command`; `--probe` to wake it) |
 | `atlas routines run NAME` | Run it at the server's next minute |
 | `atlas routines pause NAME` | Stop it firing until resumed |
 | `atlas routines resume NAME` | Fire it again; a run that came due meanwhile runs once |

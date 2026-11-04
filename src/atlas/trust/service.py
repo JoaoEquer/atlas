@@ -26,7 +26,7 @@ It is the agent loop's tool gate (`AgentLoop(gate=...)`), one per conversation.
 
 **A command routine** the agent makes or changes (`cronjob_manage` with a `command`) passes as a
 command for run_command would: the routine runs it later with nobody to approve, so it is judged
-when it is scheduled.
+when it is scheduled. A routine's probe (step 23), a command too, passes the same way.
 
 **A file write** to a system path, the home's settings or its plugins' folders is refused; one to
 the SSH configuration asks the user (the SSH config can run commands through `ProxyCommand`).
@@ -164,9 +164,12 @@ class ApprovalGate:
                 return None
             return await self._command(command, cwd if isinstance(cwd, str) else None)
         if tool.name == ROUTINE_TOOL:
-            command = arguments.get("command")
-            if isinstance(command, str) and command.strip():
-                return await self._command(command, tool=ROUTINE_TOOL)
+            for field in ("command", "probe"):
+                command = arguments.get(field)
+                if isinstance(command, str) and command.strip():
+                    judged = await self._command(command, tool=ROUTINE_TOOL)
+                    if judged is not None:
+                        return judged
         if tool.name in WRITE_TOOLS:
             path = arguments.get("path")
             refused = self._write(path)

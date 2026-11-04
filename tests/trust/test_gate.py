@@ -119,6 +119,21 @@ def test_a_routines_command_is_judged_as_run_command_would_judge_it_when_schedul
     assert unattended is not None
 
 
+def test_a_routines_probe_is_judged_as_its_command_would_be() -> None:
+    user = _User(_yes())
+    gate = ApprovalGate(approver=user)
+
+    plain = _run(gate, ROUTINE, action="create", schedule="every 5m", prompt="a", probe="ls")
+    floor = _run(gate, ROUTINE, action="create", schedule="every 5m", prompt="a", probe="rm -rf /")
+    flagged = _run(gate, ROUTINE, action="update", job_id="x", probe="git clean -fd")
+
+    assert plain is None
+    assert floor is not None
+    assert "BLOCKED (hardline)" in floor
+    assert flagged is None
+    assert [(r.tool, r.target) for r in user.asked] == [("cronjob_manage", "git clean -fd")]
+
+
 def test_a_flagged_command_asks_the_user_and_an_answer_for_the_conversation_holds() -> None:
     user = _User(_yes(Choice.CONVERSATION))
     gate = ApprovalGate(approver=user)

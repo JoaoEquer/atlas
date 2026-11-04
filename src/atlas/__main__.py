@@ -386,6 +386,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help="The bot the prompt runs as; its result enters the bot's fixed conversation.",
     )
+    make.add_argument(
+        "--probe",
+        metavar="COMMAND",
+        help="With --prompt and a schedule that repeats: a command run first, with no model; the "
+        "prompt runs only when it prints something new, which the prompt receives.",
+    )
     for name, text in (
         ("pause", "Stop a routine firing until resumed."),
         ("resume", "Fire it again; a slot that came due while paused runs once."),
@@ -1312,6 +1318,7 @@ def _routines(args: argparse.Namespace, home: Home, settings: Settings) -> int:
                 command=args.shell_command,
                 model=model,
                 bot=args.bot or None,
+                probe=args.probe,
             )
             out.write(f"Made {made.id}  {made.name}  {_routine_line(made, routines)}\n")
             return 0
@@ -1354,7 +1361,8 @@ def _routine_line(routine: Routine, routines: Routines) -> str:
     )
     last = "" if routine.last_status is None else f", last {routine.last_status.value}"
     whose = "" if routine.bot is None else f", as the bot {routine.bot}"
-    return f"{routine.schedule.display}, {state}, {upcoming}{last}{whose}"
+    probe = "" if routine.probe is None else ", woken by its probe"
+    return f"{routine.schedule.display}, {state}, {upcoming}{last}{whose}{probe}"
 
 
 def _installation(args: argparse.Namespace, home: Home, environ: Mapping[str, str]) -> int:

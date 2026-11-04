@@ -44,6 +44,8 @@ PICTURE_FILE = "picture.png"
 DOCUMENTS_FOLDER = "documents"
 #: The workspaces' worktrees, one folder per project (step 21).
 WORKTREES_FOLDER = "worktrees"
+#: Each routine's probe's own folder, where it keeps what it saw (step 23).
+PROBES_FOLDER = "probes"
 #: The user's dictations, each recording with what it said (step 26).
 DICTATIONS_FOLDER = "dictations"
 #: The speech model, downloaded once for every home of the machine, at the root (step 26).
@@ -189,6 +191,13 @@ LAYOUT: tuple[Entry, ...] = (
         "their work goes back through git, not a backup",
     ),
     Entry(
+        PROBES_FOLDER,
+        True,
+        EntryClass.USER,
+        "each routine's probe's own folder, where it keeps what it already saw; lost, a probe "
+        "hears everything again as new",
+    ),
+    Entry(
         DICTATIONS_FOLDER,
         True,
         EntryClass.USER,
@@ -329,6 +338,10 @@ class Home:
     @property
     def worktrees_folder(self) -> Path:
         return self.root / WORKTREES_FOLDER
+
+    @property
+    def probes_folder(self) -> Path:
+        return self.root / PROBES_FOLDER
 
     @property
     def dictations_folder(self) -> Path:

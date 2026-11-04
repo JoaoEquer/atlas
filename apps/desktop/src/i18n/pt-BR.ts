@@ -560,6 +560,8 @@ export const ptBR: Override<Messages> = {
     open: 'Abrir',
     pause: 'Pausar',
     paused: 'pausada',
+    probe: (command: string) => `Acordada pela sonda: $ ${command}`,
+    probed: 'a sonda ouviu algo',
     remove: 'Apagar',
     resume: 'Retomar',
     runNow: 'Rodar agora',

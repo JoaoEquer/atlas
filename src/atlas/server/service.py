@@ -819,11 +819,13 @@ class Gateway:
             "executor.session": self._executor_session,
             "subagent.session": self._subagent_session,
         }
+        runner = RoutineRunner(self.assistant)
         self.scheduler = Scheduler(
             self.assistant.routines,
-            RoutineRunner(self.assistant),
+            runner,
             clock=clock,
             on_finished=self._routine_finished,
+            prober=runner,
         )
 
     @property
@@ -3718,6 +3720,7 @@ def _routine_row(routine: Routine, running: bool) -> RoutineRow:
         routine.created_by.value,
         running,
         routine.bot,
+        routine.probe,
     )
 
 
@@ -3731,6 +3734,7 @@ def _run_row(run: Run) -> RunRow:
         run.conversation_id,
         run.output[:2_000],
         run.error,
+        run.event[:2_000],
     )
 
 

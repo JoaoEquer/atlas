@@ -575,6 +575,8 @@ export const en = {
     open: 'Open',
     pause: 'Pause',
     paused: 'paused',
+    probe: (command: string) => `Woken by its probe: $ ${command}`,
+    probed: 'its probe heard something',
     remove: 'Remove',
     resume: 'Resume',
     runNow: 'Run now',

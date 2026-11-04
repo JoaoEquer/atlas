@@ -890,6 +890,8 @@ export interface RoutineRow {
   running: boolean
   /** The bot it runs as, whose fixed conversation reads its result; `null`, the main agent. */
   bot: string | null
+  /** The command whose new output wakes its prompt (step 23); `null`, its schedule does. */
+  probe: string | null
 }
 export interface RoutineRef {
   routine_id: string
@@ -910,6 +912,8 @@ export interface RunRow {
   /** The reply or the command's output, cut to its first 2,000 characters. */
   output: string
   error: string | null
+  /** What its probe heard, which woke it, cut to its first 2,000 characters; empty when its schedule fired it. */
+  event: string
 }
 export interface RoutineRemoved {
   removed: boolean

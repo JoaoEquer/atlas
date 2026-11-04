@@ -605,6 +605,8 @@ class RoutineRow:
     running: bool
     #: The bot it runs as, whose fixed conversation reads its result; `null`, the main agent.
     bot: str | None = None
+    #: The command whose new output wakes its prompt (step 23); `null`, its schedule does.
+    probe: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -632,6 +634,9 @@ class RunRow:
     #: The reply or the command's output, cut to its first 2,000 characters.
     output: str
     error: str | None
+    #: What its probe heard, which woke it, cut to its first 2,000 characters; empty when its
+    #: schedule fired it.
+    event: str = ""
 
 
 @dataclass(frozen=True, slots=True)

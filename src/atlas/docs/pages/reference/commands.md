@@ -250,7 +250,7 @@ atlas routines list
 Make a routine that runs a prompt, or a command, on a schedule.
 
 ```
-atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHELL_COMMAND] [--model MODEL] [--bot NAME]
+atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHELL_COMMAND] [--model MODEL] [--bot NAME] [--probe COMMAND]
 ```
 
 | Argument | What it does |
@@ -261,6 +261,7 @@ atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHEL
 | `--command SHELL_COMMAND` | A command in the system's shell; its output is what you get. |
 | `--model MODEL` | Pin a model, provider/model (openai/gpt-6-sol); unset, the settings'. |
 | `--bot NAME` | The bot the prompt runs as; its result enters the bot's fixed conversation. |
+| `--probe COMMAND` | With --prompt and a schedule that repeats: a command run first, with no model; the prompt runs only when it prints something new, which the prompt receives. |
 
 One of `--prompt` or `--command` is required.
 

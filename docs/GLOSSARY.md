@@ -210,6 +210,9 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `job` | job | One background execution of a tool or command |
 | `task` | tarefa | A unit of work that can span jobs, be paused and resumed |
 | `routine` | rotina | A scheduled prompt or command the server fires on its schedule |
+| `probe` | sonda | A routine's cheap command, run with no model on its schedule, whose output wakes the routine's prompt only when it prints something new; it keeps its own cursor in `ATLAS_PROBE_STATE` |
+| `trigger` | gatilho | What fires a routine: its schedule, or an event its `probe` heard; an event's text reaches the run marked as text from outside |
+| `event source` | fonte de evento | A plugin's own probe, written in Python (`ctx.register_probe`), which a routine names in place of a command (`plugin:<plugin>:<name>`) |
 | `routine run` | execução da rotina | One firing of a routine: a new conversation of source `routine`, or a command's output |
 | `script-only routine` | rotina sem modelo | A routine that runs a command and delivers its output, with no model call |
 | `catch-up run` | execução atrasada | The one run a routine gets for the runs it missed past its grace, however many |

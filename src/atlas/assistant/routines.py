@@ -6,6 +6,10 @@ review, the loop guards halting, and an inactivity watchdog (600 seconds idle) r
 wall-clock cap; a script runs for at most an hour, its output delivered as it is, and an empty one
 is silent.
 
+**A routine's probe** (step 23) runs as a routine's command does, for at most two minutes, with
+`ATLAS_PROBE_STATE` naming a folder of its own in the home where it may keep what it saw. What it
+heard reaches the prompt it woke as text from outside, never as the user's words.
+
 **A bot's routine** (docs/ARCHITECTURE.md, Bots) runs as the bot, in a conversation of its own
 that belongs to the bot, and what it answered enters the bot's fixed conversation as a message the
 bot reads and answers: the recipient is the bot itself, which receives the output as an incoming
@@ -22,9 +26,11 @@ from atlas.agent import TurnOutcome
 from atlas.assistant.model import ConversationRole, routine_notice
 from atlas.bots import BotError
 from atlas.conversations import ROUTINE
-from atlas.jobs import Routine, Run, RunStatus, is_silent
+from atlas.home import private_folder
+from atlas.jobs import PROBE_SECONDS, Routine, Run, RunStatus, is_silent
 from atlas.models import ModelChoice
 from atlas.tools import Commands, Workspace
+from atlas.trust import untrusted
 
 if TYPE_CHECKING:
     from atlas.assistant.service import Assistant
@@ -51,6 +57,26 @@ class RoutineRunner:
             return await self._command(routine.command, run)
         return await self._prompt(routine, run)
 
+    async def probe(self, routine: Routine) -> tuple[bool, str]:
+        """Run a routine's probe (the jobs subject's `Prober`): whether it ended well, and what it
+        printed."""
+        assistant = self._assistant
+        state = private_folder(private_folder(assistant.home.probes_folder) / routine.id)
+        output, code = await self._commands().execute(
+            routine.probe or "", PROBE_SECONDS, {"ATLAS_PROBE_STATE": str(state)}
+        )
+        if code is None:
+            return False, f"{output}\n(stopped after {PROBE_SECONDS} seconds)"
+        return code == 0, output
+
+    def _commands(self) -> Commands:
+        assistant = self._assistant
+        return Commands(
+            Workspace(assistant.workspace),
+            assistant.home.commands_folder,
+            path=lambda: assistant.programs,
+        )
+
     async def _prompt(self, routine: Routine, run: Run) -> Run:
         assistant = self._assistant
         stored = assistant.conversations.create(source=ROUTINE, title=routine.name, bot=routine.bot)
@@ -60,7 +86,11 @@ class RoutineRunner:
         conversation = assistant.conversation(stored.id, role=ConversationRole.ROUTINE)
         run = dataclasses.replace(run, conversation_id=stored.id)
         try:
-            conversation.send(routine.prompt or "")
+            prompt = routine.prompt or ""
+            if run.event:
+                heard = untrusted(f"probe: {routine.name}", run.event)
+                prompt = f"{prompt}\n\nWhat its probe heard, which started this run:\n{heard}"
+            conversation.send(prompt)
             while conversation.running:
                 await asyncio.sleep(_LOOK_SECONDS)
                 idle = (assistant.clock() - conversation.last_activity).total_seconds()
@@ -102,13 +132,7 @@ class RoutineRunner:
         assistant.conversation(fixed).notice(routine_notice(name, output))
 
     async def _command(self, command: str, run: Run) -> Run:
-        assistant = self._assistant
-        commands = Commands(
-            Workspace(assistant.workspace),
-            assistant.home.commands_folder,
-            path=lambda: assistant.programs,
-        )
-        output, code = await commands.execute(command, COMMAND_SECONDS)
+        output, code = await self._commands().execute(command, COMMAND_SECONDS)
         if code is None:
             error = f"Stopped after {COMMAND_SECONDS} seconds, with every process it started."
             return dataclasses.replace(run, status=RunStatus.ERROR, output=output, error=error)

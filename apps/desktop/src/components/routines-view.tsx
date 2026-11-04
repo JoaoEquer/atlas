@@ -56,6 +56,11 @@ function Routine({ routine }: { routine: RoutineRow }) {
               : ''}
           </p>
           <p className="mt-1 truncate text-sm">{routine.prompt ?? `$ ${routine.command ?? ''}`}</p>
+          {routine.probe ? (
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground" data-testid="routine-probe">
+              {t.routines.probe(routine.probe)}
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 gap-2 text-sm">
           <button
@@ -134,6 +139,11 @@ function Runs({ runs }: { runs: RunRow[] | undefined }) {
           <span>{t.routines.status(run.status)}</span>
           {run.lateness === 'late' || run.lateness === 'catch_up' ? (
             <span className="text-waiting-text">{t.routines.late}</span>
+          ) : null}
+          {run.event ? (
+            <span className="text-muted-foreground" data-testid="run-event" title={run.event}>
+              {t.routines.probed}
+            </span>
           ) : null}
           {run.conversation_id ? (
             <button className="link" onClick={() => void selectConversation(run.conversation_id ?? '')} type="button">

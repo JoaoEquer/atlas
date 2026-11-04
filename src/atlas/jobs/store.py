@@ -51,6 +51,7 @@ from atlas.jobs.model import (
     ExecutorAccount,
     InstanceRecord,
     Lateness,
+    ProbeState,
     RouteTarget,
     Routine,
     Run,
@@ -270,6 +271,20 @@ CREATE TABLE jobs_session_routes (
 ALTER TABLE jobs_session_routes ADD COLUMN compact INTEGER NOT NULL DEFAULT 1;
 """,
         ),
+        Migration(
+            12,
+            "a routine's probe, what it heard last, and the event that woke a run (step 23)",
+            """
+ALTER TABLE jobs_routines ADD COLUMN probe TEXT;
+ALTER TABLE jobs_runs ADD COLUMN event TEXT NOT NULL DEFAULT '';
+CREATE TABLE jobs_probes (
+    routine_id TEXT PRIMARY KEY REFERENCES jobs_routines (id) ON DELETE CASCADE,
+    digest TEXT NOT NULL DEFAULT '',
+    failures INTEGER NOT NULL DEFAULT 0,
+    warned INTEGER NOT NULL DEFAULT 0
+) STRICT;
+""",
+        ),
     ),
 )
 
@@ -279,10 +294,11 @@ _ID_TRIES = 8
 _ROUTINE_COLUMNS = (
     "id, name, schedule_kind, schedule_display, minutes, expr, run_at, prompt, command, enabled, "
     "created_at, created_by, next_run_at, last_run_at, last_status, model_provider, model_name, "
-    "model_effort, run_now, bot"
+    "model_effort, run_now, bot, probe"
 )
 _RUN_COLUMNS = (
-    "number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error"
+    "number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error, "
+    "event"
 )
 _SUBAGENT_COLUMNS = (
     "id, delegation_id, parent_id, conversation_id, task_index, task_count, goal, context, model, "
@@ -308,7 +324,7 @@ class RoutineStore:
                     with transaction(connection):
                         connection.execute(
                             f"INSERT INTO jobs_routines ({_ROUTINE_COLUMNS}) "  # noqa: S608
-                            f"VALUES ({', '.join('?' * 20)})",
+                            f"VALUES ({', '.join('?' * 21)})",
                             _routine_row(made),
                         )
                 except sqlite3.IntegrityError as error:
@@ -332,7 +348,7 @@ class RoutineStore:
                     "minutes = ?, expr = ?, run_at = ?, prompt = ?, command = ?, enabled = ?, "
                     "created_at = ?, created_by = ?, next_run_at = ?, last_run_at = ?, "
                     "last_status = ?, model_provider = ?, model_name = ?, model_effort = ?, "
-                    "run_now = ?, bot = ? WHERE id = ?",
+                    "run_now = ?, bot = ?, probe = ? WHERE id = ?",
                     (*_routine_row(routine)[1:], routine.id),
                 ).rowcount
         except sqlite3.IntegrityError as error:
@@ -377,7 +393,50 @@ class RoutineStore:
         finally:
             connection.close()
 
-    def start_run(self, routine: Routine, started: datetime, lateness: Lateness) -> Run:
+    def advance(self, routine: Routine) -> None:
+        """Write when the routine looks next and when it last did, with no run: its probe ran
+        and heard nothing new (step 23)."""
+        connection = self._database.connect()
+        try:
+            with transaction(connection):
+                connection.execute(
+                    "UPDATE jobs_routines SET next_run_at = ?, last_run_at = ?, run_now = 0 "
+                    "WHERE id = ?",
+                    (_text(routine.next_run_at), _text(routine.last_run_at), routine.id),
+                )
+        finally:
+            connection.close()
+
+    def probe_state(self, routine_id: str) -> ProbeState:
+        connection = self._database.connect()
+        try:
+            row = connection.execute(
+                "SELECT digest, failures, warned FROM jobs_probes WHERE routine_id = ?",
+                (routine_id,),
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is None:
+            return ProbeState(routine_id)
+        return ProbeState(routine_id, str(row[0]), int(row[1]), bool(row[2]))
+
+    def save_probe_state(self, state: ProbeState) -> None:
+        connection = self._database.connect()
+        try:
+            with transaction(connection):
+                connection.execute(
+                    "INSERT INTO jobs_probes (routine_id, digest, failures, warned) "
+                    "VALUES (?, ?, ?, ?) ON CONFLICT (routine_id) DO UPDATE SET "
+                    "digest = excluded.digest, failures = excluded.failures, "
+                    "warned = excluded.warned",
+                    (state.routine_id, state.digest, state.failures, int(state.warned)),
+                )
+        finally:
+            connection.close()
+
+    def start_run(
+        self, routine: Routine, started: datetime, lateness: Lateness, event: str = ""
+    ) -> Run:
         """Write the routine as advanced (its next run, its last) and its run as begun, together:
         the row exists before the run does anything (V3's `execution_jobs`: "a linha nasce antes da
         execução")."""
@@ -395,9 +454,15 @@ class RoutineStore:
                     ),
                 )
                 cursor = connection.execute(
-                    "INSERT INTO jobs_runs (routine_id, started_at, lateness, status) "
-                    "VALUES (?, ?, ?, ?)",
-                    (routine.id, format_utc(started), lateness.value, RunStatus.RUNNING.value),
+                    "INSERT INTO jobs_runs (routine_id, started_at, lateness, status, event) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        routine.id,
+                        format_utc(started),
+                        lateness.value,
+                        RunStatus.RUNNING.value,
+                        event,
+                    ),
                 )
                 number = cursor.lastrowid
                 connection.execute(
@@ -409,7 +474,7 @@ class RoutineStore:
             connection.close()
         if number is None:  # pragma: no cover - an INSERT always has a row id
             raise DatabaseError("SQLite gave no number to a routine run.")
-        return Run(number, routine.id, started, lateness)
+        return Run(number, routine.id, started, lateness, event=event)
 
     def finish_run(self, run: Run) -> None:
         """Write how a run ended, and the routine's last status."""
@@ -1224,6 +1289,7 @@ def _routine_row(routine: Routine) -> tuple[object, ...]:
         routine.model_effort,
         int(routine.run_now),
         routine.bot,
+        routine.probe,
     )
 
 
@@ -1231,7 +1297,7 @@ def _routine(row: Sequence[object]) -> Routine:
     (
         routine_id, name, kind, display, minutes, expr, run_at, prompt, command, enabled,
         created_at, created_by, next_run_at, last_run_at, last_status, provider, model, effort,
-        run_now, bot,
+        run_now, bot, probe,
     ) = row  # fmt: skip
     schedule = Schedule(
         ScheduleKind(str(kind)),
@@ -1260,11 +1326,15 @@ def _routine(row: Sequence[object]) -> Routine:
         model_effort=None if effort is None else str(effort),
         run_now=bool(run_now),
         bot=None if bot is None else str(bot),
+        probe=None if probe is None else str(probe),
     )
 
 
 def _run(row: Sequence[object]) -> Run:
-    number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error = row
+    (
+        number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error,
+        event,
+    ) = row  # fmt: skip
     started = _moment(started_at)
     if started is None:  # pragma: no cover - NOT NULL
         raise DatabaseError(f"Run {number} has no start time.")
@@ -1278,6 +1348,7 @@ def _run(row: Sequence[object]) -> Run:
         conversation_id=None if conversation_id is None else str(conversation_id),
         output=str(output),
         error=None if error is None else str(error),
+        event=str(event),
     )
 
 

@@ -11,6 +11,8 @@ subagents: their tasks, their summaries and the notice that brings them back. Pu
   the zone's naive wall time, and a repeated autumn hour takes the first instant after the last run.
 """
 
+import dataclasses
+import hashlib
 import json
 import re
 from collections.abc import Sequence
@@ -54,6 +56,13 @@ ONESHOT_GRACE_SECONDS = 120
 LATE_TOLERANCE_SECONDS = 300
 #: What a reply says to stay quiet: the whole reply, or its first or last line.
 SILENT_MARKS = ("[SILENT]", "SILENT", "NO_REPLY")
+
+
+#: How long a probe may run, its failures in a row before the user is told, and the most of
+#: its output an event carries.
+PROBE_SECONDS = 120
+PROBE_FAILURES = 3
+MAX_EVENT_CHARS = 20_000
 
 
 class ScheduleKind(StrEnum):
@@ -245,6 +254,52 @@ class Routine:
     #: The bot it runs as, whose fixed conversation reads its result (step 13b); `None`, the
     #: main agent.
     bot: str | None = None
+    #: Its probe (step 23): a command run with no model on its schedule, whose output wakes its
+    #: prompt only when it is something new; `None`, the schedule fires the prompt itself.
+    probe: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeState:
+    """What a routine's probe heard last (step 23)."""
+
+    routine_id: str
+    #: The digest of its last output that woke the routine, so the same output twice wakes once.
+    digest: str = ""
+    #: Its failures in a row, and whether the user was told of them.
+    failures: int = 0
+    warned: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Heard:
+    """What a probe's one run means."""
+
+    state: ProbeState
+    #: The text that wakes the routine; empty, it sleeps on.
+    event: str = ""
+    #: Tell the user it failed too many times in a row: once per run of failures.
+    warn: bool = False
+
+
+def heard(state: ProbeState, ok: bool, output: str) -> Heard:
+    """A probe's run read: a failure counts and warns once at `PROBE_FAILURES` in a row; a success
+    that printed nothing, or what woke the routine last time, wakes nothing; anything new wakes it
+    with that text, cut to its last `MAX_EVENT_CHARS`."""
+    if not ok:
+        failures = state.failures + 1
+        warn = failures >= PROBE_FAILURES and not state.warned
+        return Heard(
+            dataclasses.replace(state, failures=failures, warned=state.warned or warn), warn=warn
+        )
+    calm = dataclasses.replace(state, failures=0, warned=False)
+    text = output.strip()
+    if not text or text == "(no output)":
+        return Heard(calm)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if digest == state.digest:
+        return Heard(calm)
+    return Heard(dataclasses.replace(calm, digest=digest), event=text[-MAX_EVENT_CHARS:])
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +317,8 @@ class Run:
     #: The reply, or the command's output.
     output: str = ""
     error: str | None = None
+    #: What its probe heard, which woke it (step 23); empty for a run its schedule fired.
+    event: str = ""
 
 
 # -- subagents ------------------------------------------------------------------------------------
