@@ -63,7 +63,8 @@ test('a conversation picks another model and effort, and its next turn runs on t
   const options = page.getByTestId('model-menu').getByTestId('model-option')
   await expect(options).toHaveText([/^FakeDefault$/, /^Fake Other2$/])
   await expect(options.first()).toHaveAttribute('data-current', 'true')
-  await page.getByTestId('effort-menu').click()
+  // The keyboard opens the submenu: a click raced the pointer's own opening of it (pickEffort).
+  await page.getByTestId('effort-menu').press('ArrowRight')
   await expect(page.getByTestId('effort-option')).toHaveText(['LowDefault', 'High'])
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
