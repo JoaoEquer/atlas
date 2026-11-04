@@ -932,6 +932,24 @@ export const ptBR: Override<Messages> = {
     wentOn: (name: string) => `O limite do plano chegou: continuou em ${name}.`
   },
 
+  changes: {
+    add: 'Adicionar',
+    binary: 'Um arquivo binário.',
+    comment: 'Comentar esta linha',
+    commentPlaceholder: 'O que deve mudar aqui? Ctrl+Enter adiciona.',
+    more: 'Mudaram mais arquivos do que os mostrados aqui.',
+    none: 'Nada mudou ainda.',
+    readAgain: 'Ler as mudanças de novo',
+    reading: 'Lendo as mudanças…',
+    removeComment: 'Tirar o comentário',
+    send: (count: number) =>
+      count === 1 ? 'Mandar 1 comentário ao agente' : `Mandar ${String(count)} comentários ao agente`,
+    statuses: { added: 'novo', deleted: 'apagado', renamed: 'renomeado' },
+    summary: (count: number, base: string) =>
+      `${count === 1 ? '1 arquivo mudou' : `${String(count)} arquivos mudaram`} desde ${base}`,
+    title: 'Mudanças',
+    truncated: 'O resto deste arquivo não aparece.'
+  },
   workspaces: {
     archive: (name: string) => `Arquivar ${name}: o trabalho fica guardado no branch, a pasta sai`,
     cancel: 'Cancelar',

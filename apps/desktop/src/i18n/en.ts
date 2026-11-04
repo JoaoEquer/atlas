@@ -946,6 +946,24 @@ export const en = {
     wentOn: (name: string) => `The plan limit was reached: it went on on ${name}.`
   },
 
+  changes: {
+    add: 'Add',
+    binary: 'A binary file.',
+    comment: 'Comment on this line',
+    commentPlaceholder: 'What should change here? Ctrl+Enter adds it.',
+    more: 'More files changed than are shown here.',
+    none: 'Nothing changed yet.',
+    readAgain: 'Read the changes again',
+    reading: 'Reading the changes…',
+    removeComment: 'Remove the comment',
+    send: (count: number) =>
+      count === 1 ? 'Send 1 comment to the agent' : `Send ${String(count)} comments to the agent`,
+    statuses: { added: 'new', deleted: 'deleted', renamed: 'renamed' } as Record<string, string>,
+    summary: (count: number, base: string) =>
+      `${count === 1 ? '1 file' : `${String(count)} files`} changed since ${base}`,
+    title: 'Changes',
+    truncated: 'The rest of this file is not shown.'
+  },
   workspaces: {
     archive: (name: string) => `Archive ${name}: its work kept on its branch, its folder removed`,
     cancel: 'Cancel',

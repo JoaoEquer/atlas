@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from atlas.home import Database, format_utc, utc_now
-from atlas.workspaces import git
+from atlas.workspaces import diff, git
 from atlas.workspaces.errors import WorkspaceError
 from atlas.workspaces.model import (
     ARCHIVE_MESSAGE,
@@ -109,6 +109,16 @@ class Workspaces:
         if workspace.state is WorkspaceState.ARCHIVED:
             return "archived"
         return git.summary(Path(workspace.folder), workspace.base)
+
+    def diff(self, workspace_id: str) -> tuple[list[diff.DiffFile], bool]:
+        """What a workspace changed since it left its branch of origin, line by line, and
+        whether some files were left out."""
+        workspace = self.get(workspace_id)
+        if workspace.state is WorkspaceState.ARCHIVED:
+            raise WorkspaceError(
+                f"The workspace {workspace.name} is archived: bring it back first."
+            )
+        return diff.changes(Path(workspace.folder), workspace.base)
 
     def create(self, folder: Path, name: str, base: str | None = None) -> Workspace:
         """A new workspace of the project of `folder`, named `name`, on a new branch from `base`

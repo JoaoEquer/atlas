@@ -102,3 +102,23 @@ def test_the_sessions_new_worktree_is_a_workspace_in_the_home(
     assert (made["branch"], made["worktree"]) == ("atlas/1101-1832", True)
     assert row["folder"] == made["folder"]
     assert not (site.parent / "site-1101-1832").exists(), "never beside the project again"
+
+
+def test_a_workspaces_changes_are_read_line_by_line_through_the_server(
+    serve: Serve, tmp_path: Path
+) -> None:
+    site = _repository(tmp_path / "site")
+    with serve().client() as client:
+        made = client.result("workspace.create", {"folder": str(site), "name": "edit"})
+        (Path(made["folder"]) / "README.md").write_text("Hello, world.\n", encoding="utf-8")
+        read = client.result("workspace.diff", {"id": made["id"]})
+        client.result("workspace.archive", {"id": made["id"]})
+        archived = client.call("workspace.diff", {"id": made["id"]})
+
+    [readme] = read["files"]
+    assert (readme["path"], readme["added"], readme["removed"]) == ("README.md", 1, 1)
+    assert [(line["kind"], line["new"], line["text"]) for line in readme["lines"]] == [
+        ("minus", 0, "Hello."),
+        ("plus", 1, "Hello, world."),
+    ]
+    assert "archived" in archived["error"]["message"]

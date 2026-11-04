@@ -3861,6 +3861,13 @@ in any folder. `atlas.workspaces` (A1), decided with the user; how, our choice, 
   (`workspace.set_project`); deleting asks once, and again when the server refuses for work not
   delivered (`force`). The settings section that held the starting folder and the time zone is
   named for them.
+- **Its changes, commented on the line** (A2): `workspace.diff`, the workspace's folder against
+  the merge base with its branch of origin (`git diff`, committed or not, renames found) and its
+  untracked files whole, each line with its number on each side; cut at 3,000 lines a file and 300
+  files, said so. The side panel's Changes tab, for the session on screen in a workspace, shows it;
+  a click on a line takes a `review comment`, kept in the app per workspace until sent, and the
+  comments go to the session as one message of the user's (`sendToSession`): each its file and
+  line, the line quoted, then the comment. Nothing new for a harness: it reads a message.
 - **Named `workspace`;** the file tools' folder of before is the `starting folder` (GLOSSARY), its
   `[workspace] folder` setting kept as it was.
 

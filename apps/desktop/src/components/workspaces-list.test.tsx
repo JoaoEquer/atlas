@@ -32,6 +32,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   app.$connection.set({ error: null, state: 'idle' })
+  workspaces.$workspaceRows.set([])
   vi.restoreAllMocks()
 })
 

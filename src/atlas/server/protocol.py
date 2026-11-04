@@ -1650,6 +1650,38 @@ class WorkspaceDelete:
 
 
 @dataclass(frozen=True, slots=True)
+class DiffLineRow:
+    #: `same`, `plus`, `minus`, or `gap` between two hunks.
+    kind: str
+    text: str
+    #: Its number in the file before and after; 0 where it has none.
+    old: int
+    new: int
+
+
+@dataclass(frozen=True, slots=True)
+class DiffFileRow:
+    path: str
+    #: `added`, `modified`, `deleted` or `renamed`.
+    status: str
+    added: int
+    removed: int
+    binary: bool
+    #: Its lines were cut: the rest is not shown.
+    truncated: bool
+    lines: list[DiffLineRow]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceDiff:
+    """What a workspace changed since it left its branch of origin (step 21, A2)."""
+
+    files: list[DiffFileRow]
+    #: More files changed than are listed.
+    more: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectRow:
     """How a project prepares a new workspace."""
 
@@ -2454,6 +2486,13 @@ METHODS: Mapping[str, Method] = {
             Empty,
             "Delete a workspace, its folder and its branch; one with work not delivered only "
             "with force.",
+        ),
+        Method(
+            "workspace.diff",
+            WorkspaceRef,
+            WorkspaceDiff,
+            "What a workspace changed since it left its branch of origin, committed or not, line "
+            "by line with each line's numbers, for the user to comment on.",
         ),
         Method(
             "workspace.project",

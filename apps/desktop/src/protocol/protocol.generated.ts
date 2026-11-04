@@ -455,6 +455,31 @@ export interface WorkspaceDelete {
   /** The user said yes to deleting work not delivered. */
   force?: boolean
 }
+/** What a workspace changed since it left its branch of origin (step 21, A2). */
+export interface WorkspaceDiff {
+  files: DiffFileRow[]
+  /** More files changed than are listed. */
+  more: boolean
+}
+export interface DiffFileRow {
+  path: string
+  /** `added`, `modified`, `deleted` or `renamed`. */
+  status: string
+  added: number
+  removed: number
+  binary: boolean
+  /** Its lines were cut: the rest is not shown. */
+  truncated: boolean
+  lines: DiffLineRow[]
+}
+export interface DiffLineRow {
+  /** `same`, `plus`, `minus`, or `gap` between two hunks. */
+  kind: string
+  text: string
+  /** Its number in the file before and after; 0 where it has none. */
+  old: number
+  new: number
+}
 export interface FolderRef {
   /** A project folder; a relative one is the workspace's. */
   folder: string
@@ -2009,6 +2034,8 @@ export interface RpcMethods {
   'workspace.create': { params: WorkspaceCreate; result: WorkspaceRow }
   /** Delete a workspace, its folder and its branch; one with work not delivered only with force. */
   'workspace.delete': { params: WorkspaceDelete; result: Empty }
+  /** What a workspace changed since it left its branch of origin, committed or not, line by line with each line's numbers, for the user to comment on. */
+  'workspace.diff': { params: WorkspaceRef; result: WorkspaceDiff }
   /** The workspaces of the home, or of a folder's project (step 21). */
   'workspace.list': { params: WorkspaceListParams; result: WorkspaceList }
   /** How a folder's project prepares a new workspace. */
@@ -2151,6 +2178,7 @@ export const RPC_METHODS = [
   'workspace.archive',
   'workspace.create',
   'workspace.delete',
+  'workspace.diff',
   'workspace.list',
   'workspace.project',
   'workspace.set_project',

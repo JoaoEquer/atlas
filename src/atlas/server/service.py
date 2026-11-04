@@ -242,6 +242,8 @@ from atlas.server.protocol import (
     DictationRef,
     DictationRow,
     DictationWrite,
+    DiffFileRow,
+    DiffLineRow,
     Empty,
     Events,
     EventsParams,
@@ -421,6 +423,7 @@ from atlas.server.protocol import (
     WorkbenchUseAccountParams,
     WorkspaceCreate,
     WorkspaceDelete,
+    WorkspaceDiff,
     WorkspaceList,
     WorkspaceListParams,
     WorkspaceRef,
@@ -732,6 +735,7 @@ class Gateway:
             "workspace.archive": self._workspace_archive,
             "workspace.unarchive": self._workspace_unarchive,
             "workspace.delete": self._workspace_delete,
+            "workspace.diff": self._workspace_diff,
             "workspace.project": self._workspace_project,
             "workspace.set_project": self._workspace_set_project,
             "dictation.write": self._dictation_write,
@@ -2002,6 +2006,25 @@ class Gateway:
         await self._workspaces(lambda: self.workspaces.delete(params.id, force=params.force))
         self._workspaces_changed()
         return Empty()
+
+    async def _workspace_diff(self, connection: Connection, params: WorkspaceRef) -> WorkspaceDiff:
+        self._owner(connection)
+        files, more = await self._workspaces(self.workspaces.diff, params.id)
+        return WorkspaceDiff(
+            [
+                DiffFileRow(
+                    found.path,
+                    found.status,
+                    found.added,
+                    found.removed,
+                    found.binary,
+                    found.truncated,
+                    [DiffLineRow(line.kind, line.text, line.old, line.new) for line in found.lines],
+                )
+                for found in files
+            ],
+            more,
+        )
 
     async def _workspace_project(self, connection: Connection, params: FolderRef) -> ProjectRow:
         found = await self._workspaces(self.workspaces.project_of, Path(params.folder))

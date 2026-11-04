@@ -922,3 +922,66 @@ test("the box's new worktree is a workspace in the home, listed under its projec
   await expect(workspace).toHaveCount(0)
   expect(readdirSync(path.join(home, 'worktrees', made[0] ?? ''))).toEqual([])
 })
+
+test("a comment on a line of a workspace's changes reaches its session as a message", async () => {
+  const scripts = await scriptsFolder()
+  const log = path.join(path.dirname(scripts), 'claude.log')
+  desktop = await launch(withClaude(scripts, { FAKE_CLAUDE_LOG: log }))
+  const { claude, folder, home, page } = desktop
+  keepOldSession(claude, folder)
+  writeFileSync(path.join(folder, 'README.md'), 'The shop.\n')
+  const identity = {
+    ...process.env,
+    GIT_AUTHOR_EMAIL: 'ana@example.com',
+    GIT_AUTHOR_NAME: 'Ana',
+    GIT_COMMITTER_EMAIL: 'ana@example.com',
+    GIT_COMMITTER_NAME: 'Ana'
+  }
+  for (const step of [
+    ['init', '--quiet', '--initial-branch', 'main'],
+    ['add', '--all'],
+    ['commit', '--quiet', '--message', 'The shop']
+  ]) {
+    spawnSync('git', ['-C', folder, ...step], { env: identity, windowsHide: true })
+  }
+
+  await openClaudeCode(page)
+  await openFolder(page, folder)
+  await page
+    .getByTestId('session-folder')
+    .filter({ hasText: path.basename(folder) })
+    .getByTestId('folder-new-session')
+    .click()
+  await page.getByTestId('where-select').click()
+  await page.getByTestId('where-worktree').click()
+  await expect(page.getByTestId('workspace')).toHaveCount(1)
+
+  // What the agent would have done: a line changed in the workspace, never in the project.
+  const [project] = readdirSync(path.join(home, 'worktrees'))
+  const [name] = readdirSync(path.join(home, 'worktrees', project ?? ''))
+  writeFileSync(path.join(home, 'worktrees', project ?? '', name ?? '', 'README.md'), 'The shop, open late.\n')
+
+  if (await page.getByTestId('panel-show').isVisible()) {
+    await page.getByTestId('panel-show').click()
+  }
+  await page.getByTestId('changes-tab').click()
+  const added = page.locator('[data-testid="diff-line"][data-kind="plus"]')
+  await expect(added).toHaveText(/The shop, open late\./)
+  await added.click()
+  await page.getByTestId('comment-text').fill('Say until when.')
+  await page.getByTestId('comment-add').click()
+  await page.getByTestId('review-send').click()
+
+  await expect(page.getByTestId('review-comments')).toBeHidden()
+  const prompts = () =>
+    readFileSync(log, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map(line => JSON.parse(line) as { message?: { content?: unknown }; type?: string })
+      .filter(entry => entry.type === 'user')
+      .map(entry => String(entry.message?.content))
+  await expect
+    .poll(prompts, STARTED)
+    .toContain('Review comments on your changes:\n\nREADME.md:1\n> The shop, open late.\nSay until when.')
+  expect(readFileSync(path.join(folder, 'README.md'), 'utf8')).toBe('The shop.\n')
+})

@@ -6,6 +6,7 @@ import { t } from '@/i18n'
 import type { ExecutorRow, WorkspaceRow } from '@/protocol/protocol.generated'
 import { $connection, $workspacesSeen, newSession } from '@/store/app'
 import {
+  $workspaceRows,
   archiveWorkspace,
   byProject,
   createWorkspace,
@@ -28,30 +29,8 @@ import { IconButton } from './ui/tip'
  * shows while the home has none: the box's "New worktree" makes the first.
  */
 export function WorkspacesList({ executors }: { executors: ExecutorRow[] }) {
-  const seen = useStore($workspacesSeen)
-  const { state } = useStore($connection)
-  const [rows, setRows] = useState<WorkspaceRow[]>([])
+  const rows = useWorkspaceRows()
   const [open, setOpen] = useState(true)
-
-  useEffect(() => {
-    if (state !== 'open') {
-      return undefined
-    }
-
-    let live = true
-    listWorkspaces().then(
-      found => {
-        if (live) {
-          setRows(found)
-        }
-      },
-      () => undefined
-    )
-
-    return () => {
-      live = false
-    }
-  }, [seen, state])
 
   if (rows.length === 0) {
     return null
@@ -79,6 +58,35 @@ export function WorkspacesList({ executors }: { executors: ExecutorRow[] }) {
         ))}
     </section>
   )
+}
+
+/** The home's workspaces, read while the connection is open and again whenever one changed. */
+export function useWorkspaceRows(): WorkspaceRow[] {
+  const seen = useStore($workspacesSeen)
+  const { state } = useStore($connection)
+  const rows = useStore($workspaceRows)
+
+  useEffect(() => {
+    if (state !== 'open') {
+      return undefined
+    }
+
+    let live = true
+    listWorkspaces().then(
+      found => {
+        if (live) {
+          $workspaceRows.set(found)
+        }
+      },
+      () => undefined
+    )
+
+    return () => {
+      live = false
+    }
+  }, [seen, state])
+
+  return rows
 }
 
 function Project({ executor, root, workspaces }: { executor: string; root: string; workspaces: WorkspaceRow[] }) {
