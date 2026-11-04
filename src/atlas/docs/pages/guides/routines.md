@@ -39,7 +39,7 @@ entering the bot's conversation.
 | `0 9 * * 1-5` | a 5-field cron expression |
 | `2026-12-01T14:00` | once, at that time |
 
-Times are in your system's time zone, or the one under **Settings**, then **Workspace**
+Times are in your system's time zone, or the one under **Settings**, then **Folder and time zone**
 (**Time zone of routines**), an IANA name such as `America/Sao_Paulo`.
 
 ## The Routines screen

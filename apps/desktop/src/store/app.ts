@@ -2546,6 +2546,12 @@ export class HomeSession {
       return
     }
 
+    if (event.type === 'workspaces.changed') {
+      $workspacesSeen.set($workspacesSeen.get() + 1)
+
+      return
+    }
+
     if (event.type === 'dictations.changed') {
       $dictationsSeen.set($dictationsSeen.get() + 1)
 
@@ -2862,6 +2868,9 @@ export const $speech = atom<null | SpeechState>(null)
 /** Counted up when a dictation was kept, written down or deleted: the Dictations page reads them
  *  again (step 26). */
 export const $dictationsSeen = atom(0)
+/** Counted up when a workspace was made, prepared, archived, brought back or deleted: the
+ *  executors tab reads them again (step 21). */
+export const $workspacesSeen = atom(0)
 export const $mcpServers = atom<McpList | null>(null)
 export const $skills = atom<null | SkillRow[]>(null)
 export const $extensionsError = atom<null | string>(null)

@@ -3855,6 +3855,12 @@ in any folder. `atlas.workspaces` (A1), decided with the user; how, our choice, 
   its own commits and its new files). Without it, the task runs in the folder as before, and the
   spawn's answer warns when another agent works there now, a session of the user's or another
   delegated task: no lock on a folder (decided with the user on 03/11/2026).
+- **The screen** (step 21, A1): the workspaces atop the executors tab, under their project
+  (`workspace.list`, read again on `workspaces.changed`), each opening a session of the first
+  executor on; a project's menu makes one and sets how a new one is prepared
+  (`workspace.set_project`); deleting asks once, and again when the server refuses for work not
+  delivered (`force`). The settings section that held the starting folder and the time zone is
+  named for them.
 - **Named `workspace`;** the file tools' folder of before is the `starting folder` (GLOSSARY), its
   `[workspace] folder` setting kept as it was.
 

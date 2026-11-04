@@ -875,3 +875,50 @@ test('a file pasted or picked in a session goes to Claude Code as the SDK sends 
   await expect(prompt).not.toContainText('atlas-attachments')
   await expect(prompt.getByTestId('attachment-chip')).toHaveCount(2)
 })
+
+test("the box's new worktree is a workspace in the home, listed under its project and deleted from there", async () => {
+  const scripts = await scriptsFolder()
+  desktop = await launch(withClaude(scripts))
+  const { claude, folder, home, page } = desktop
+  keepOldSession(claude, folder)
+  writeFileSync(path.join(folder, 'README.md'), 'The shop.\n')
+  const identity = {
+    ...process.env,
+    GIT_AUTHOR_EMAIL: 'ana@example.com',
+    GIT_AUTHOR_NAME: 'Ana',
+    GIT_COMMITTER_EMAIL: 'ana@example.com',
+    GIT_COMMITTER_NAME: 'Ana'
+  }
+  for (const step of [
+    ['init', '--quiet', '--initial-branch', 'main'],
+    ['add', '--all'],
+    ['commit', '--quiet', '--message', 'The shop']
+  ]) {
+    spawnSync('git', ['-C', folder, ...step], { env: identity, windowsHide: true })
+  }
+
+  await openClaudeCode(page)
+  await openFolder(page, folder)
+  await page
+    .getByTestId('session-folder')
+    .filter({ hasText: path.basename(folder) })
+    .getByTestId('folder-new-session')
+    .click()
+  await page.getByTestId('where-select').click()
+  await page.getByTestId('where-worktree').click()
+
+  // Made in the home's worktrees folder, on a branch of its own, and listed under its project.
+  const workspace = page.getByTestId('workspace')
+  await expect(workspace).toHaveCount(1)
+  await expect(page.getByTestId('workspace-project')).toContainText(path.basename(folder))
+  await expect(page.getByTestId('where-branch')).toHaveText(/^atlas\//)
+  const made = readdirSync(path.join(home, 'worktrees'))
+  expect(made).toHaveLength(1)
+
+  // Nothing done in it: deleted on the first yes, its folder gone.
+  await workspace.hover()
+  await workspace.getByTestId('workspace-delete').click()
+  await page.getByTestId('workspace-delete-yes').click()
+  await expect(workspace).toHaveCount(0)
+  expect(readdirSync(path.join(home, 'worktrees', made[0] ?? ''))).toEqual([])
+})

@@ -723,7 +723,7 @@ export const en = {
       personalization: 'Personalization',
       safety: 'Safety',
       voice: 'Voice',
-      workspace: 'Workspace'
+      workspace: 'Folder and time zone'
     },
     theme: 'Look',
     themeDark: 'Dark',
@@ -946,11 +946,41 @@ export const en = {
     wentOn: (name: string) => `The plan limit was reached: it went on on ${name}.`
   },
 
+  workspaces: {
+    archive: (name: string) => `Archive ${name}: its work kept on its branch, its folder removed`,
+    cancel: 'Cancel',
+    create: 'Create',
+    delete: (name: string) => `Delete ${name}`,
+    deleteAnyway: 'Delete anyway',
+    deleteNote: (branch: string) => `Its folder and its branch ${branch} are deleted.`,
+    deleteYes: 'Delete',
+    name: 'Name of the workspace',
+    namePlaceholder: 'fix-login',
+    new: 'New workspace',
+    ports: (ports: string) => `Ports ${ports}`,
+    portsSize: 'Ports each',
+    portsStart: 'First port',
+    projectMenu: (name: string) => `Workspaces of ${name}`,
+    save: 'Save',
+    script: 'Setup script',
+    scriptHint:
+      "Runs in each new workspace once it is made, with its ports in ATLAS_WORKSPACE_PORT and ATLAS_WORKSPACE_PORTS. The files listed in the project's .worktreeinclude are copied in first.",
+    scriptPlaceholder: 'npm ci',
+    setup: 'Prepare new workspaces',
+    states: {
+      archived: 'archived',
+      preparing: 'preparing…',
+      setup_failed: 'setup failed'
+    } as Record<string, string>,
+    title: 'Workspaces',
+    unarchive: (name: string) => `Bring ${name} back, its work as it was`,
+    undelivered: 'It holds work not delivered, which is lost with it.'
+  },
   environment: {
     context: 'Context',
     local: 'Local',
     newWorktree: 'New worktree',
-    newWorktreeHint: (branch: string) => `A new session in a folder beside this one, on a branch from ${branch}`,
+    newWorktreeHint: (branch: string) => `A new session in a workspace of its own, on a branch from ${branch}`,
     title: 'Environment',
     tokens: (count: string) => `${count} tokens`,
     worktree: 'Worktree'

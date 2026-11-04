@@ -66,6 +66,7 @@ import {
 import { SkeletonRows } from './ui/skeleton'
 import { ICON_BUTTON, IconButton } from './ui/tip'
 import { when } from './when'
+import { WorkspacesList } from './workspaces-list'
 
 /**
  * The executors tab (step 16f, decided with the user on 15/10/2026): one row per executor on and
@@ -112,6 +113,7 @@ export function ExecutorsList() {
         </div>
       )}
       <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
+        <WorkspacesList executors={on} />
         {harnesses.map(rows => (
           <Harness key={rows[0] ? harnessOf(rows[0]) : ''} reorder={reorder} rows={rows} />
         ))}

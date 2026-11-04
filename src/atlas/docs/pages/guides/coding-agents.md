@@ -65,6 +65,18 @@ The route is drawn as a path above the session's box, from its pill: each stop i
 
 On the right of the title bar, a session's folder opens in the file manager, in VS Code, or in a terminal.
 
+## Workspaces
+
+A workspace is one task of a project: a copy of the repository (a git worktree) in Atlas's home, on a branch of its own, `atlas/<name>`, where sessions of any coding agent work without touching the project's folder or each other. Several can run side by side.
+
+- **Where they are**: atop the **Executors** tab, each under its project. A click starts a session in it. A workspace says when its setup script is still running, or failed, with the script's last words.
+- **A new one**: **New worktree** under a session's box, or **New workspace** in its project's menu (the three dots), by a name of your own.
+- **How a new one is prepared**: **Prepare new workspaces**, in the project's menu. The files listed in the project's `.worktreeinclude`, one path per line (a `.env`, for example), are copied in first; then the setup script runs in its folder (`npm ci`, for example). Give a first port, and each workspace gets a block of its own, in `ATLAS_WORKSPACE_PORT` and `ATLAS_WORKSPACE_PORTS`, so two dev servers never clash.
+- **Archive** keeps its work in a commit on its branch and removes its folder; bringing it back makes the folder again with the work as it was, nothing committed. **Delete** removes the folder and the branch after a yes, and asks again when it holds work not delivered.
+- When Atlas delegates a task to a coding agent, it can ask for a new workspace for it. The result then says the branch and what changed.
+
+If a harness asks before every tool in a workspace because it does not trust its folder, trust the `worktrees` folder of Atlas's home once: that covers every workspace.
+
 The side panel, with the session's executor open, shows its **Environment** first: the machine, the folder and its branch. Below it, **Context** says how much of the model's window the session holds, when the harness says.
 
 ## Questions and permissions

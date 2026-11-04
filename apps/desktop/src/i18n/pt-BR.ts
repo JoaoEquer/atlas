@@ -709,7 +709,7 @@ export const ptBR: Override<Messages> = {
       personalization: 'Personalização',
       safety: 'Segurança',
       voice: 'Voz',
-      workspace: 'Área de trabalho'
+      workspace: 'Pasta e fuso'
     },
     theme: 'Aparência',
     themeDark: 'Escuro',
@@ -932,11 +932,41 @@ export const ptBR: Override<Messages> = {
     wentOn: (name: string) => `O limite do plano chegou: continuou em ${name}.`
   },
 
+  workspaces: {
+    archive: (name: string) => `Arquivar ${name}: o trabalho fica guardado no branch, a pasta sai`,
+    cancel: 'Cancelar',
+    create: 'Criar',
+    delete: (name: string) => `Apagar ${name}`,
+    deleteAnyway: 'Apagar mesmo assim',
+    deleteNote: (branch: string) => `A pasta e o branch ${branch} são apagados.`,
+    deleteYes: 'Apagar',
+    name: 'Nome da workspace',
+    namePlaceholder: 'corrigir-login',
+    new: 'Nova workspace',
+    ports: (ports: string) => `Portas ${ports}`,
+    portsSize: 'Portas por workspace',
+    portsStart: 'Primeira porta',
+    projectMenu: (name: string) => `Workspaces de ${name}`,
+    save: 'Salvar',
+    script: 'Script de preparo',
+    scriptHint:
+      'Roda em cada workspace nova depois de criada, com as portas dela em ATLAS_WORKSPACE_PORT e ATLAS_WORKSPACE_PORTS. Antes, os arquivos listados no .worktreeinclude do projeto são copiados.',
+    scriptPlaceholder: 'npm ci',
+    setup: 'Preparo das workspaces novas',
+    states: {
+      archived: 'arquivada',
+      preparing: 'preparando…',
+      setup_failed: 'o preparo falhou'
+    },
+    title: 'Workspaces',
+    unarchive: (name: string) => `Trazer ${name} de volta, com o trabalho como estava`,
+    undelivered: 'Ela tem trabalho não entregue, que se perde junto.'
+  },
   environment: {
     context: 'Contexto',
     local: 'Local',
     newWorktree: 'Nova worktree',
-    newWorktreeHint: (branch: string) => `Uma sessão nova numa pasta ao lado desta, num branch a partir de ${branch}`,
+    newWorktreeHint: (branch: string) => `Uma sessão nova numa workspace só dela, num branch a partir de ${branch}`,
     title: 'Ambiente',
     tokens: (count: string) => `${count} tokens`,
     worktree: 'Worktree'
