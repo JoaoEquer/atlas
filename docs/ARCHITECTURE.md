@@ -2075,6 +2075,14 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   so. The probe is a command, so the approval gate judges it as it judges a routine's command; a
   bot gives none, since a command runs as nobody. `atlas routines create --probe`, the tool's
   `probe`, and the Routines screen shows it and which runs it woke.
+- **A plugin's probe** (SDK version 30, `PluginContext.register_probe`, `atlas.probes` in the
+  manifest, shown at consent and counted in its fingerprint): the source of events of a service
+  the plugin speaks to (GitHub, a calendar), in its Python. A routine names it as its probe,
+  `plugin:<plugin>:<name>`, a prefix no command starts with; the runner calls it with the same
+  folder and the same two minutes a probe command gets, and what it returns is what it heard, so
+  what *new* means, the failures and the run are the same for both. A raise is a failure; a plugin
+  that is off makes each look fail, saying which probe is missing. The webhook, an event pushed
+  rather than looked for, comes with the relay (step 20).
 
 ## Subagents — decided 2026-10-11
 

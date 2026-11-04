@@ -10,6 +10,7 @@ from atlas.plugins.install import remove as remove_plugin
 from atlas.plugins.install import update as update_plugin
 from atlas.plugins.model import (
     MANIFEST,
+    PLUGIN_PROBE,
     Admission,
     Dependency,
     Manifest,
@@ -88,6 +89,7 @@ from atlas.plugins.service import (
     LoadedCli,
     LoadedCommand,
     LoadedExecutor,
+    LoadedProbe,
     LoadedReader,
     LoadedTool,
     PluginError,
@@ -105,6 +107,7 @@ __all__ = [
     "MANIFEST",
     "MARKETPLACE_SOURCE",
     "OFFICIAL_FOLDER",
+    "PLUGIN_PROBE",
     "SCHEMA",
     "Account",
     "Accounts",
@@ -144,6 +147,7 @@ __all__ = [
     "LoadedCli",
     "LoadedCommand",
     "LoadedExecutor",
+    "LoadedProbe",
     "LoadedReader",
     "LoadedTool",
     "Manifest",

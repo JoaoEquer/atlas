@@ -93,6 +93,7 @@ what it keeps while it runs (caches, `node_modules`, renders) goes in its data f
 - `network` lists the hosts it reaches. It is shown at consent and not enforced.
 - `hooks` names the events its Python hooks into (needs `api` 15).
 - `readers` names the kinds of attachment its Python reads into text, `audio` (needs `api` 21).
+- `probes` names the sources of events its Python brings for routines (needs `api` 30).
 - `desktop` names what its screen does outside the app's window (needs `api` 23 and a screen):
   `shortcut`, a key heard in every program, and `paste`, text pasted into the program in focus.
 
@@ -289,6 +290,39 @@ def register(ctx: PluginContext) -> None:
 - **It has 2 minutes.** One that raises, returns nothing or runs out leaves the file's note as it
   was, and the turn goes on.
 - `audio` is the only kind for now.
+
+## Probes
+
+A probe is a source of events for routines: it looks at what your plugin watches (new issues on
+GitHub, the next meetings in a calendar, unread mail) with no model and no cost, and a routine
+whose probe it is runs its prompt only when the probe found something new. Declare it under
+`atlas.probes` (`"api": 30`), and register it:
+
+```python
+from pathlib import Path
+
+
+def register(ctx: PluginContext) -> None:
+    async def issues(state: Path) -> str:
+        return await my_new_issues(since=state / "cursor")
+
+    ctx.register_probe("issues", issues)
+```
+
+The user makes a routine with it as its probe, by its full name:
+
+```bash
+atlas routines create issues --schedule "every 10m" --probe "plugin:github:issues" --prompt "Triage the new issues below."
+```
+
+- **Return what is there now, as text.** Atlas compares it with what last woke the routine: the
+  same text twice wakes it once, and empty text wakes nothing. What is new reaches the prompt
+  marked as text from outside.
+- **`state` is a folder of the routine's own** in the user's Atlas folder, the one a probe command
+  gets as `ATLAS_PROBE_STATE`: keep where you stopped there, so each routine has its own.
+- **It has 2 minutes.** One that raises or runs out is a failed look; at the third in a row the
+  user is told once, as a failed run.
+- **A routine whose plugin is off** fails each look, and says which probe is missing.
 
 ## Channels
 
@@ -770,7 +804,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 ## What the SDK offers
 
-Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 29), and the ACP
+Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 30), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
 (`SCREEN_API` 6). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
@@ -792,6 +826,7 @@ SDK adds and the guide does not name fails it.
 | `ctx.notify(conversation, text)` | a message that starts a turn | 16 |
 | `ctx.register_call(name, run)` | what the screen's `ctx.call` reaches | 17 |
 | `ctx.register_reader(kind, run)` | an attachment read into text (Readers) | 21 |
+| `ctx.register_probe(name, run)` | a routine's source of events, a `ProbeRun` (Probes) | 30 |
 | `ctx.memory_limits()` | the memory's limits as the user set them, a `MemoryLimits` (`user`, `memory`), read only; `None` in a terminal command | 26 |
 | `ctx.register_accounts(accounts)`, `ctx.workbench` | the harnesses' other accounts (Other accounts) | 29 |
 

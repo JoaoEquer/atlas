@@ -166,7 +166,15 @@ from atlas.models import (
     load_sdks,
     sees_images,
 )
-from atlas.plugins import Accounts, Executor, LoadedCommand, LoadedReader, LoadedTool, Transcript
+from atlas.plugins import (
+    Accounts,
+    Executor,
+    LoadedCommand,
+    LoadedProbe,
+    LoadedReader,
+    LoadedTool,
+    Transcript,
+)
 from atlas.secrets import MCP_SIGN_IN_FILE, SecretsError, Vault
 from atlas.skills import (
     Curator,
@@ -311,6 +319,8 @@ class _Shared:
     readers: dict[str, LoadedReader] = field(default_factory=dict[str, LoadedReader])
     #: Atlas's own readers, which the plugins' join.
     own_readers: dict[str, LoadedReader] = field(default_factory=dict[str, LoadedReader])
+    #: The plugins' probes (step 23), by what a routine names (`plugin:github:issues`).
+    probes: dict[str, LoadedProbe] = field(default_factory=dict[str, LoadedProbe])
     last_active: datetime | None = None
     #: The process's subagents, made once the assistant is.
     subagents: "Subagents | None" = None
@@ -670,6 +680,11 @@ class Assistant:
         shared.own_readers[reader.kind] = reader
         shared.readers = {reader.kind: reader, **shared.readers}
 
+    def plugin_probe(self, typed: str) -> LoadedProbe | None:
+        """The probe of a plugin that is on that a routine names (`plugin:github:issues`), or
+        `None`."""
+        return self._shared.probes.get(typed)
+
     def use_settings(self, settings: Settings) -> None:
         """The editable settings changed on the settings screen (step 15b), handed to whoever
         holds them: the default model from the next turn of a conversation that picked none,
@@ -809,6 +824,7 @@ class Assistant:
         monitors: Sequence[PluginMonitor] = (),
         slash: Sequence[LoadedCommand] = (),
         readers: Sequence[LoadedReader] = (),
+        probes: Sequence[LoadedProbe] = (),
     ) -> None:
         """What the plugins that are on bring now (step 16j): their tools, which join the
         conversations behind the tool search as the MCP servers' do; their skills folders, listed
@@ -822,6 +838,7 @@ class Assistant:
         shared.agents = _agents(agents or {})
         shared.slash = {command.typed: command for command in slash}
         shared.readers = {**shared.own_readers, **{reader.kind: reader for reader in readers}}
+        shared.probes = {probe.typed: probe for probe in probes}
         if tuple(monitors) != shared.monitors:
             shared.monitors = tuple(monitors)
             # Each conversation starts them again as they are now, when their time comes.

@@ -8,7 +8,9 @@ is silent.
 
 **A routine's probe** (step 23) runs as a routine's command does, for at most two minutes, with
 `ATLAS_PROBE_STATE` naming a folder of its own in the home where it may keep what it saw. What it
-heard reaches the prompt it woke as text from outside, never as the user's words.
+heard reaches the prompt it woke as text from outside, never as the user's words. A probe named
+`plugin:<plugin>:<name>` is a plugin's (SDK version 30): its Python looks, with the same folder and
+the same two minutes, and what it returns is what it heard.
 
 **A bot's routine** (docs/ARCHITECTURE.md, Bots) runs as the bot, in a conversation of its own
 that belongs to the bot, and what it answered enters the bot's fixed conversation as a message the
@@ -20,6 +22,7 @@ failed one deliver nothing; the routines' list says how each run ended.
 import asyncio
 import dataclasses
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from atlas.agent import TurnOutcome
@@ -29,6 +32,7 @@ from atlas.conversations import ROUTINE
 from atlas.home import private_folder
 from atlas.jobs import PROBE_SECONDS, Routine, Run, RunStatus, is_silent
 from atlas.models import ModelChoice
+from atlas.plugins import PLUGIN_PROBE
 from atlas.tools import Commands, Workspace
 from atlas.trust import untrusted
 
@@ -62,12 +66,29 @@ class RoutineRunner:
         printed."""
         assistant = self._assistant
         state = private_folder(private_folder(assistant.home.probes_folder) / routine.id)
+        probe = routine.probe or ""
+        if probe.startswith(PLUGIN_PROBE):
+            return await self._plugin_probe(probe, state)
         output, code = await self._commands().execute(
-            routine.probe or "", PROBE_SECONDS, {"ATLAS_PROBE_STATE": str(state)}
+            probe, PROBE_SECONDS, {"ATLAS_PROBE_STATE": str(state)}
         )
         if code is None:
             return False, f"{output}\n(stopped after {PROBE_SECONDS} seconds)"
         return code == 0, output
+
+    async def _plugin_probe(self, typed: str, state: Path) -> tuple[bool, str]:
+        loaded = self._assistant.plugin_probe(typed)
+        if loaded is None:
+            return False, f"No plugin that is on brings the probe {typed}."
+        try:
+            heard = await asyncio.wait_for(loaded.run(state), PROBE_SECONDS)
+        except TimeoutError:
+            return False, f"(stopped after {PROBE_SECONDS} seconds)"
+        except Exception as error:  # noqa: BLE001 - a plugin's failure is the probe's, counted
+            return False, f"{type(error).__name__}: {error}"
+        if not isinstance(heard, str):  # pyright: ignore[reportUnnecessaryIsInstance] - a plugin's
+            return False, f"The probe {typed} returned {type(heard).__name__}, not text."
+        return True, heard
 
     def _commands(self) -> Commands:
         assistant = self._assistant

@@ -63,7 +63,10 @@ edits taken without asking. Version 29 moves the harnesses' other accounts out o
 plugin (`Accounts`, `PluginContext.register_accounts`, step 22): the accounts, the order they take
 over in at a plan's limit, a folder's account and a session's route are the plugin's; running each
 account as an executor of its own and carrying a session to the stop the plugin names are
-Atlas's (`WorkbenchHost`).
+Atlas's (`WorkbenchHost`). Version 30 lets a plugin bring a source of events for routines
+(`PluginContext.register_probe`, step 23): what is new on GitHub, in a calendar, in a mailbox,
+read with no model; a routine whose probe is `plugin:<plugin>:<name>` wakes its prompt only when
+it hears something new.
 
 **What costs credit is declared and shown:** `llm` and `notify` call the user's model on the
 plugin's own initiative, so the manifest says `"llm": true` or `"notify": true` and the consent
@@ -110,8 +113,9 @@ from typing import Any, Literal, Protocol
 #: shortcut, pasting into the program in focus); 24, themes; 25, a setting's choices, listed by
 #: the app (fixed, Atlas's models, or the plugin's call `setting_choices`); 26, the memory's
 #: limits, read only; 27, where a harness's newest version is published and how its install
-#: updates; 28, a harness's permission modes; 29, the harnesses' other accounts, in one plugin.
-API_VERSION = 29
+#: updates; 28, a harness's permission modes; 29, the harnesses' other accounts, in one plugin;
+#: 30, probes, a routine's source of events.
+API_VERSION = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -995,6 +999,13 @@ type CallRun = Callable[[Any], Awaitable[Any]]
 #: text, leaves the attachment's note as it was; it gets 2 minutes.
 type ReadRun = Callable[[Path, str], Awaitable[str]]
 
+#: A probe (version 30): it looks, with no model, at whatever the plugin watches, and returns what
+#: is there now, as text; empty, nothing. It is given a folder of the routine's own, where it may
+#: keep where it stopped. Atlas wakes the routine's prompt only when the text differs from the one
+#: that last woke it, and hands the prompt the text as written outside. Raising is a failure,
+#: counted as a probe command's; it gets 2 minutes.
+type ProbeRun = Callable[[Path], Awaitable[str]]
+
 
 @dataclass(frozen=True, slots=True)
 class LlmMessage:
@@ -1153,6 +1164,12 @@ class PluginContext(Protocol):
         `audio`. Before a turn, Atlas hands it each such file the user sent, from the app or a
         channel, and gives the model what it returns in the file's note. One reader a kind: a
         second plugin's is left out and logged."""
+        ...
+
+    def register_probe(self, name: str, run: ProbeRun) -> None:
+        """A probe the manifest names under `probes` (version 30): a routine whose probe is
+        `plugin:<plugin>:<name>` runs `run` each time it comes due, and its prompt only when `run`
+        returned something new."""
         ...
 
     def register_accounts(self, accounts: "Accounts") -> None:

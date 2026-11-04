@@ -42,6 +42,7 @@ from atlas.plugins.model import (
     BIN_FOLDER,
     COMMANDS_FOLDER,
     ON_SKILL,
+    PLUGIN_PROBE,
     SCREEN_FILE,
     SKILLS_FOLDER,
     THEMES_FOLDER,
@@ -72,6 +73,7 @@ from atlas.plugins.sdk import (
     LlmResult,
     MemoryLimits,
     PluginLlm,
+    ProbeRun,
     ReadRun,
     ToolRun,
     WorkbenchHost,
@@ -202,6 +204,20 @@ class LoadedReader:
 
 
 @dataclass(frozen=True, slots=True)
+class LoadedProbe:
+    """A plugin's source of events for routines (SDK version 30)."""
+
+    plugin: str
+    name: str
+    run: ProbeRun
+
+    @property
+    def typed(self) -> str:
+        """What a routine names as its probe: `plugin:<plugin>:<name>`."""
+        return f"{PLUGIN_PROBE}{self.plugin}:{self.name}"
+
+
+@dataclass(frozen=True, slots=True)
 class LoadedAccounts:
     """The harnesses' other accounts, from the plugin that brings them (SDK version 29)."""
 
@@ -234,13 +250,15 @@ SCREEN_BYTES = 2 * 1024 * 1024
 @dataclass(frozen=True, slots=True)
 class PluginParts:
     """What the Python of the plugins that are on registered for the loop: tools (version 14),
-    hooks (version 15), slash commands (version 16) and attachment readers (version 21)."""
+    hooks (version 15), slash commands (version 16), attachment readers (version 21) and
+    probes (version 30)."""
 
     tools: list[LoadedTool] = field(default_factory=list[LoadedTool])
     hooks: list[PluginCallback] = field(default_factory=list[PluginCallback])
     commands: list[LoadedCommand] = field(default_factory=list[LoadedCommand])
     calls: list[LoadedCall] = field(default_factory=list[LoadedCall])
     readers: list[LoadedReader] = field(default_factory=list[LoadedReader])
+    probes: list[LoadedProbe] = field(default_factory=list[LoadedProbe])
 
 
 class PluginHost(Protocol):
@@ -526,13 +544,14 @@ class Plugins:
         await self.stop(kind="parts")
         parts = PluginParts()
         wanted: Callable[[Manifest], bool] = lambda m: bool(  # noqa: E731
-            m.tools or m.python_hooks or m.slash_commands or m.calls or m.readers
+            m.tools or m.python_hooks or m.slash_commands or m.calls or m.readers or m.probes
         )
         for context in await self._load(wanted, None, kind="parts"):
             parts.tools.extend(context.tools)
             parts.hooks.extend(context.hooks)
             parts.commands.extend(context.commands)
             parts.calls.extend(context.calls)
+            parts.probes.extend(context.probes)
             for reader in context.readers:
                 taken = next((r for r in parts.readers if r.kind == reader.kind), None)
                 if taken is None:
@@ -863,6 +882,7 @@ class _Context:
         self.cli: list[LoadedCli] = []
         self.calls: list[LoadedCall] = []
         self.readers: list[LoadedReader] = []
+        self.probes: list[LoadedProbe] = []
         self.accounts: Accounts | None = None
         self.stops: list[Stop] = []
         #: Set once the load gave up: what the plugin registers after is ignored.
@@ -1018,6 +1038,19 @@ class _Context:
             return
         self.readers = [reader for reader in self.readers if reader.kind != kind]
         self.readers.append(LoadedReader(self.name, kind, run))
+
+    def register_probe(self, name: str, run: ProbeRun) -> None:
+        if name not in self._manifest.probes:
+            raise PluginError(
+                f"{self.name} registered the probe {name}, which it does not declare under "
+                "atlas.probes."
+            )
+        if not callable(run):
+            raise PluginError(f"{self.name} registered the probe {name} with nothing to run.")
+        if self.abandoned.is_set():
+            return
+        self.probes = [probe for probe in self.probes if probe.name != name]
+        self.probes.append(LoadedProbe(self.name, name, run))
 
     def register_accounts(self, accounts: Accounts) -> None:
         if not self._manifest.accounts:

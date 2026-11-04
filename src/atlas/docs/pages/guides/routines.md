@@ -43,6 +43,8 @@ atlas routines create mail --schedule "every 5m" --probe "python unread.py" --pr
 - A probe that wants to remember where it stopped (the last message it saw, say) keeps it in the
   folder named by `ATLAS_PROBE_STATE`, one of its own in your Atlas folder.
 - What arrives while the prompt runs is heard by the next look, all at once.
+- A plugin may bring probes of its own, for a service it speaks to: give its name as the probe,
+  `plugin:<plugin>:<name>` (`--probe "plugin:github:issues"`); its page says which it brings.
 - A probe may run for 2 minutes. If it fails three times in a row you are notified once, as a
   failed run.
 - What the probe printed reaches the agent marked as text from outside, so instructions inside an
