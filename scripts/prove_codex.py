@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from atlas.plugins import (
-    BUNDLED_FOLDER,
+    OFFICIAL_FOLDER,
     Answers,
     Called,
     Executor,
@@ -103,7 +103,7 @@ def main() -> int:
 
 def executor(program: str) -> Executor:
     """The plugin's executor, as Atlas makes it."""
-    package = import_plugin(BUNDLED_FOLDER / "codex", "codex")
+    package = import_plugin(OFFICIAL_FOLDER / "codex", "codex")
     cli = package.program(program)
     made: Executor = package.Codex(cli, logger=logging.getLogger("prove_codex"))
     return made

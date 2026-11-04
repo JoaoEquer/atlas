@@ -11,7 +11,7 @@ import type { ExecutorAccounts, ExecutorRow, InstanceRow } from '@/protocol/prot
 import { $connection, $executorAccounts, $workbench } from '@/store/app'
 
 // @ts-expect-error -- the plugin's screen is plain JavaScript, loaded uncompiled by the app.
-import screenModule from '../../../../src/atlas/plugins/bundled/accounts/desktop/plugin.js'
+import screenModule from '../../../../plugins/accounts/desktop/plugin.js'
 
 import type { Place } from './registry'
 import { host } from './sdk'

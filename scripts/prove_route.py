@@ -72,7 +72,7 @@ from atlas.home import (
 from atlas.jobs import AccountStore
 from atlas.models import Models, UserMessage, load_catalog
 from atlas.plugins import (
-    BUNDLED_FOLDER,
+    OFFICIAL_FOLDER,
     Answers,
     Executor,
     ExecutorError,
@@ -120,7 +120,7 @@ class Desk:
 
 def executor(plugin: str, program: str) -> Executor:
     """The plugin's executor, as Atlas makes it, on `program` (a JSON list) or the one found."""
-    package = import_plugin(BUNDLED_FOLDER / plugin, plugin)
+    package = import_plugin(OFFICIAL_FOLDER / plugin, plugin)
     made: Executor = (package.ClaudeCode if plugin == CLAUDE else package.Codex)(
         package.program(program), logger=logging.getLogger(f"prove_route.{plugin}")
     )
@@ -197,7 +197,7 @@ async def prove(
         executors={CLAUDE: claude, CODEX: codex},
         on_workbench=heard.append,
     )
-    plugin = import_plugin(BUNDLED_FOLDER / "accounts", "accounts")
+    plugin = import_plugin(OFFICIAL_FOLDER / "accounts", "accounts")
     host = AssistantPluginHost(assistant).workbench()
     accounts = plugin.PluginAccounts(plugin.Book(root / "accounts.json"), lambda: host)
     assistant.set_accounts(accounts)

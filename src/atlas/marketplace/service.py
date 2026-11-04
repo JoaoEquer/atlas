@@ -64,14 +64,17 @@ from atlas.marketplace.store import (
 )
 from atlas.plugins import (
     API_VERSION,
-    BUNDLED_FOLDER,
     MANIFEST,
     MARKETPLACE_SOURCE,
+    OFFICIAL_FOLDER,
     Found,
     Installed,
     PluginError,
     Plugins,
     PluginView,
+    install_official,
+    is_official,
+    official_installed,
     place_plugin,
     read_plugin,
     remove_plugin,
@@ -326,6 +329,13 @@ class Marketplace:
         with self._lock:
             if name in bundled_skills() and not (self.library.folder / name).exists():
                 reset_bundled(self.library, name)
+                return Done(self.row(name), [name])
+            if is_official(name) and name not in official_installed(self.plugins):
+                # One of Atlas's own (step 26): from the installation's folder, off.
+                try:
+                    install_official(self.plugins, name)
+                except PluginError as error:
+                    raise MarketplaceError(str(error)) from error
                 return Done(self.row(name), [name])
             index = self._current()
             item = self._offered(index, name)
@@ -662,7 +672,11 @@ class Marketplace:
                     license=manifest.license or "MIT",
                     tier=Tier.OFFICIAL,
                     version=manifest.version,
-                    state=State.ON if view.enabled and view.consented else State.OFF,
+                    state=State.AVAILABLE
+                    if not view.installed
+                    else State.ON
+                    if view.enabled and view.consented
+                    else State.OFF,
                     shipped=True,
                     problem=view.problem,
                 )
@@ -827,7 +841,7 @@ def check(
 def shipped_names() -> set[str]:
     """The names of what Atlas ships, which no item of the marketplace may take."""
     names = set(bundled_skills())
-    names.update(path.name for path in BUNDLED_FOLDER.iterdir() if path.is_dir())
+    names.update(path.name for path in OFFICIAL_FOLDER.iterdir() if path.is_dir())
     return names
 
 

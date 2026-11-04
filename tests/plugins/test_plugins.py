@@ -7,7 +7,7 @@ import ast
 import asyncio
 import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +15,16 @@ import pytest
 
 from atlas.home import Database, Home, migrate
 from atlas.plugins import (
-    BUNDLED_FOLDER,
+    OFFICIAL_FOLDER,
     SCHEMA,
     ManifestError,
     PluginError,
     Plugins,
+    install_official,
+    install_plugin,
+    official_plugins,
+    refresh_official,
+    remove_plugin,
 )
 from atlas.plugins.model import (
     PAIRING_ALPHABET,
@@ -85,7 +90,7 @@ def clock() -> _Clock:
 def plugins(home: Home, vault: Vault, clock: _Clock, tmp_path: Path) -> Plugins:
     database = Database(home.database_file)
     migrate(database, (SCHEMA,))
-    return Plugins(home, database, vault, clock=clock, bundled_folder=tmp_path / "bundled")
+    return Plugins(home, database, vault, clock=clock, official_folder=tmp_path / "bundled")
 
 
 # -- the manifest ----------------------------------------------------------------------------------
@@ -248,18 +253,63 @@ def test_what_atlas_does_not_load_yet_or_a_newer_sdk_is_refused(
         plugins.enable("broken", "")
 
 
-def test_a_user_plugin_named_as_a_shipped_one_is_refused(
+def test_a_plugin_of_atlass_is_installed_from_its_folder_and_none_takes_its_place(
     home: Home, vault: Vault, tmp_path: Path
 ) -> None:
+    """Step 26: Atlas ships no plugin inside itself; one it makes is listed from the installation's
+    folder, installed when the home records it, run from that folder, and an address with its
+    name cannot replace it. Taken out, its record goes and the installation keeps its files."""
     database = Database(home.database_file)
     migrate(database, (SCHEMA,))
-    _plugin(tmp_path / "bundled")
-    _plugin(home.plugins_folder)
-    found = Plugins(home, database, vault, bundled_folder=tmp_path / "bundled").all()
-    assert [(v.name, v.bundled, v.problem) for v in found] == [
-        ("echo", True, None),
-        ("echo", False, "Atlas ships a plugin named echo; rename this one."),
-    ]
+    official = tmp_path / "official"
+    _plugin(official)
+    plugins = Plugins(home, database, vault, official_folder=official)
+    [offered] = plugins.all()
+    assert (offered.bundled, offered.installed) == (True, False), "from Atlas's folder, not yet"
+
+    _on(plugins)  # turning it on installs it
+    [view] = plugins.all()
+    other = tmp_path / "other"
+    _plugin(other)
+
+    assert (view.name, view.bundled, view.installed, view.running) == ("echo", True, True, True)
+    assert view.folder == official / "echo", "run from the installation, at its version"
+    with pytest.raises(PluginError, match="Atlas's own plugin echo is installed"):
+        install_plugin(plugins, str(other / "echo"))
+    remove_plugin(plugins, "echo")
+    [gone] = plugins.all()
+    assert (gone.installed, gone.enabled) == (False, False)
+    assert (official / "echo" / "__init__.py").exists(), "the installation keeps its files"
+
+
+def test_a_plugin_atlas_shipped_inside_itself_before_step_26_comes_back_as_it_was(
+    home: Home, vault: Vault, tmp_path: Path
+) -> None:
+    """The first start after step 26 installs each plugin of Atlas's the user ever decided on,
+    in the state they left it; one never used stays offered, and one of the user's of the same
+    name is left alone."""
+    database = Database(home.database_file)
+    migrate(database, (SCHEMA,))
+    official = tmp_path / "official"
+    _plugin(official)
+    _plugin(official, "unused", {**_manifest(), "name": "unused"})
+    _plugin(official, "theirs", {**_manifest(), "name": "theirs"})
+    _plugin(home.plugins_folder, "theirs", {**_manifest(), "name": "theirs"})
+    plugins = Plugins(home, database, vault, official_folder=official)
+    manifest = plugins.view("echo").manifest
+    assert manifest is not None
+    # Decided before step 26: on, with its consent, and nothing recorded it.
+    now = datetime.now(UTC)
+    plugins.store.decide("echo", enabled=True, consent=manifest.fingerprint(), now=now)
+    plugins.store.decide("theirs", enabled=False, consent=None, now=now)
+
+    assert refresh_official(plugins, folder=official) == ["echo"]
+    assert refresh_official(plugins, folder=official) == [], "once"
+
+    views = {view.name: view for view in plugins.all()}
+    assert (views["echo"].installed, views["echo"].running) == (True, True), "as it was left"
+    assert not views["unused"].installed, "never used: offered, not installed"
+    assert views["theirs"].folder == home.plugins_folder / "theirs", "the user's own, left alone"
 
 
 #: What each plugin Atlas ships declares, as its consent's fingerprint. A user who turned one on
@@ -285,9 +335,9 @@ def test_a_shipped_plugin_asks_for_consent_again_only_on_purpose(home: Home, vau
     database = Database(home.database_file)
     migrate(database, (SCHEMA,))
     found = {
-        view.name: view.manifest.fingerprint()
-        for view in Plugins(home, database, vault).all()
-        if view.bundled and view.manifest is not None
+        name: plugin.manifest.fingerprint()
+        for name, plugin in official_plugins().items()
+        if plugin.manifest is not None
     }
     assert found == BUNDLED_CONSENTS, (
         "A shipped plugin's declaration changed: users who turned it on will be asked to consent "
@@ -298,9 +348,10 @@ def test_a_shipped_plugin_asks_for_consent_again_only_on_purpose(home: Home, vau
 def test_atlas_ships_its_channel_and_executor_plugins_off(home: Home, vault: Vault) -> None:
     database = Database(home.database_file)
     migrate(database, (SCHEMA,))
-    accounts, claude, codex, deepseek, gemini, telegram, voice = Plugins(
-        home, database, vault, bundled_folder=BUNDLED_FOLDER
-    ).all()
+    plugins = Plugins(home, database, vault, official_folder=OFFICIAL_FOLDER)
+    for name in official_plugins():
+        install_official(plugins, name)
+    accounts, claude, codex, deepseek, gemini, telegram, voice = plugins.all()
     assert (accounts.name, accounts.bundled, accounts.enabled) == ("accounts", True, False)
     assert accounts.manifest is not None
     assert accounts.manifest.accounts, "the harnesses' other accounts (step 22)"
@@ -359,7 +410,7 @@ def test_a_plugin_atlas_ships_imports_only_the_sdk_from_atlas() -> None:
     """import-linter cannot see a folder named with a hyphen (`claude-code` is no module name),
     so the rule every plugin keeps is read here, from each shipped plugin's own files."""
     checked: list[str] = []
-    for source in sorted(BUNDLED_FOLDER.rglob("*.py")):
+    for source in sorted(OFFICIAL_FOLDER.rglob("*.py")):
         tree = ast.parse(source.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             names: list[str] = []
@@ -438,7 +489,7 @@ def test_a_plugin_that_fails_or_hangs_while_loading_is_marked_and_the_rest_goes_
     # the hanging case gets a short limit, and it hangs well past it.
     hangs = "sleep" in body
     plugins = Plugins(
-        home, database, vault, bundled_folder=tmp_path / "none", load_seconds=2 if hangs else 30
+        home, database, vault, official_folder=tmp_path / "none", load_seconds=2 if hangs else 30
     )
     _plugin(home.plugins_folder, code=f"def register(ctx):\n{body}\n")
     _plugin(home.plugins_folder, "fine", {**_manifest(), "name": "fine"})
@@ -586,5 +637,5 @@ def test_someone_let_in_before_is_reached_at_their_own_chat_after_the_migration(
         connection.close()
     migrate(database, (SCHEMA,))
 
-    plugins = Plugins(home, database, vault, bundled_folder=tmp_path / "bundled")
+    plugins = Plugins(home, database, vault, official_folder=tmp_path / "bundled")
     assert plugins.reached("telegram") == ["100"]

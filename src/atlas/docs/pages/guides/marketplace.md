@@ -25,6 +25,10 @@ marked **Official** and listed first. An item's page shows its README at the rev
 it needs on your computer, and the secrets it reads, which you store from that page and never see
 again. Then **Install**.
 
+Atlas's own plugins, the coding agents, Voice, Telegram and Accounts, are among the Official items:
+installing one takes it from your Atlas, at the same version, with no download, and it updates
+when Atlas does.
+
 - A **skill** is ready at once. A skill that needs an MCP server installs it along with it.
 - An **MCP server** connects as soon as it is installed: no restart.
 - A **plugin** or an **executor** arrives turned off. **Turn on** shows what it declares, its

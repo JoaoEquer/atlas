@@ -1,8 +1,9 @@
 """Plugins on disk and in the database: their folders, their Python, and what the user decided.
 
-**Where plugins come from**: the ones Atlas ships, in `atlas/plugins/bundled/`, then the user's,
-one folder each in the home's `plugins/`. A user's plugin with the name of a shipped one is
-refused, not loaded in its place.
+**Where plugins come from**: one folder each in the home's `plugins/`. Since step 26 (03/11/2026)
+Atlas ships none inside itself: the plugins it makes are in the repository's own `plugins/`
+folder, installed into the home like any other (`atlas.plugins.official`), and marked as Atlas's
+by where they came from (`.install-metadata.json`).
 
 **A plugin's Python is imported from its folder** under a name of its own (`atlas_plugin_<name>`),
 so two plugins never share a module, and Atlas never imports a plugin that is turned off.
@@ -101,8 +102,12 @@ WHERE approved = 1 AND EXISTS (
     ),
 )
 
-#: The plugins Atlas ships.
-BUNDLED_FOLDER = Path(__file__).parent / "bundled"
+#: The plugins Atlas makes (step 26): the repository's own folder, beside the package, which the
+#: installation (a checkout) and the image (which copies it) hold.
+OFFICIAL_FOLDER = Path(__file__).resolve().parents[3] / "plugins"
+#: Where the plugins installed by address, from the marketplace or from Atlas's own folder are
+#: recorded, in the home's plugins folder.
+INSTALLED_FILE = ".install-metadata.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,24 +121,36 @@ class Found:
     bundled: bool
 
 
-def find_plugins(user_folder: Path, bundled_folder: Path = BUNDLED_FOLDER) -> list[Found]:
-    """Every plugin folder, the shipped ones first, by name."""
+def find_plugins(user_folder: Path) -> list[Found]:
+    """Every plugin folder of the home, by name; those installed from Atlas's own folder are
+    marked `bundled` (Atlas's own)."""
     found: dict[str, Found] = {}
-    for root, bundled in ((bundled_folder, True), (user_folder, False)):
-        for folder in _folders(root):
-            entry = read_plugin(folder, bundled)
-            if entry.name in found:
-                if found[entry.name].bundled and not bundled:
-                    found[f"{entry.name} ({folder})"] = Found(
-                        folder,
-                        entry.name,
-                        None,
-                        f"Atlas ships a plugin named {entry.name}; rename this one.",
-                        bundled=False,
-                    )
-                continue
+    sources = install_sources(user_folder)
+    for folder in _folders(user_folder):
+        entry = read_plugin(folder, sources.get(folder.name, "").startswith(OFFICIAL_SOURCE))
+        if entry.name not in found:
             found[entry.name] = entry
     return list(found.values())
+
+
+#: What the record of a plugin of Atlas's says it came from, before its name (step 26).
+OFFICIAL_SOURCE = "official:"
+
+
+def install_sources(plugins_folder: Path) -> dict[str, str]:
+    """Where each plugin installed into the home came from, by name, as its record says."""
+    try:
+        data: object = json.loads((plugins_folder / INSTALLED_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    records = cast("dict[str, object]", data)
+    return {
+        name: str(cast("dict[str, object]", entry).get("source", ""))
+        for name, entry in records.items()
+        if isinstance(entry, dict)
+    }
 
 
 def _folders(root: Path) -> Iterator[Path]:

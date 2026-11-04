@@ -95,7 +95,7 @@ ALL = {
 def plugins(home: Home, vault: Vault, tmp_path: Path) -> Plugins:
     database = Database(home.database_file)
     migrate(database, SCHEMAS)
-    return Plugins(home, database, vault, bundled_folder=tmp_path / "bundled")
+    return Plugins(home, database, vault, official_folder=tmp_path / "bundled")
 
 
 def _on(plugins: Plugins, name: str = "echo") -> None:

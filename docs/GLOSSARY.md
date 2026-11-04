@@ -271,6 +271,7 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `browser mode` | modo do navegador | Which browser a call drives: `profile` (Atlas's own profile, with the user's logins, a window), `clean` (a temporary profile, a window) or `headless` (a temporary profile, no window) |
 | `Atlas profile` | perfil do Atlas | The Chrome profile in `ATLAS_HOME/browser/profile`, apart from the user's own, which they sign into once per site |
 | `plugin` | plugin | A folder that adds skills, tools, hooks, agents or, through `register(ctx)`, channels, screens and providers |
+| `official plugin` | plugin oficial | A plugin Atlas makes (step 26): the four executors, the voice, Telegram and the accounts, kept in the repository's `plugins/` beside the core, installed when the home records it (`official:<name>`) and run from the installation, so it is always the version of the Atlas that runs it |
 | `manifest` | manifesto | A plugin's `.claude-plugin/plugin.json`, in Claude Code's format, with what only Atlas reads under `atlas` |
 | `declaration` | declaração | What a plugin's manifest says it does (its Python, channels, secrets, hosts), shown before the user turns it on |
 | `consent` | consentimento | The user's yes to a plugin's declaration, kept as its fingerprint; a declaration that changes asks again |

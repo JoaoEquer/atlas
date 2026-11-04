@@ -29,7 +29,7 @@ uv run ruff check .        # lint
 uv run ruff format .       # format
 uv run pyright             # types, strict on src/
 uv run lint-imports        # subject boundaries
-uv run deptry src          # dependency hygiene
+uv run deptry src plugins  # dependency hygiene
 uv run pytest              # tests on every core, with the coverage floor (`-n0`: one process)
 uv run atlas serve         # run the server on 127.0.0.1:18790
 docker compose up --build  # run in a container

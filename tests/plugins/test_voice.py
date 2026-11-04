@@ -23,8 +23,7 @@ from atlas.assistant import Assistant, ConversationEvent, FileSent
 from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
 from atlas.hooks import Hooks
 from atlas.models import TOOL_SEARCH, AttachmentKind, CallLedger, UserMessage
-from atlas.plugins import BUNDLED_FOLDER, ManifestError, Plugins
-from atlas.plugins.bundled.voice.gemini import INLINE_BYTES
+from atlas.plugins import OFFICIAL_FOLDER, ManifestError, Plugins, install_official
 from atlas.plugins.model import parse_manifest
 from atlas.secrets import Vault
 from fake_model import (
@@ -38,6 +37,7 @@ from fake_model import (
     FakeReply,
 )
 from model_support import Connect
+from official_support import official_module
 
 CHAT = "/v1/chat/completions"
 #: A voice note's first bytes, as Telegram sends one: an Ogg page.
@@ -46,12 +46,17 @@ SAID = "Remind me to call the dentist on Thursday."
 #: What Atlas's own system prompt holds, and a title's does not.
 ATLAS = "You are Atlas"
 
+#: The voice plugin Atlas makes (plugins/voice), imported as Atlas imports it.
+INLINE_BYTES = official_module("voice", "gemini").INLINE_BYTES
+
 
 @pytest.fixture
 def plugins(home: Home, vault: Vault) -> Plugins:
     database = Database(home.database_file)
     migrate(database, SCHEMAS)
-    return Plugins(home, database, vault, bundled_folder=BUNDLED_FOLDER)
+    made = Plugins(home, database, vault, official_folder=OFFICIAL_FOLDER)
+    install_official(made, "voice")
+    return made
 
 
 def _voice_on(

@@ -87,7 +87,7 @@ Ask Atlas in plain words, and it delegates to the right executor on the account 
 
 ## How Atlas talks to them
 
-Atlas brings no copy of these programs. Each one is driven by a plugin Atlas ships, which runs the program you installed and speaks the protocol its own makers use for their apps:
+Atlas brings no copy of these programs. Each one is driven by a plugin Atlas makes, installed when you turn the agent on, which runs the program you installed and speaks the protocol its own makers use for their apps:
 
 | Harness | How Atlas drives it |
 |---|---|

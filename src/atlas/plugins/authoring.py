@@ -128,7 +128,7 @@ def validate(folder: Path) -> Validation:
         database = Database(home.database_file)
         migrate(database, (SCHEMA,))
         vault = Vault(home.secrets_folder, VaultSettings(), Redactor())
-        plugins = Plugins(home, database, vault, bundled_folder=Path(scratch) / "none")
+        plugins = Plugins(home, database, vault, official_folder=Path(scratch) / "none")
         view = plugins.view(manifest.name)
         if view.problem is not None:
             return Validation(folder, manifest, (view.problem,))

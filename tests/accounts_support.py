@@ -13,9 +13,9 @@ from atlas.assistant import Assistant
 from atlas.assistant.model import AccountView
 from atlas.assistant.plugin_host import AssistantPluginHost
 from atlas.plugins import ExecutorError
-from atlas.plugins.store import BUNDLED_FOLDER, import_plugin
+from atlas.plugins.store import OFFICIAL_FOLDER, import_plugin
 
-FOLDER = BUNDLED_FOLDER / "accounts"
+FOLDER = OFFICIAL_FOLDER / "accounts"
 
 
 def accounts_module(name: str = "") -> ModuleType:

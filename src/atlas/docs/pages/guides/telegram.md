@@ -5,7 +5,7 @@ sidebar:
   order: 8
 ---
 
-With the Telegram plugin, which ships with Atlas, you talk to Atlas from your phone through a bot
+With the Telegram plugin, one of Atlas's own (installed when you turn it on), you talk to Atlas from your phone through a bot
 of your own. A conversation there is an Atlas conversation like any other: it shows up in the app
 too, and goes on in either place.
 

@@ -23,6 +23,7 @@ own, marked). They load first.
 """
 
 import asyncio
+import dataclasses
 import hashlib
 import inspect
 import logging
@@ -76,11 +77,13 @@ from atlas.plugins.sdk import (
     WorkbenchHost,
 )
 from atlas.plugins.store import (
-    BUNDLED_FOLDER,
+    OFFICIAL_FOLDER,
+    OFFICIAL_SOURCE,
     Found,
     PluginStore,
     find_plugins,
     import_plugin,
+    install_sources,
     plugin_hooks,
 )
 from atlas.secrets import SecretsError, Vault
@@ -120,6 +123,9 @@ class PluginView:
     secrets: dict[str, bool] = field(default_factory=dict[str, bool])
     #: Each declared setting's value, the user's or its default.
     settings: dict[str, str] = field(default_factory=dict[str, str])
+    #: In the home's plugins; one of Atlas's own not installed yet is listed from the
+    #: installation's folder, and turning it on installs it (step 26).
+    installed: bool = True
 
     @property
     def running(self) -> bool:
@@ -297,13 +303,13 @@ class Plugins:
         vault: Vault,
         *,
         clock: Callable[[], datetime] = utc_now,
-        bundled_folder: Path = BUNDLED_FOLDER,
+        official_folder: Path = OFFICIAL_FOLDER,
         load_seconds: float = LOAD_SECONDS,
     ) -> None:
         self._home = home
         self._vault = vault
         self._clock = clock
-        self._bundled = bundled_folder
+        self._official = official_folder
         self._load_seconds = load_seconds
         self.store = PluginStore(database)
         #: What failed while a plugin loaded or ran, until it is turned on again.
@@ -346,7 +352,22 @@ class Plugins:
         except SecretsError:
             stored = set[str]()
         views: list[PluginView] = []
-        for found in find_plugins(self._home.plugins_folder, self._bundled):
+        home = find_plugins(self._home.plugins_folder)
+        names = {found.name for found in home}
+        # Atlas's own (step 26) run from the installation's folder, installed when the home
+        # records them; the others are listed too, to be turned on, which installs them.
+        recorded = install_sources(self._home.plugins_folder)
+        official = [
+            dataclasses.replace(found, bundled=True)
+            for found in find_plugins(self._official)
+            if found.name not in names and found.manifest is not None
+        ]
+        present = names | {
+            found.name
+            for found in official
+            if recorded.get(found.name, "").startswith(OFFICIAL_SOURCE)
+        }
+        for found in [*home, *official]:
             state = states.get(found.name)
             manifest = found.manifest
             enabled = state is not None and state.enabled
@@ -368,6 +389,7 @@ class Plugins:
                     if manifest is None
                     else {s.name: s.name in stored for s in manifest.secrets},
                     {} if manifest is None else self._settings(manifest),
+                    installed=found.name in present,
                 )
             )
         return _with_dependencies(views)
@@ -408,6 +430,11 @@ class Plugins:
         unmet = _unmet(manifest, {other.name: other for other in self.all()})
         if unmet is not None:
             raise PluginError(f"{name} cannot be turned on yet. {unmet}")
+        if not view.installed:
+            # One of Atlas's own, turned on for the first time: installed from the installation.
+            from atlas.plugins.official import install_official  # noqa: PLC0415 - it imports this
+
+            install_official(self, name, folder=self._official, clock=self._clock)
         self.store.decide(name, enabled=True, consent=consent, now=self._clock())
         self._failures.pop(name, None)
         _logger.info("A plugin was turned on.", extra={"plugin": name})
@@ -707,13 +734,17 @@ class Plugins:
                     )
 
     async def offered_executors(self) -> list[LoadedExecutor]:
-        """The executors of the plugins Atlas ships that are off, to look at before the user turns
-        them on (step 16c): the onboarding offers the harnesses installed here. Their code is
-        Atlas's own, shipped with it; a plugin of the user's runs only once consented to."""
+        """The executors of the plugins Atlas makes that are not installed in the home, or are
+        off, to look at before the user turns them on (step 16c; step 26): the onboarding and the
+        executors tab offer the harnesses installed on the computer. Their code is Atlas's own, in
+        the installation's folder at the version that runs; a plugin of the user's runs only
+        once consented to."""
         loaded: list[LoadedExecutor] = []
-        offered = _offered
+        offered = [
+            view for view in self.all() if view.bundled and not view.running and not view.problem
+        ]
         for context in await self._load(
-            lambda m: bool(m.executors), None, pick=offered, kind="offered"
+            lambda m: bool(m.executors), None, views=offered, kind="offered"
         ):
             loaded += [
                 LoadedExecutor(context.name, n, make) for n, make in context.executors.items()
@@ -726,14 +757,15 @@ class Plugins:
         only: set[str] | None,
         *,
         kind: str,
-        pick: Callable[[PluginView], bool] = lambda view: view.running,
+        views: Sequence[PluginView] | None = None,
     ) -> list["_Context"]:
-        """The registrations of the plugins `pick` takes (those that are on) that bring what is
+        """The registrations of the plugins that are on (or of `views`) that bring what is
         `wanted`."""
         contexts: list[_Context] = []
-        for view in load_order(self.all()):
+        chosen = views if views is not None else [v for v in self.all() if v.running]
+        for view in load_order(list(chosen)):
             manifest = view.manifest
-            if not pick(view) or manifest is None or not manifest.python:
+            if manifest is None or not manifest.python:
                 continue
             if not wanted(manifest) or (only is not None and view.name not in only):
                 continue
@@ -1044,11 +1076,6 @@ class _Llm:
         return await self._plugins.host.complete(
             self._name, prompt, system=system, max_tokens=max_tokens, json_schema=json_schema
         )
-
-
-def _offered(view: PluginView) -> bool:
-    """A plugin Atlas ships, off, that nothing keeps from being turned on."""
-    return view.bundled and not view.running and view.problem is None
 
 
 def _problem(found: Found) -> str | None:

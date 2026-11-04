@@ -355,8 +355,8 @@ def register(ctx: PluginContext) -> None:
   app.
 - **`send_file`** (`"api": 22`) sends a file a tool made; a channel without it gets a line naming
   the file instead.
-- The Telegram plugin Atlas ships is a whole channel:
-  [src/atlas/plugins/bundled/telegram](https://github.com/marqueskaio/atlas/tree/main/src/atlas/plugins/bundled/telegram).
+- The Telegram plugin Atlas makes is a whole channel:
+  [plugins/telegram](https://github.com/marqueskaio/atlas/tree/main/plugins/telegram).
 
 ## Executors
 
@@ -447,16 +447,16 @@ def register(ctx: PluginContext) -> None:
   harness: `TranscriptEntry` items in a `Transcript`.
 - **A harness that speaks the Agent Client Protocol** needs no channel of its own:
   `atlas.plugins.acp` (`"api": 18`) starts it, speaks ACP over its stdio and turns its updates
-  into these events. The Gemini CLI and DeepSeek plugins Atlas ships use it:
-  [src/atlas/plugins/bundled/gemini-cli](https://github.com/marqueskaio/atlas/tree/main/src/atlas/plugins/bundled/gemini-cli),
-  [src/atlas/plugins/bundled/deepseek](https://github.com/marqueskaio/atlas/tree/main/src/atlas/plugins/bundled/deepseek). The Claude Code and
+  into these events. The Gemini CLI and DeepSeek plugins Atlas makes use it:
+  [plugins/gemini-cli](https://github.com/marqueskaio/atlas/tree/main/plugins/gemini-cli),
+  [plugins/deepseek](https://github.com/marqueskaio/atlas/tree/main/plugins/deepseek). The Claude Code and
   Codex plugins speak their harness's own protocol.
 
 ## Other accounts
 
 Atlas runs each harness on your own login, one account. Running them on several accounts at once,
 and moving a session to another account when its plan runs out, is a plugin's: the **accounts**
-plugin Atlas ships does it, and one plugin a home may bring it (`"accounts": true`, `"api": 29`).
+plugin Atlas makes does it, and one plugin a home may bring it (`"accounts": true`, `"api": 29`).
 
 ```python
 from pathlib import Path

@@ -17,6 +17,14 @@ from atlas.plugins.model import (
     Pairing,
     Theme,
 )
+from atlas.plugins.official import (
+    install_official,
+    is_official,
+    official_installed,
+    official_plugins,
+    refresh_official,
+    uninstall_official,
+)
 from atlas.plugins.sdk import (
     API_VERSION,
     Account,
@@ -90,13 +98,13 @@ from atlas.plugins.service import (
     PluginTheme,
     PluginView,
 )
-from atlas.plugins.store import BUNDLED_FOLDER, SCHEMA, Found, read_plugin
+from atlas.plugins.store import OFFICIAL_FOLDER, SCHEMA, Found, read_plugin
 
 __all__ = [
     "API_VERSION",
-    "BUNDLED_FOLDER",
     "MANIFEST",
     "MARKETPLACE_SOURCE",
+    "OFFICIAL_FOLDER",
     "SCHEMA",
     "Account",
     "Accounts",
@@ -175,12 +183,18 @@ __all__ = [
     "Validation",
     "Verdict",
     "WorkbenchHost",
+    "install_official",
     "install_plugin",
     "installed",
+    "is_official",
     "new_plugin",
+    "official_installed",
+    "official_plugins",
     "place_plugin",
     "read_plugin",
+    "refresh_official",
     "remove_plugin",
+    "uninstall_official",
     "update_plugin",
     "validate",
 ]

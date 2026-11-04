@@ -73,7 +73,7 @@ mcp = ["mcp==2.2.0", "mcp-types==2.2.0", "jsonschema==4.26.0"]
 # which no OpenAI-compatible endpoint carries. An extra, as it serves one provider. 1.11.0 (30/09/2026) for the 14-day rule. It brings httpx2 and pydantic,
 # which the OpenAI SDK already brings, and docstring-parser and jiter.
 anthropic = ["anthropic==1.11.0"]
-# Zstandard, to read DeepSeek's harness's sessions (atlas/plugins/bundled/deepseek): its logs are
+# Zstandard, to read DeepSeek's harness's sessions (plugins/deepseek): its logs are
 # Zstandard frames, which Python 3.13 does not read (3.14 does, as compression.zstd). BSD, no
 # dependencies, prebuilt for every system. 0.25.0 (14/09/2025) for the 14-day rule.
 deepseek = ["zstandard==0.25.0"]
@@ -121,7 +121,7 @@ dev = [
 [tool.ruff]
 target-version = "py313"
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "plugins"]
 # The host updater runs on the Compose host's own Python, 3.11 or newer (docs/ARCHITECTURE.md, The
 # update of a Compose host): no syntax newer than that.
 per-file-target-version = { "src/atlas/installation/host_updater.py" = "py311" }
@@ -153,6 +153,9 @@ select = [
 known-third-party = ["mcp"]
 
 [tool.ruff.lint.per-file-ignores]
+# A plugin's folder is named as the plugin (`claude-code`), and Atlas imports it under a name of its
+# own (`atlas_plugin_claude_code`): the folder is never a module name.
+"plugins/**" = ["N999"]
 "tests/**" = [
     "S101",  # assert is how pytest checks
     "S105",  # tests hold fake secrets on purpose, to prove they never leak
@@ -176,10 +179,11 @@ exclude = [
 
 [tool.pyright]
 pythonVersion = "3.13"
-include = ["src", "tests"]
+include = ["src", "tests", "plugins"]
 # The fake model server (tests/fake_model.py) is imported by the tests as a top-level module.
 extraPaths = ["src", "tests"]
-strict = ["src"]
+# The plugins Atlas makes (step 26: the repository's plugins/) are held to the core's rules.
+strict = ["src", "plugins"]
 
 [tool.importlinter]
 root_packages = ["atlas"]
@@ -386,34 +390,6 @@ protected_modules = ["atlas.plugins.*"]
 allowed_importers = ["atlas.plugins"]
 
 [[tool.importlinter.contracts]]
-name = "A plugin Atlas ships imports from Atlas only the SDK, as every plugin must"
-type = "forbidden"
-source_modules = ["atlas.plugins.bundled"]
-forbidden_modules = [
-    "atlas.agent",
-    "atlas.assistant",
-    "atlas.bots",
-    "atlas.browser",
-    "atlas.conversations",
-    "atlas.home",
-    "atlas.hooks",
-    "atlas.installation",
-    "atlas.jobs",
-    "atlas.mcp",
-    "atlas.memory",
-    "atlas.models",
-    "atlas.plugins.install",
-    "atlas.plugins.model",
-    "atlas.plugins.service",
-    "atlas.plugins.store",
-    "atlas.secrets",
-    "atlas.server",
-    "atlas.skills",
-    "atlas.tools",
-    "atlas.trust",
-]
-
-[[tool.importlinter.contracts]]
 name = "marketplace is reached only through its package root"
 type = "protected"
 protected_modules = ["atlas.marketplace.*"]
@@ -537,14 +513,14 @@ DEP002 = ["tzdata", "browser-harness"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
-# The coverage is measured by folder, not by package: a plugin Atlas ships is imported under a
-# name of its own (`atlas_plugin_<name>`), as every plugin is, and is counted all the same.
+# The coverage is measured by folder, not by package: a plugin Atlas makes (`plugins/`) is imported
+# under a name of its own (`atlas_plugin_<name>`), as every plugin is, and is counted all the same.
 # The tests run on every core (`-n0` runs them in this process, for a debugger), and a test that
 # hangs fails after five minutes instead of holding the run.
-addopts = "--import-mode=importlib --strict-markers -n auto --cov=src/atlas --cov-report=term-missing --cov-fail-under=90"
+addopts = "--import-mode=importlib --strict-markers -n auto --cov=src/atlas --cov=plugins --cov-report=term-missing --cov-fail-under=90"
 timeout = 300
 markers = [
-    "offered_executors: the plugins Atlas ships that are off are looked at, as at a real start",
+    "offered_executors: the plugins Atlas makes that are not on are looked at, as at a real start",
 ]
 
 [tool.coverage.run]

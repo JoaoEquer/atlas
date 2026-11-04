@@ -24,6 +24,8 @@ RUN uv sync --frozen --no-dev --all-extras --no-install-project
 COPY README.md LICENSE ./
 COPY LICENSES ./LICENSES
 COPY src ./src
+# The plugins Atlas makes (step 26), installed into a home from here.
+COPY plugins ./plugins
 RUN uv sync --frozen --no-dev --all-extras
 
 # Atlas never runs as root, and the code in /app is root's. User state lives in the /data volume,

@@ -2116,7 +2116,7 @@ Step 13. The user's goal, in their words: nothing they would answer Claude Code 
 lost; it reaches them through Atlas. Researched on 12/10/2026. Domain agents moved to step 13b.
 
 - **Claude Code first**, the one the user runs (since step 16c the plugin Atlas ships,
-  `atlas/plugins/bundled/claude-code`: Plugins, below); Codex second, since step 16o (Codex,
+  `plugins/claude-code`: Plugins, below); Codex second, since step 16o (Codex,
   below); the Gemini CLI third, since step 16p, over ACP (Gemini CLI, below); DeepSeek's
   harness fourth, since step 16q, over the same client (DeepSeek, below); and the rest come when
   use asks.
@@ -2181,7 +2181,7 @@ lost; it reaches them through Atlas. Researched on 12/10/2026. Domain agents mov
 Step 16o, asked for by the user on 20/10/2026 with the Gemini CLI and DeepSeek after it (ROADMAP,
 Codex, Gemini CLI e DeepSeek). Studied on Codex 0.163.0, in the schema its own `codex app-server
 generate-json-schema` writes. The plugin is
-`atlas/plugins/bundled/codex`, the SDK's executor as Claude Code's is.
+`plugins/codex`, the SDK's executor as Claude Code's is.
 
 - **Over `codex app-server`**, the JSON-RPC 2.0 on stdio that Codex's own app and its VS Code
   extension speak: one process per instance, holding one thread; a prompt is a
@@ -2226,7 +2226,7 @@ generate-json-schema` writes. The plugin is
 Step 16p, after Codex (ROADMAP, Codex, Gemini CLI e DeepSeek). Studied on the Gemini CLI 0.65.0,
 in its source (`packages/cli/src/acp/`, its session files and its Code Assist client; Apache-2.0)
 and in ACP's schema (`agent-client-protocol` 0.9.0, schema 0.11.2). The plugin is
-`atlas/plugins/bundled/gemini-cli`.
+`plugins/gemini-cli`.
 
 - **Over ACP**, through the SDK's client (`atlas.plugins.acp`, version 18): `gemini --acp`, one
   process per instance holding one session; a prompt is a `session/prompt`, which answers when the
@@ -2284,7 +2284,7 @@ and in ACP's schema (`agent-client-protocol` 0.9.0, schema 0.11.2). The plugin i
 Step 16q, after the Gemini CLI (ROADMAP, Codex, Gemini CLI e DeepSeek). Studied in DeepSeek's
 harness (`dsh`, `@deepseek-ai/dsh` 0.2.1-rc.2, MIT): its ACP package (`packages/acp/acp`), its
 session format and its configuration, and in the `dsh` installed here, with no prompt. The plugin
-is `atlas/plugins/bundled/deepseek`, over the SDK's ACP client.
+is `plugins/deepseek`, over the SDK's ACP client.
 
 - **Over `dsh --profile acp`**, its automation-only ACP: no login over the channel, `session/new`,
   `session/resume`, `session/list` and `session/close`, the model and the effort as configuration
@@ -2507,14 +2507,14 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
   `secrets` (names in the vault, with where to get them), `settings` (Claude Code's `userConfig`,
   with defaults) and `network` (shown, not enforced). Version 1 loads Python channels; a plugin
   with skills, commands, agents, hooks or MCP servers is listed and refused until Atlas loads them.
-- **Where plugins come from:** the ones Atlas ships, in `atlas/plugins/bundled/` (inside the
-  package, so the image and the wheel carry them), then the home's `plugins/`, one folder each. A
-  user's plugin named as a shipped one is refused (an impostor). Each plugin has a data
+- **Where plugins come from:** the home's `plugins/`, one folder each. Since step 26 the ones
+  Atlas makes live in the repository's `plugins/`, beside the package, and are installed into the
+  home like any other (Atlas's own plugins, below); an address cannot replace one installed. Each plugin has a data
   folder in the home's `plugin-data/` (Claude Code's `${CLAUDE_PLUGIN_DATA}`); both travel in a
   backup.
 - **Python only through `register(ctx)`** (`atlas.plugins.sdk`, the one module of Atlas a plugin
-  imports with `atlas.plugins.acp`, the SDK's ACP client since version 18; import-linter and a
-  test hold the shipped ones to them). The context grants only what the manifest
+  imports with `atlas.plugins.acp`, the SDK's ACP client since version 18; a test holds Atlas's
+  own to them). The context grants only what the manifest
   declares: an undeclared secret, setting or channel raises. **The contract only grows**: nothing
   removed or renamed, new parameters optional and keyword-only, a breaking change
   kept working with a warning for two versions; a plugin written for a newer SDK is refused.
@@ -2573,7 +2573,7 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
   alphabet without look-alikes and their message is dropped; the user approves it on the Plugins
   screen or with `atlas pairing approve`, and they send again. Codes last an hour, at most 3 wait
   per channel.
-- **Telegram** (`atlas/plugins/bundled/telegram`): long polling, the
+- **Telegram** (`plugins/telegram`): long polling, the
   backlog dropped at start, private chats and text only, each interim text as it comes and the
   reply at the end, with the typing notice meanwhile (The turn on screen). Two choices of Atlas's own: the Bot API over `httpx2` instead of
   python-telegram-bot, since that library's retries have to be fought (the 409 loop,
@@ -2594,13 +2594,13 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
   Atlas (decided with the user). The server finds the executors of the plugins that are on at
   every start (waiting 5 seconds, so the first conversation sees them) and whenever one is turned
   on or off, and offers only those installed in a version their plugin drives. Claude Code is the
-  first (`atlas/plugins/bundled/claude-code`), moved out of the core with its behavior of step 13
+  first (`plugins/claude-code`), moved out of the core with its behavior of step 13
   kept: its `program` setting replaced `[executors] claude_code`, which `config.toml` now refuses
-  with the way there. Codex is the second (`atlas/plugins/bundled/codex`, step 16o: Codex,
-  above), the Gemini CLI the third (`atlas/plugins/bundled/gemini-cli`, step 16p: Gemini CLI,
+  with the way there. Codex is the second (`plugins/codex`, step 16o: Codex,
+  above), the Gemini CLI the third (`plugins/gemini-cli`, step 16p: Gemini CLI,
   above), over the SDK's ACP client (`atlas.plugins.acp`, version 18), which came with it (decided
   with the user on 20/10/2026, when Hermes, its first user until then, moved after Codex, the
-  Gemini CLI and DeepSeek); DeepSeek's harness the fourth (`atlas/plugins/bundled/deepseek`,
+  Gemini CLI and DeepSeek); DeepSeek's harness the fourth (`plugins/deepseek`,
   step 16q: DeepSeek, above), over the same client.
 - **The workbench** (step 16c; `atlas.assistant.workbench`, the app's `workbench.tsx`): one panel on
   the right, the same in every conversation, collapsed while no instance works or waits. One card
@@ -3054,7 +3054,7 @@ the user: the voice conversation is to be the best there is, paid).
   runs out leaves the note, logged. **Atlas's own, marked:** an image is described only as a
   turn starts, but a voice note sent while a turn runs is common on a phone, so a steer with a file
   to read is read first and delivered then, steering the turn or starting the next one.
-- **The voice plugin's reader** (`atlas/plugins/bundled/voice`): OpenAI's
+- **The voice plugin's reader** (`plugins/voice`): OpenAI's
   `audio/transcriptions` with `gpt-transcribe` (released 05/08/2026, US$ 0.0045 a minute), the
   file sent as it is (Telegram's OGG voice notes, MP3, M4A, WAV and WebM up to 25 MB, past
   Atlas's 20 MB for audio). The model and the address are settings.
@@ -3687,6 +3687,30 @@ remembering a word, the first account's file the same byte for byte and a new se
 other (that `--fork-session` writes the copy in the other account's folder is what the fake
 assumes, and the real one must show); the way back; the missing tool's warning; the leaks above;
 archive and delete on the other account, the first untouched.
+
+### Atlas's own plugins out of the core — decided 2026-11-03
+
+Step 26, the core's pruning: the core is the agent's own capabilities, and a link to a service, an
+account or a given program is a plugin. Atlas's own plugins (the four executors, the voice,
+Telegram and the accounts) leave the package for the repository's `plugins/` folder, kept beside
+it and tested in the same CI (pyright strict, the coverage floor and a test of their imports
+included). Decided with the user; how, our choice, marked:
+
+- **Installed by the home, run from the installation.** The installation is a checkout and the
+  image copies the folder: installing one (turning it on does it) records it in the home's
+  `plugins/` as `official:<name>` (`atlas.plugins.official`), and Atlas runs it from the
+  installation's folder. Our choice, marked: a copy in the home would be a second version to keep
+  in step and give nothing the record does not. Until then it is listed from the installation's
+  folder, off and not installed, as the shipped plugins were; the executors tab and the first run
+  look at its harness with its own code, which is Atlas's at the version that runs (the store's
+  `bins`, from the sequence's review, stay for others' items).
+- **It updates with Atlas** (the sequence's review, item 5), with nothing to copy: its files are
+  the installation's. One whose declaration changed waits for consent, as any plugin. A home that
+  used one when Atlas shipped it inside itself gets it installed by the first start, as it was
+  left; a plugin of the user's of the same name keeps the name.
+- **The marketplace lists them as official**, available until installed; installing one installs
+  it off. Removing one takes its record away and leaves its data; the installation keeps its
+  files.
 
 ### The other accounts in a plugin — decided 2026-11-03
 

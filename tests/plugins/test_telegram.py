@@ -11,10 +11,23 @@ from typing import Any
 import pytest
 
 from atlas.plugins import Inbound, InboundFile, Prompt
-from atlas.plugins.bundled.telegram.bot import Fatal
-from atlas.plugins.bundled.telegram.channel import NOT_READ_TEXT, TOO_BIG_TEXT, TelegramChannel
-from atlas.plugins.bundled.telegram.text import MESSAGE_LIMIT, pieces, to_html, utf16_len
 from fake_telegram import JPEG, TOKEN, FakeTelegram
+from official_support import official_module
+
+# The Telegram plugin Atlas makes (plugins/telegram), imported as Atlas imports it.
+_bot, _channel, _text = (official_module("telegram", name) for name in ("bot", "channel", "text"))
+Fatal = _bot.Fatal
+NOT_READ_TEXT, TOO_BIG_TEXT, TelegramChannel = (
+    _channel.NOT_READ_TEXT,
+    _channel.TOO_BIG_TEXT,
+    _channel.TelegramChannel,
+)
+MESSAGE_LIMIT, pieces, to_html, utf16_len = (
+    _text.MESSAGE_LIMIT,
+    _text.pieces,
+    _text.to_html,
+    _text.utf16_len,
+)
 
 
 class Host:
@@ -50,7 +63,7 @@ async def _until(check: Callable[[], bool], seconds: float = 5) -> None:
 
 
 def _running(
-    telegram: FakeTelegram, host: Host, scenario: Callable[[TelegramChannel], Awaitable[None]]
+    telegram: FakeTelegram, host: Host, scenario: Callable[[Any], Awaitable[None]]
 ) -> None:
     async def main() -> None:
         channel = TelegramChannel(TOKEN, telegram.url, sleep=0.001)
@@ -113,7 +126,7 @@ def test_it_starts_by_dropping_what_waited_and_hands_on_private_texts_only(
 ) -> None:
     host = Host()
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         await _until(lambda: bool(telegram.called("getUpdates")))
         telegram.say(100, "hello there", name="Ana")
         telegram.say(200, "in a group", chat_type="group")
@@ -133,7 +146,7 @@ def test_files_are_downloaded_and_handed_on_with_their_caption(telegram: FakeTel
     host = Host()
     pdf = b"%PDF-1.7\n" + b"x" * 300
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         await _until(lambda: bool(telegram.called("getUpdates")))
         telegram.send_photo(100, JPEG + b"the large one", caption="What is this?")
         telegram.send_file(100, "document", pdf, name="contrato.pdf")
@@ -155,7 +168,7 @@ def test_files_are_downloaded_and_handed_on_with_their_caption(telegram: FakeTel
 def test_a_file_past_what_telegram_lets_a_bot_download_is_said_so(telegram: FakeTelegram) -> None:
     host = Host()
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         await _until(lambda: bool(telegram.called("getUpdates")))
         telegram.send_file(100, "video", b"small", name="aula.mp4", size=30 * 1024 * 1024)
         telegram.send_file(100, "document", b"x", name="notas.pdf", caption="Read it", size=1)
@@ -178,7 +191,7 @@ def test_a_reply_goes_as_html_and_again_plain_when_telegram_cannot_read_it(
     host = Host()
     telegram.refuse_html = 1
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         await channel.send("100", "**Done**: 2 < 3")
         await channel.send("100", "**Again**")
 
@@ -195,7 +208,7 @@ def test_a_flood_wait_is_waited_and_a_long_one_fails_the_send(telegram: FakeTele
     host = Host()
     telegram.fail("sendMessage", 429, "Too Many Requests: retry after 2", retry_after=2)
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         await channel.send("100", "first")
         telegram.fail("sendMessage", 429, "Too Many Requests: retry after 5000", retry_after=5000)
         with pytest.raises(Exception, match="429"):
@@ -211,7 +224,7 @@ def test_buttons_carry_the_prompt_and_a_press_goes_to_atlas_which_may_refuse_it(
 ) -> None:
     host = Host()
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         prompt = Prompt("srq-abc123", "Run `git reset`?", ("Allow once", "Deny"))
         await channel.ask("100", prompt)
         assert telegram.buttons(100) == [["p:srq-abc123:0", "p:srq-abc123:1"]]
@@ -239,7 +252,7 @@ def test_buttons_carry_the_prompt_and_a_press_goes_to_atlas_which_may_refuse_it(
 def test_a_free_question_says_a_typed_answer_works(telegram: FakeTelegram) -> None:
     host = Host()
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         await channel.ask("100", Prompt("srq-q.0", "Which city?", ("Lisbon",), typed=True))
 
     _running(telegram, host, scenario)
@@ -249,7 +262,7 @@ def test_a_free_question_says_a_typed_answer_works(telegram: FakeTelegram) -> No
 def test_working_shows_typing_until_the_turn_ends(telegram: FakeTelegram) -> None:
     host = Host()
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         await channel.working("100", True)
         await _until(lambda: bool(telegram.called("sendChatAction")))
         await channel.working("100", False)
@@ -294,7 +307,7 @@ def test_a_conflict_that_passes_and_a_flood_on_polling_are_ridden_out(
     telegram.fail("getUpdates", 409, "Conflict")
     telegram.fail("getUpdates", 429, "Too Many Requests", retry_after=1)
 
-    async def scenario(channel: TelegramChannel) -> None:
+    async def scenario(channel: Any) -> None:
         telegram.say(100, "still here")
         await _until(lambda: len(host.received) == 1)
 

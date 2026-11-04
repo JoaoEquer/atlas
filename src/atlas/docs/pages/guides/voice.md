@@ -5,7 +5,7 @@ sidebar:
   order: 9
 ---
 
-The Voice plugin, which ships with Atlas, lets you speak to Atlas and to the rest of your computer.
+The Voice plugin, one of Atlas's own (installed when you turn it on), lets you speak to Atlas and to the rest of your computer.
 Everything goes through one provider, OpenAI or Gemini, on the key Atlas's provider of that name
 already uses: `OPENAI_API_KEY` or `GEMINI_API_KEY`.
 

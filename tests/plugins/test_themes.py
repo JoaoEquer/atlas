@@ -38,7 +38,7 @@ def _theme_plugin(root: Path, theme: dict[str, Any] | str = SAND, api: int = 24)
 def plugins(home: Home, vault: Vault, tmp_path: Path) -> Plugins:
     database = Database(home.database_file)
     migrate(database, SCHEMAS)
-    return Plugins(home, database, vault, bundled_folder=tmp_path / "bundled")
+    return Plugins(home, database, vault, official_folder=tmp_path / "bundled")
 
 
 def test_a_theme_is_read_as_data() -> None:

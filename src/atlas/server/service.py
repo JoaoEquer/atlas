@@ -163,6 +163,7 @@ from atlas.plugins import (
     Plugins,
     PluginView,
     UpdateSource,
+    refresh_official,
 )
 from atlas.plugins import Permission as ExecutorPermission
 from atlas.plugins import Question as ExecutorQuestion
@@ -765,6 +766,11 @@ class Gateway:
         if abandoned:
             _logger.warning("Runs a previous Atlas left running are now unknown: %d.", abandoned)
         self._housekeeping = asyncio.create_task(self._keep_house())
+        # Atlas's own plugins come to this version first, and those used before step 26, when
+        # Atlas shipped them inside itself, are installed (atlas.plugins.official).
+        refreshed = await asyncio.to_thread(refresh_official, self.plugins)
+        if refreshed:
+            _logger.info("Atlas's own plugins were put in place: %s.", ", ".join(refreshed))
         # In the background: a plugin may take its deadline to load, and the clients need not wait.
         self._channels_start = asyncio.create_task(self.channels.reconcile())
         self._plugins_start = asyncio.create_task(self.load_plugins())

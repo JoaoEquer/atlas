@@ -52,7 +52,7 @@ jobs:
       - name: Boundaries
         run: uv run lint-imports
       - name: Dependencies
-        run: uv run deptry src
+        run: uv run deptry src plugins
       - name: Tests
         run: uv run pytest
 
