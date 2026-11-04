@@ -9,6 +9,7 @@ from atlas.skills.bundled import (
     files_digest,
     read_manifest,
     reset_bundled,
+    retire_bundled,
     skill_files,
     sync_bundled,
 )
@@ -121,6 +122,7 @@ __all__ = [
     "read_manifest",
     "rendered",
     "reset_bundled",
+    "retire_bundled",
     "reviewing",
     "share",
     "skill_file",

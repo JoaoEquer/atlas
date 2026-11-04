@@ -10,7 +10,6 @@ import {
   $keyLater,
   $keyNotice,
   $keyProviders,
-  $logins,
   $modelOptions,
   $pairings,
   $pluginError,
@@ -23,11 +22,8 @@ import {
   dismissKeyNotice,
   enablePlugin,
   keyScreenShown,
-  logInToGithub,
   newConversation,
-  refreshLogins,
   refreshPlugins,
-  send,
   showPluginConsent,
   storePluginSecret
 } from '@/store/app'
@@ -458,125 +454,69 @@ function TelegramStep({ onDone }: { onDone: (mark: Mark) => void }) {
   )
 }
 
-/** Connections: GitHub through gh's own login in the browser, and Gmail and Calendar through gws,
- * set up with Atlas in a conversation; each says who it is logged in as. */
+/** The plugins of Atlas's that connect a service (step 26: GitHub and Google Workspace, the core's
+ * until then), in the order the step shows them. */
+const CONNECTIONS = ['github', 'google']
+
+/** Connections: GitHub and Google Workspace, each a plugin of Atlas's. Once on, its own part shows
+ * here (`connection`); until then it is offered with what it declares, and turned on in place. */
 function ConnectionsStep({ onDone }: { onDone: (mark: Mark) => void }) {
   const home = useStore($home)
-  const logins = useStore($logins)
-  const noKey = keyScreenShown(useStore($modelOptions), false, null)
-  const [code, setCode] = useState<null | { code: string; url: string }>(null)
-  const [error, setError] = useState<null | string>(null)
-  const github = logins?.find(row => row.service === 'github')
-  const google = logins?.find(row => row.service === 'google')
+  const plugins = useStore($plugins)
+  const parts = inArea(useStore($contributions), 'connection')
+  const offered = CONNECTIONS.flatMap(name => plugins.filter(row => row.name === name && !row.enabled))
+  const [turning, setTurning] = useState<null | string>(null)
 
   useEffect(() => {
-    void refreshLogins()
+    refreshPlugins()
   }, [])
-
-  const connectGithub = async () => {
-    setError(null)
-    const started = await logInToGithub()
-    if ('error' in started) {
-      setError(started.error)
-    } else {
-      setCode(started)
-    }
-  }
 
   return (
     <>
-      <section className="space-y-3 rounded-lg border border-border p-4" data-testid="first-run-github">
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{t.firstRun.github}</p>
-            <p className="text-xs text-muted-foreground">{t.firstRun.githubIntro}</p>
-          </div>
-          {github?.logged_in ? (
-            <Connected account={github.account} service="github" />
-          ) : (
-            github?.installed && (
-              <button
-                className={PRIMARY}
-                data-testid="first-run-github-connect"
-                onClick={() => void connectGithub()}
-                type="button"
-              >
-                {t.firstRun.connect}
-              </button>
-            )
-          )}
-        </div>
-        {github && !github.installed && (
-          <p className="text-sm text-muted-foreground" data-testid="first-run-github-missing">
-            {t.firstRun.githubMissing}
-          </p>
-        )}
-        {code && !github?.logged_in && (
-          <div className="space-y-1 rounded-md bg-subtle p-3 text-sm">
-            <p>{t.firstRun.githubCode}</p>
-            <p className="font-mono text-lg tracking-widest select-all" data-testid="first-run-github-code">
-              {code.code}
-            </p>
-            <button
-              className="text-xs underline underline-offset-4"
-              onClick={() => {
-                window.open(code.url)
-              }}
-              type="button"
-            >
-              {t.firstRun.githubPage}
-            </button>
-          </div>
-        )}
-        {error && <InlineError>{error}</InlineError>}
-      </section>
-      <section className="space-y-3 rounded-lg border border-border p-4" data-testid="first-run-google">
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{t.firstRun.google}</p>
-            <p className="text-xs text-muted-foreground">{t.firstRun.googleIntro}</p>
-          </div>
-          {google?.logged_in ? (
-            <Connected account={google.account} service="google" />
-          ) : (
+      <PlaceContributions
+        area="connection"
+        place={{
+          away: () => {
+            stepAway(home)
+            newConversation()
+          }
+        }}
+      />
+      {offered.map(row => (
+        <section
+          className="space-y-2 rounded-lg border border-border p-4"
+          data-testid={`first-run-offer-${row.name}`}
+          key={row.name}
+        >
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{row.name === 'github' ? t.firstRun.github : t.firstRun.google}</p>
+              <p className="text-xs text-muted-foreground">{row.description}</p>
+            </div>
             <button
               className={PRIMARY}
-              data-testid="first-run-google-set-up"
-              disabled={noKey}
+              data-testid="first-run-turn-on"
+              disabled={turning !== null}
               onClick={() => {
-                // The agent leads gws's setup in a conversation; the first run waits on this step,
-                // a band away, and reads the logins again when it shows.
-                stepAway(home)
-                newConversation()
-                void send(t.firstRun.googlePrompt)
+                setTurning(row.name)
+                void enablePlugin(row).finally(() => {
+                  setTurning(null)
+                })
               }}
               type="button"
             >
-              {t.firstRun.googleSetUp}
+              {t.firstRun.turnOn}
             </button>
-          )}
-        </div>
-        {noKey && !google?.logged_in && <p className="text-xs text-muted-foreground">{t.firstRun.googleNoKey}</p>}
-      </section>
-      <button
-        className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        data-testid="first-run-check-again"
-        onClick={() => void refreshLogins()}
-        type="button"
-      >
-        {t.firstRun.checkAgain}
-      </button>
-      <Next done={Boolean(github?.logged_in || google?.logged_in)} onDone={onDone} />
+          </div>
+          <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
+            {row.declaration.map(line => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
+      <Next done={parts.length > 0} onDone={onDone} />
     </>
-  )
-}
-
-function Connected({ account, service }: { account: string; service: string }) {
-  return (
-    <span className="flex shrink-0 items-center gap-1 text-sm" data-testid={`first-run-${service}-connected`}>
-      <Check aria-hidden className="text-primary" size={14} stroke={2.25} />
-      {t.firstRun.connectedAs(account)}
-    </span>
   )
 }
 

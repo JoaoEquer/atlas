@@ -130,7 +130,6 @@ from atlas.installation import (
     compose_progress,
 )
 from atlas.jobs import AccountStore, JobsError, Routine, Run, RunStatus, Scheduler
-from atlas.logins import LoginsError, ProgramLogins
 from atlas.marketplace import Kind as MarketKind
 from atlas.marketplace import Marketplace, MarketplaceError, MarketplaceStore
 from atlas.marketplace import Page as MarketPage
@@ -163,6 +162,7 @@ from atlas.plugins import (
     Plugins,
     PluginView,
     UpdateSource,
+    official_plugins,
     refresh_official,
 )
 from atlas.plugins import Permission as ExecutorPermission
@@ -250,7 +250,6 @@ from atlas.server.protocol import (
     ExecutorUsageRow,
     FolderGit,
     FolderRef,
-    GithubCode,
     HomeBackupParams,
     HomeCreateParams,
     HomeImportParams,
@@ -311,8 +310,6 @@ from atlas.server.protocol import (
     PreviewPayload,
     PreviewRead,
     PreviewReadParams,
-    ProgramLoginList,
-    ProgramLoginRow,
     ProposalApproved,
     ProposalChange,
     ProposalCount,
@@ -413,7 +410,7 @@ from atlas.server.updates import LOOK_SECONDS, Newest, UpdateError, newer, newes
 from atlas.server.updates import command as update_command
 from atlas.server.updates import run as run_update
 from atlas.server.updates import shown as shown_command
-from atlas.skills import SkillLibrary, SkillUsage, changed, read_manifest
+from atlas.skills import SkillLibrary, SkillUsage, changed, read_manifest, retire_bundled
 from atlas.terminals import TerminalError, Terminals
 from atlas.tools import (
     SECRET_REQUEST_SECONDS,
@@ -511,12 +508,8 @@ class Gateway:
         environ: Mapping[str, str] | None = None,
         host_updater: HostChannel | None = None,
         update_transport: httpx2.AsyncBaseTransport | None = None,
-        logins: ProgramLogins | None = None,
     ) -> None:
         self.replay = Replay()
-        #: gh's and gws's logins, for the first run's Connections (step 18d).
-        self.logins = logins or ProgramLogins()
-        self.logins.changed = self.logins_changed
         #: Where each executor's newest version is published and how its install updates, as
         #: its plugin says; the newest version of each, read at most once a day; the transport
         #: those reads take (a test's own).
@@ -644,8 +637,6 @@ class Gateway:
             "pairing.list": self._pairing_list,
             "pairing.approve": self._pairing_approve,
             "pairing.forget": self._pairing_forget,
-            "login.list": self._login_list,
-            "login.github": self._login_github,
             "conversation.list": self._list,
             "conversation.search": self._search,
             "conversation.rename": self._rename,
@@ -771,6 +762,7 @@ class Gateway:
         refreshed = await asyncio.to_thread(refresh_official, self.plugins)
         if refreshed:
             _logger.info("Atlas's own plugins were put in place: %s.", ", ".join(refreshed))
+        await asyncio.to_thread(self._skills_to_plugins)
         # In the background: a plugin may take its deadline to load, and the clients need not wait.
         self._channels_start = asyncio.create_task(self.channels.reconcile())
         self._plugins_start = asyncio.create_task(self.load_plugins())
@@ -938,6 +930,34 @@ class Gateway:
         if before != (detections, plugins, offered):
             self.plugins_changed()
 
+    def _skills_to_plugins(self) -> None:
+        """Skills Atlas shipped that a plugin of Atlas's brings now (step 26: `github` and the
+        `gws-*` ones): a home that had them gets that plugin installed and turned on, as the
+        update's own doing, since the skills were on for it, and their copies leave the library,
+        archived when untouched, the user's own when changed. A plugin the user decided on is left
+        as they decided."""
+        library = SkillLibrary(self._home.skills_folder)
+        shipped = read_manifest(library.folder)
+        decided = self.plugins.store.states()
+        for name, found in official_plugins().items():
+            manifest = found.manifest
+            had: set[str] = set(manifest.skills) & shipped.keys() if manifest is not None else set()
+            if not had or manifest is None:
+                continue
+            if name not in decided:
+                try:
+                    self.plugins.enable(name, manifest.fingerprint())
+                except PluginError as error:
+                    _logger.warning(
+                        "A plugin that brings Atlas's skills was not turned on: %s", error
+                    )
+                    continue
+            archived, kept = retire_bundled(library, had)
+            _logger.info(
+                "Skills Atlas shipped come from a plugin now.",
+                extra={"plugin": name, "archived": archived, "kept": kept},
+            )
+
     def _move_accounts(self) -> None:
         """Once, the other accounts Atlas kept itself until step 22 go to the accounts plugin,
         which is turned on for whoever had any, as the update's own doing (decided with the user
@@ -1061,7 +1081,6 @@ class Gateway:
             if starting is not None:
                 await asyncio.gather(starting, return_exceptions=True)
         await self.plugins.stop()
-        await self.logins.close()
         await asyncio.to_thread(self.terminals.close_all)
         await self.channels.close()
         await self.scheduler.close()
@@ -1958,7 +1977,9 @@ class Gateway:
         self, connection: Connection, params: PluginCallParams
     ) -> PluginCallResult:
         """A plugin's screen calls its Python (step 16m): only a call its manifest declares, of a
-        plugin that is on; what it raises reaches the screen as the error's message."""
+        plugin that is on; what it raises reaches the screen as the error's message. The owner's
+        app only, never a channel's bridge: a plugin's call runs with the user's permissions."""
+        self._owner(connection)
         found = self._calls.get((params.plugin, params.name))
         if found is None:
             raise ProtocolError(
@@ -2270,30 +2291,6 @@ class Gateway:
         await self._plugin_call(self.plugins.forget, params.channel, params.user)
         self.plugins_changed()
         return Empty()
-
-    # -- the programs' logins, for the first run's Connections (step 18d) -----------------------
-
-    async def _login_list(self, connection: Connection, params: Empty) -> ProgramLoginList:
-        self._owner(connection)
-        return ProgramLoginList(
-            [
-                ProgramLoginRow(row.service, row.program, row.installed, row.logged_in, row.account)
-                for row in await self.logins.read()
-            ]
-        )
-
-    async def _login_github(self, connection: Connection, params: Empty) -> GithubCode:
-        self._owner(connection)
-        try:
-            code = await self.logins.log_in_github()
-        except LoginsError as error:
-            raise ProtocolError(INVALID_PARAMS, str(error)) from error
-        return GithubCode(code.code, code.url)
-
-    def logins_changed(self) -> None:
-        frame = self._event_frame("logins.changed", Empty())
-        for connection in self._connections:
-            connection.put(frame)
 
     # -- what a channel's bridge uses (atlas.server.channels) -------------------------------------
 

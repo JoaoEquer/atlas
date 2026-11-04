@@ -123,7 +123,7 @@ def test_a_fresh_home_is_built_served_and_left_as_declared(tmp_path: Path) -> No
     ) == ("home_migrations",)
 
     # The skills Atlas ships were copied into the library when it started.
-    assert (home / "skills" / "gws-gmail" / "SKILL.md").is_file()
+    assert (home / "skills" / "write-plugin" / "SKILL.md").is_file()
     assert (home / "skills" / ".bundled_manifest").is_file()
 
     # Everything at the top of the home is declared in its boundary.

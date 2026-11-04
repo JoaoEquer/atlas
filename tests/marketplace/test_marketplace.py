@@ -285,7 +285,8 @@ def test_with_nothing_read_and_github_down_the_listing_says_why(
     assert shipped["claude-code"].kind is Kind.EXECUTOR
     assert shipped["claude-code"].title == "Claude Code"
     assert shipped["telegram"].kind is Kind.PLUGIN
-    assert shipped["github"].kind is Kind.SKILL
+    assert shipped["write-plugin"].kind is Kind.SKILL
+    assert shipped["github"].kind is Kind.PLUGIN, "a plugin of Atlas's since step 26"
     assert {row.tier for row in shipped.values()} == {Tier.OFFICIAL}
 
 
@@ -422,10 +423,10 @@ def test_a_skill_atlas_ships_deleted_by_the_user_is_put_back_by_installing_it(
 ) -> None:
     marketplace(tmp_path, github)
     market = _marketplace(home, github, plugins, clock)
-    assert _row(market, "github").state is State.AVAILABLE
-    market.install("github")
-    assert (home.skills_folder / "github" / "SKILL.md").is_file()
-    assert _row(market, "github").state is State.INSTALLED
+    assert _row(market, "write-plugin").state is State.AVAILABLE
+    market.install("write-plugin")
+    assert (home.skills_folder / "write-plugin" / "SKILL.md").is_file()
+    assert _row(market, "write-plugin").state is State.INSTALLED
 
 
 # -- MCP servers ----------------------------------------------------------------------------------
@@ -703,7 +704,7 @@ def test_the_terminal_lists_shows_installs_updates_and_removes(
     assert "Skills" in said
     assert "pdf 1.0.0" not in said
     assert "  pdf  Pdf by someone  (available)" in said
-    assert "Gmail: send email, read it and keep the mailbox in order." in said
+    assert "Write an Atlas plugin with the user" in said
     assert main(["marketplace", "show", "pdf"], dict(environ)) == 0
     assert "needs the program nowhere-tool: missing" in capsys.readouterr().out
     assert main(["marketplace", "install", "pdf"], dict(environ)) == 0

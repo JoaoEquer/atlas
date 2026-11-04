@@ -423,22 +423,22 @@ def test_the_skills_atlas_ships_are_listed_as_atlass_and_reset_puts_one_back(
 ) -> None:
     home = tmp_path
     sync_bundled(SkillLibrary(home / "skills"))
-    send = home / "skills" / "gws-gmail-send" / "SKILL.md"
+    send = home / "skills" / "write-plugin" / "SKILL.md"
     shipped = send.read_text(encoding="utf-8")
     send.write_text(shipped + "\nAlways sign as Atlas.\n", encoding="utf-8")
 
     assert _run(home, "skills", "list") == 0
     listed = capsys.readouterr().out
-    assert _run(home, "skills", "reset", "gws-gmail-send") == 0
+    assert _run(home, "skills", "reset", "write-plugin") == 0
     assert _run(home, "skills", "reset", "nope") == 1
     said = capsys.readouterr()
 
-    assert "gws-gmail  library  by Atlas  0 uses\n" in listed
-    assert "gws-gmail-send  library  by Atlas, changed since  0 uses\n" in listed
+    assert "atlas  library  by Atlas  0 uses\n" in listed
+    assert "write-plugin  library  by Atlas, changed since  0 uses\n" in listed
     assert send.read_text(encoding="utf-8") == shipped
-    assert "Put gws-gmail-send back as Atlas ships it." in said.out
+    assert "Put write-plugin back as Atlas ships it." in said.out
     assert "'nope' is not a skill Atlas ships" in said.err
-    assert _run(home, "skills", "revert", "gws-gmail-send") == 0  # the change is kept
+    assert _run(home, "skills", "revert", "write-plugin") == 0  # the change is kept
     assert "Always sign as Atlas." in send.read_text(encoding="utf-8")
 
 

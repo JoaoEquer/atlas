@@ -109,15 +109,19 @@ test("the Connections step logs GitHub in through gh's code, and sets Google up 
     }
   })
 
+  // Each is a plugin of Atlas's (step 26), offered with what it declares and turned on here.
+  await page.getByTestId('first-run-offer-github').getByTestId('first-run-turn-on').click()
+  await page.getByTestId('first-run-offer-google').getByTestId('first-run-turn-on').click()
+
   // GitHub: gh's code shown, its page opened, and Connected once the browser said yes.
   const github = page.getByTestId('first-run-github')
-  await github.getByTestId('first-run-github-connect').click()
+  await github.getByTestId('first-run-github-connect').click(STARTED)
   await expect(github.getByTestId('first-run-github-code')).toHaveText('AB12-CD34', STARTED)
   expect(await page.evaluate(() => (window as unknown as { opened: string[] }).opened)).toEqual([
     'https://github.com/login/device'
   ])
   writeFileSync(path.join(state, 'gh-approve'), 'example-user')
-  await expect(github.getByTestId('first-run-github-connected')).toHaveText('Connected as example-user', STARTED)
+  await expect(github.getByTestId('first-run-github-connected')).toContainText('Connected as example-user', STARTED)
   await expect(page.getByTestId('first-run-continue')).toBeEnabled()
 
   // Google: a conversation where Atlas leads gws's setup, the step a band away.
@@ -132,6 +136,6 @@ test("the Connections step logs GitHub in through gh's code, and sets Google up 
   writeFileSync(path.join(state, 'gws-login'), 'ana@example.com')
   await page.getByTestId('first-run-back').click()
   await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'connections')
-  await expect(page.getByTestId('first-run-google-connected')).toHaveText('Connected as ana@example.com', STARTED)
+  await expect(page.getByTestId('first-run-google-connected')).toContainText('Connected as ana@example.com', STARTED)
   await expect(page.getByTestId('first-run-band')).toHaveCount(0)
 })

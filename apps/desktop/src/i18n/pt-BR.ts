@@ -340,22 +340,11 @@ export const ptBR: Override<Messages> = {
     botRunning:
       'Seu bot está ligado. Mande uma mensagem a ele no Telegram: ele responde com um código, e você aparece aqui.',
     botStarting: 'Ligando o seu bot…',
-    checkAgain: 'Conferir de novo',
     connect: 'Conectar',
-    connectedAs: (account: string) => (account ? `Conectado como ${account}` : 'Conectado'),
     continue: 'Continuar',
     github: 'GitHub',
-    githubCode: 'Digite este código na página que abriu no navegador:',
-    githubIntro: 'Issues, pull requests e repositórios, pelo gh, com o login da sua conta.',
-    githubMissing: 'O gh não está nesta máquina: rode o instalador de novo, ou instale-o por cli.github.com.',
-    githubPage: 'Abrir a página de novo',
     google: 'Gmail e Agenda',
-    googleIntro: 'O Atlas configura o gws com você numa conversa: o projeto no Google, o login e a conferência.',
-    googleNoKey: 'Precisa de um modelo para conversar: conecte um no passo 1 antes.',
-    googlePrompt:
-      'Conecte o meu Gmail e o meu Google Agenda ao Atlas pelo gws. Comece pelo `gws auth status`, instale o gws ' +
-      'se faltar, e me guie na configuração um passo de cada vez.',
-    googleSetUp: 'Configurar com o Atlas',
+    turnOn: 'Ligar',
     letIn: 'Deixar entrar',
     letInDone: (name: string) => `${name} entrou: fale com o Atlas pelo Telegram.`,
     letInWaits: (name: string, code: string) => `${name} espera com ${code}`,

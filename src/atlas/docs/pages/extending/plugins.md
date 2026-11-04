@@ -645,6 +645,9 @@ export default {
   it is: `{ executor, folder, instance, conversation }` for a session (`instance` and
   `conversation` are `null` before it starts), `{ executor, base, account, title }` for an
   executor. The accounts plugin puts its pill and its accounts there.
+- Screen version 5 adds `area: 'connection'`, a part of the first run's Connections step, given
+  `{ away }`: calling it leaves the first run waiting a band away, in a new conversation, for a
+  setup Atlas leads there. The GitHub and Google Workspace plugins draw their connections there.
 - `host.state.workbench` (the executors and their instances) and `host.state.accounts` (each
   harness's accounts, once read) are the app's, `host.readAccounts(executor)` reads an executor's
   accounts again, and `host.sessionAccount` moves the session on screen to another account of its
@@ -763,7 +766,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 29), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
-(`SCREEN_API` 4). Each name below has its section above. A test keeps this list whole: a name the
+(`SCREEN_API` 5). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
 
 **`register(ctx)` gets a `PluginContext`:**
@@ -845,5 +848,5 @@ sees the system's look until it is on again.
 ## Not yet
 
 Atlas lists a plugin that brings any of these, and refuses to turn it on: LSP servers, output
-styles and workflows. A screen has a page, a panel, a button in the box and a part of an
-executor's session and sidebar place; a status bar and a palette are not in the app.
+styles and workflows. A screen has a page, a panel, a button in the box, a part of an
+executor's session and sidebar place, and one of the first run's Connections; a status bar and a palette are not in the app.

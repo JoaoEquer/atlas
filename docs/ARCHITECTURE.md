@@ -542,9 +542,11 @@ Skills are folders in Claude Code's format (Tools, above) that learn from use.
   or the review changed is theirs and left alone, one the user deleted is not copied again, and a
   library skill of the same name is kept. Every write goes through the library, so an update or
   `atlas skills reset` (back to what Atlas ships) keeps the previous files as a version. The first
-  ones are the programs' skills of step 14b: `github` on `gh`, and the `gws` project's own
-  Gmail and Calendar skills (Apache-2.0). `write-plugin` (step 16t) writes a plugin with the
-  user, reading the plugin guide copied into its `references/`.
+  ones were the programs' skills of step 14b, `github` on `gh` and the `gws` project's own Gmail
+  and Calendar skills (Apache-2.0); since step 26 they are the GitHub and Google Workspace
+  plugins' (Atlas's own plugins out of the core, below), and Atlas ships `atlas` and
+  `write-plugin` (step 16t, which writes a plugin with the user, reading the plugin guide copied
+  into its `references/`).
 - **The curator** makes no model call: at most every 7 days, after 2 idle hours, the first pass deferred one interval, it
   archives a `review` skill nobody loaded or changed for 30 days, counted from its creation when
   it never was (a load by the review counts). A skill a routine names will count
@@ -3708,6 +3710,16 @@ included). Decided with the user; how, our choice, marked:
   the installation's. One whose declaration changed waits for consent, as any plugin. A home that
   used one when Atlas shipped it inside itself gets it installed by the first start, as it was
   left; a plugin of the user's of the same name keeps the name.
+- **GitHub and Google Workspace become plugins too**, `github` and `google`: the skills of step
+  14b (`github:github`, `google:gws-*`), and the first run's Connections, which their screens draw
+  (screen version 5, `connection`) over their calls (`status`, and `gh`'s login in the browser);
+  `atlas.logins` and its methods leave the core. The defenses stay in it, whatever brought the
+  program (the sequence's review): the outward actions the gate asks about
+  (`atlas.trust.outward`), their output marked as outside text, and their logins out of the
+  backup. A home that had the skills gets both plugins installed and on by its first start, its
+  untouched copies archived and a changed one left as the user's. Our choice, marked: the
+  installer still brings `gh` until its next release, which needs the published installer
+  republished (the user's).
 - **The marketplace lists them as official**, available until installed; installing one installs
   it off. Removing one takes its record away and leaves its data; the installation keeps its
   files.

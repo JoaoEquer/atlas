@@ -685,26 +685,6 @@ export interface PairingForgetParams {
   channel: string
   user: string
 }
-export interface ProgramLoginList {
-  logins: ProgramLoginRow[]
-}
-/** A service Atlas reaches through a program logged in on the server's machine (step 18d). */
-export interface ProgramLoginRow {
-  /** `github` or `google`. */
-  service: string
-  /** `gh` or `gws`. */
-  program: string
-  /** The program is on the server's PATH. */
-  installed: boolean
-  logged_in: boolean
-  /** Who it is logged in as, when the program says: the GitHub login, Google's e-mail. */
-  account: string
-}
-/** GitHub's one-time code, typed on `url` in the browser while `gh` waits. */
-export interface GithubCode {
-  code: string
-  url: string
-}
 export interface ProviderConnectParams {
   provider: string
   /** The key the user pasted. It is never sent back. */
@@ -1759,10 +1739,6 @@ export interface RpcMethods {
   'home.picture': { params: Empty; result: HomePicture }
   /** Keep a square PNG as the home's picture, or take it away with `null`; a backup carries it. */
   'home.set_picture': { params: HomePicture; result: HomePicture }
-  /** Start gh's login in the browser and give the one-time code to type there; logins.changed tells when it ends. The owner's app only. */
-  'login.github': { params: Empty; result: GithubCode }
-  /** Whether gh and gws are on the server's machine and logged in, as their own `auth status` says. The owner's app only. */
-  'login.list': { params: Empty; result: ProgramLoginList }
   /** Install an item, with the MCP servers a skill needs; a plugin arrives off, for the consent of plugin.enable. */
   'marketplace.install': { params: MarketplaceRef; result: MarketplaceDone }
   /** The marketplace (step 16s): what it offers, what Atlas ships and what came from it, read again when the last read is an hour old or when asked. */
@@ -1958,8 +1934,6 @@ export const RPC_METHODS = [
   'home.list',
   'home.picture',
   'home.set_picture',
-  'login.github',
-  'login.list',
   'marketplace.install',
   'marketplace.list',
   'marketplace.page',
@@ -2068,8 +2042,6 @@ export interface EventMap {
   'executor.accounts': AccountsChanged
   /** An executor's plan usage changed: read with executor.usage, or told by its harness as one of its instances worked. */
   'executor.usage': ExecutorUsageRow
-  /** gh's login in the browser ended, well or not; read login.list. */
-  'logins.changed': Empty
   /** An item was installed, updated, removed or retired, from any client or the terminal; read marketplace.list. */
   'marketplace.changed': MarketplaceChanged
   /** An MCP server connected, was left out or stopped, or its tools changed; read mcp.list. */
@@ -2136,7 +2108,6 @@ export const EVENT_NAMES = [
   'conversations.changed',
   'executor.accounts',
   'executor.usage',
-  'logins.changed',
   'marketplace.changed',
   'mcp.changed',
   'message.complete',

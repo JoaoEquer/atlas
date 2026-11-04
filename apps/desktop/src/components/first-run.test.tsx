@@ -7,7 +7,6 @@ import type {
   KeyProvider,
   ModelOptions,
   PluginRow,
-  ProgramLoginRow,
   SessionFolderRow,
   SessionRow
 } from '@/protocol/protocol.generated'
@@ -42,7 +41,6 @@ afterEach(() => {
   app.$plugins.set([])
   app.$pairings.set([])
   app.$pluginError.set(null)
-  app.$logins.set(null)
 })
 
 const NONE: ModelOptions = { default: { effort: null, model: null, picked: false, provider: null }, providers: [] }
@@ -283,8 +281,6 @@ describe('"Bring your work" (step 18d)', () => {
       return Promise.resolve(true)
     })
     const approve = vi.spyOn(app, 'approvePairing').mockResolvedValue(true)
-    // Continue goes on to Connections, which reads the logins.
-    vi.spyOn(app, 'refreshLogins').mockResolvedValue()
     app.$plugins.set([TELEGRAM])
     at('telegram')
     render(<FirstRun />)
@@ -332,58 +328,57 @@ describe('"Bring your work" (step 18d)', () => {
     expect(store).toHaveBeenCalledWith('telegram', 'TELEGRAM_BOT_TOKEN', '456:def')
   })
 
-  const login = (service: string, program: string, change: Partial<ProgramLoginRow> = {}): ProgramLoginRow => ({
-    account: '',
-    installed: true,
-    logged_in: false,
-    program,
-    service,
-    ...change
-  })
+  const GITHUB: PluginRow = {
+    ...TELEGRAM,
+    channels: [],
+    declaration: ['Runs its own Python code inside Atlas', 'Says it reaches: github.com.'],
+    description: 'Work with GitHub through its own program, gh',
+    name: 'github',
+    secrets: []
+  }
 
-  it("connects GitHub through gh's code in the browser, and Google in a conversation with Atlas", async () => {
-    const read = vi.spyOn(app, 'refreshLogins').mockResolvedValue()
-    const github = vi
-      .spyOn(app, 'logInToGithub')
-      .mockResolvedValue({ code: 'AB12-CD34', url: 'https://github.com/login/device' })
+  it('offers GitHub and Google as plugins of Atlas, turned on in place, and shows their parts once on', () => {
+    vi.spyOn(app, 'refreshPlugins').mockReturnValue()
+    const enable = vi.spyOn(app, 'enablePlugin').mockResolvedValue(true)
     const opened = vi.spyOn(app, 'newConversation').mockReturnValue()
-    const sent = vi.spyOn(app, 'send').mockResolvedValue()
-    app.$modelOptions.set(KEYED)
-    app.$logins.set([login('github', 'gh'), login('google', 'gws')])
+    app.$plugins.set([GITHUB, { ...GITHUB, description: 'Gmail and Calendar through gws', name: 'google' }])
     at('connections')
     render(<FirstRun />)
 
-    expect(read).toHaveBeenCalled()
+    const offer = screen.getByTestId('first-run-offer-github')
+    expect(offer.textContent).toContain('Says it reaches: github.com.')
+    expect(screen.getByTestId('first-run-offer-google')).toBeTruthy()
     expect(screen.getByTestId('first-run-continue')).toHaveProperty('disabled', true)
-    fireEvent.click(screen.getByTestId('first-run-github-connect'))
-    expect((await screen.findByTestId('first-run-github-code')).textContent).toBe('AB12-CD34')
-    expect(github).toHaveBeenCalled()
+    fireEvent.click(within(offer).getByTestId('first-run-turn-on'))
+    expect(enable).toHaveBeenCalledWith(GITHUB)
 
-    // The browser said yes: logins.changed read them again.
+    // On, the plugin's own part shows; its setup in a conversation leaves the first run a band away.
+    let undo: () => void = () => undefined
     act(() => {
-      app.$logins.set([login('github', 'gh', { account: 'example-user', logged_in: true }), login('google', 'gws')])
+      app.$plugins.set([{ ...GITHUB, consented: true, enabled: true }])
+      undo = contribute('github', {
+        area: 'connection',
+        id: 'github',
+        render: place => (
+          <button
+            data-testid="plugin-part"
+            onClick={() => {
+              ;(place as { away: () => void }).away()
+            }}
+            type="button"
+          >
+            part
+          </button>
+        ),
+        title: 'GitHub'
+      })
     })
-    expect(screen.getByTestId('first-run-github-connected').textContent).toBe('Connected as example-user')
-    expect(screen.queryByTestId('first-run-github-code')).toBeNull()
+    expect(screen.queryByTestId('first-run-offer-github')).toBeNull()
     expect(screen.getByTestId('first-run-continue')).toHaveProperty('disabled', false)
-
-    // Google: the agent leads gws's setup in a conversation, the first run a band away.
-    fireEvent.click(screen.getByTestId('first-run-google-set-up'))
+    fireEvent.click(screen.getByTestId('plugin-part'))
     expect(opened).toHaveBeenCalled()
-    expect(sent.mock.calls[0]?.[0]).toContain('gws auth status')
     expect(run()).toMatchObject({ away: true, open: true, step: 'connections' })
-  })
-
-  it('offers no GitHub button without gh, and no Google setup without a model', () => {
-    vi.spyOn(app, 'refreshLogins').mockResolvedValue()
-    app.$modelOptions.set(NONE)
-    app.$logins.set([login('github', 'gh', { installed: false }), login('google', 'gws', { installed: false })])
-    at('connections')
-    render(<FirstRun />)
-
-    expect(screen.queryByTestId('first-run-github-connect')).toBeNull()
-    expect(screen.getByTestId('first-run-github-missing')).toBeTruthy()
-    expect(screen.getByTestId('first-run-google-set-up')).toHaveProperty('disabled', true)
+    act(undo)
   })
 
   it('the band over the app brings back the step stepped away from', () => {

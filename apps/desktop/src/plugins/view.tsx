@@ -53,7 +53,13 @@ function Rendered({ item, place }: { item: Registered; place?: Place }) {
 
 /** What the plugins' screens add to a place of an executor (screen version 4): by a session's
  *  box (`session`), or under an executor in the sidebar (`executor`), each given the place. */
-export function PlaceContributions({ area, place }: { area: Extract<Area, 'executor' | 'session'>; place: Place }) {
+export function PlaceContributions({
+  area,
+  place
+}: {
+  area: Extract<Area, 'connection' | 'executor' | 'session'>
+  place: Place
+}) {
   const items = inArea(useStore($contributions), area)
 
   return (

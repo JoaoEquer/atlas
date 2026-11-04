@@ -3,7 +3,8 @@
  * page of the main area with its entry in the sidebar (`page`), or, since screen version 2 (step
  * 17a), a button beside the words of the conversation's box (`box`). Since screen version 4 (step
  * 22), a part of an executor's session, by its box (`session`), and of an executor's place in the
- * sidebar (`executor`), each rendered with the place it shows in. The app keeps its own surfaces
+ * sidebar (`executor`), each rendered with the place it shows in; since version 5 (step 26), a
+ * part of the first run's Connections (`connection`). The app keeps its own surfaces
  * and adds these beside them. Pure stores.
  */
 import { atom } from 'nanostores'
@@ -12,7 +13,7 @@ import type { ReactNode } from 'react'
 import type { InstanceRow } from '@/protocol/protocol.generated'
 
 /** Where a contribution goes. */
-export type Area = 'box' | 'executor' | 'page' | 'panel' | 'session'
+export type Area = 'box' | 'connection' | 'executor' | 'page' | 'panel' | 'session'
 
 /** The executor session a `session` contribution shows by: its executor (on an account,
  *  `claude-code@1a2b3c4d`), its folder, the instance on it (`null` before it starts) and the
@@ -33,8 +34,14 @@ export interface ExecutorPlace {
   title: string
 }
 
-/** Where a contribution is rendered: its place, for `session` and `executor`. */
-export type Place = ExecutorPlace | SessionPlace
+/** The first run's Connections, where a `connection` contribution shows: `away` leaves the first
+ *  run waiting on its step, a band away, in a new conversation, for a setup Atlas leads. */
+export interface ConnectionPlace {
+  away: () => void
+}
+
+/** Where a contribution is rendered: its place, for `session`, `executor` and `connection`. */
+export type Place = ConnectionPlace | ExecutorPlace | SessionPlace
 
 /** A contribution as a plugin writes it: the host names it after the plugin. */
 export interface Contribution {
@@ -74,7 +81,7 @@ export function insertIntoBox(text: string): void {
 /** Why a plugin's screen did not load, by plugin, for the Plugins screen. */
 export const $screenErrors = atom<Record<string, string>>({})
 
-const AREAS: readonly Area[] = ['box', 'executor', 'page', 'panel', 'session']
+const AREAS: readonly Area[] = ['box', 'connection', 'executor', 'page', 'panel', 'session']
 
 /** Add a contribution; returns what takes it away. The same key again replaces it. */
 export function contribute(plugin: string, contribution: Contribution): () => void {

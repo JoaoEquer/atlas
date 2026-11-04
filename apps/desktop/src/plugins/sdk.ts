@@ -30,8 +30,9 @@ import { $pluginPage, insertIntoBox } from './registry'
  *  floating bar (`ctx.shortcut`, `ctx.paste`, `ctx.bar`, step 17b); 4, a part of an executor's
  *  session and of its place in the sidebar (`session`, `executor`), the executors and their
  *  accounts as the app knows them, and the session on screen going on on another account (step
- *  22, the accounts plugin). */
-export const SCREEN_API = 4
+ *  22, the accounts plugin); 5, a part of the first run's Connections (`connection`, step 26: the GitHub and
+ *  Google Workspace plugins). */
+export const SCREEN_API = 5
 
 /** Read a store and follow it, in a component: `useValue(host.state.conversation)`. */
 export const useValue = useStore

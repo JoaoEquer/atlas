@@ -323,6 +323,8 @@ BUNDLED_CONSENTS = {
     "codex": "693d68ea873b613f5d88b99ac5857c884e6da3038e79347efea6430db863703c",
     "deepseek": "4ff0b8f41f12fccd1b19a74dc37c164b1c8328da5bdfaa2f9353689ed3f70154",
     "gemini-cli": "f55aa0469062ac5b19b23f140e261a3126c327f53799daff15e3170e5ce36337",
+    "github": "b916894f2baf121ec0fb6d34a6c8f3a8cc3c2bf358d126e086c1859846c1d194",
+    "google": "d96a07239fb1feaa056b57aa8911d0937718cd2b7c412a8ab67d685104619fca",
     "telegram": "bc11fc8c276abf0e4bcbdce1282af46458728404923f1de826e4e4f1f723578f",
     "voice": "82baa2909c9036c844ba79a196d8807aa03c5ddd3902f2151123d190a785dc66",
 }
@@ -351,7 +353,13 @@ def test_atlas_ships_its_channel_and_executor_plugins_off(home: Home, vault: Vau
     plugins = Plugins(home, database, vault, official_folder=OFFICIAL_FOLDER)
     for name in official_plugins():
         install_official(plugins, name)
-    accounts, claude, codex, deepseek, gemini, telegram, voice = plugins.all()
+    accounts, claude, codex, deepseek, gemini, github, google, telegram, voice = plugins.all()
+    assert (github.name, github.enabled, google.name, google.enabled) == (
+        "github",
+        False,
+        "google",
+        False,
+    ), "GitHub and Google Workspace, plugins of Atlas's since step 26, off"
     assert (accounts.name, accounts.bundled, accounts.enabled) == ("accounts", True, False)
     assert accounts.manifest is not None
     assert accounts.manifest.accounts, "the harnesses' other accounts (step 22)"

@@ -315,12 +315,6 @@ protected_modules = ["atlas.instances.*"]
 allowed_importers = ["atlas.instances"]
 
 [[tool.importlinter.contracts]]
-name = "logins is reached only through its package root"
-type = "protected"
-protected_modules = ["atlas.logins.*"]
-allowed_importers = ["atlas.logins"]
-
-[[tool.importlinter.contracts]]
 name = "terminals is reached only through its package root"
 type = "protected"
 protected_modules = ["atlas.terminals.*"]
