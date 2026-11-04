@@ -1982,6 +1982,13 @@ class Gateway:
         self._owner(connection)
         found = self._calls.get((params.plugin, params.name))
         if found is None:
+            # A screen may call while the plugins still load, at start or after a save: the call
+            # is looked for again once they are loaded.
+            if self._plugins_start is not None and not self._plugins_start.done():
+                await asyncio.wait({self._plugins_start})
+            async with self._plugins_lock:
+                found = self._calls.get((params.plugin, params.name))
+        if found is None:
             raise ProtocolError(
                 NOT_FOUND, f"The plugin {params.plugin} has no call {params.name} running."
             )

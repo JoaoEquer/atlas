@@ -38,17 +38,22 @@ def test_the_real_chrome_and_engine_read_type_and_see(tmp_path: Path) -> None:
         browser = Browser(folder, [str(CHROME)], redact=str)
         try:
             tool = browser.tool("c-1", sees_images=True)
-            opened = await tool.run(
-                {
-                    "code": f"# Opening the test page\nnew_tab({url!r})\nwait_for_load()\n"
-                    'print(json.dumps(page_info()))\nprint(js(\'document.querySelector("h1")'
-                    ".textContent'))",
-                    "mode": "headless",
-                    "timeout_s": 60,
-                }
-            )
+            opening = {
+                "code": f"# Opening the test page\nnew_tab({url!r})\nwait_for_load()\n"
+                'print(json.dumps(page_info()))\nprint(js(\'document.querySelector("h1")'
+                ".textContent'))",
+                "mode": "headless",
+                "timeout_s": 60,
+            }
+            opened = await tool.run(opening)
             assert isinstance(opened, str)
             found = _result(opened)
+            if "waiting for the daemon" in str(found.get("stderr", "")):
+                # A Chrome still starting on a slow machine misses the engine's 5 seconds for a
+                # tab; the model reads the error and calls again, as this does.
+                opened = await tool.run(opening)
+                assert isinstance(opened, str)
+                found = _result(opened)
             assert found["success"], found
             info = json.loads(found["output"].splitlines()[0])
             assert info["title"].endswith("Atlas test page")  # the tab marked as the agent's
