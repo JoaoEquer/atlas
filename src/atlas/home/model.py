@@ -42,6 +42,8 @@ SOUL_FILE = "SOUL.md"
 #: The home's picture, beside its name in the app (home/picture.py).
 PICTURE_FILE = "picture.png"
 DOCUMENTS_FOLDER = "documents"
+#: The speech model, downloaded once for every home of the machine, at the root (step 26).
+SPEECH_FOLDER = "speech"
 #: The files the user attached to messages, one folder each (step 16g).
 ATTACHMENTS_FOLDER = "attachments"
 LOGS_FOLDER = "logs"
@@ -175,6 +177,13 @@ LAYOUT: tuple[Entry, ...] = (
         EntryClass.USER,
         "in a container, the user's home folder, where the workspace starts: what the agent made",
     ),
+    Entry(
+        SPEECH_FOLDER,
+        True,
+        EntryClass.MACHINE,
+        "the model that writes down recordings on this computer, at the root for every home; "
+        "downloaded again where it is missing",
+    ),
     Entry(HOMES_FOLDER, True, EntryClass.HOMES, "the other homes of this machine"),
     Entry(ACTIVE_HOME_FILE, False, EntryClass.MACHINE, "which home opens here when none is named"),
     Entry(
@@ -299,6 +308,11 @@ class Home:
     @property
     def documents_folder(self) -> Path:
         return self.root / DOCUMENTS_FOLDER
+
+    @property
+    def speech_folder(self) -> Path:
+        """The speech model's folder: the root's, as only the root's is used."""
+        return self.root / SPEECH_FOLDER
 
     @property
     def homes_folder(self) -> Path:
@@ -441,6 +455,17 @@ class BrowserSettings:
     chrome: tuple[str, ...] = ()
 
 
+#: Who writes down a recording (step 26): this computer, a provider with its key, or nobody.
+TRANSCRIPTIONS = ("local", "openai", "gemini", "off")
+
+
+@dataclass(frozen=True, slots=True)
+class VoiceSettings:
+    #: Who writes down a recording sent or dictated: `local` (this computer, with its model
+    #: downloaded once), `openai`, `gemini` (each with its key), or `off`.
+    transcription: str = "local"
+
+
 #: The marketplace Atlas reads (step 16s), and where GitHub serves a repository's archive and one
 #: of its files at a commit or a branch.
 MARKETPLACE_REPOSITORY = "marqueskaio/atlas-marketplace"
@@ -476,6 +501,7 @@ class Settings:
     time: TimeSettings = field(default_factory=TimeSettings)
     browser: BrowserSettings = field(default_factory=BrowserSettings)
     marketplace: MarketplaceSettings = field(default_factory=MarketplaceSettings)
+    voice: VoiceSettings = field(default_factory=VoiceSettings)
 
 
 # -- migrations ----------------------------------------------------------------------------------

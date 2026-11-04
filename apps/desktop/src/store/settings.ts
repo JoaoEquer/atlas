@@ -7,7 +7,7 @@ import { atom } from 'nanostores'
 
 import { $machinesNotice, refreshMachines, refreshThisMachine } from './machines'
 
-export const SECTIONS = ['general', 'model', 'personalization', 'safety', 'workspace', 'machines'] as const
+export const SECTIONS = ['general', 'model', 'personalization', 'safety', 'workspace', 'voice', 'machines'] as const
 export type SettingsSection = (typeof SECTIONS)[number]
 
 export const $settings = atom(false)

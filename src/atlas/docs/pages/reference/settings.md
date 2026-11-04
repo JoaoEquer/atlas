@@ -83,3 +83,9 @@ An unknown key in `config.toml` stops Atlas with an error, so a typo never passe
 | `branch` | text | `"main"` | `ATLAS_MARKETPLACE_BRANCH` | The branch Atlas reads it from. |
 | `archive_url` | text | `"https://codeload.github.com/{repo}/tar.gz/{ref}"` | `ATLAS_MARKETPLACE_ARCHIVE_URL` | Where a repository's archive is fetched, with `{repo}` and `{ref}`: a mirror's address, or a test's. |
 | `raw_url` | text | `"https://raw.githubusercontent.com/{repo}/{ref}/{path}"` | `ATLAS_MARKETPLACE_RAW_URL` | Where one file of a repository is read, with `{repo}`, `{ref}` and `{path}`. |
+
+## [voice]
+
+| Key | Value | Default | Variable | What it does |
+|---|---|---|---|---|
+| `transcription` | text | `"local"` | `ATLAS_VOICE_TRANSCRIPTION` | Who writes down a recording sent or dictated: `local` (this computer, with its model downloaded once), `openai`, `gemini` (each with its key), or `off`. *On the settings screen.* |

@@ -38,6 +38,7 @@ export {
   IconLayoutSidebarRight as LayoutSidebarRight,
   IconMessagePlus as MessagePlus,
   IconMessages as Messages,
+  IconMicrophone as Microphone,
   IconMoon as Moon,
   IconPaperclip as Paperclip,
   IconPhoto as Photo,

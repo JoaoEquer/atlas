@@ -59,9 +59,23 @@ with why, and **Write it down again** tries once more. A backup carries them.
 
 ## Send audio
 
-An audio file you attach in the app, or a voice note you send on [Telegram](/docs/guides/telegram/),
-is written down before Atlas reads it: the model receives the words, with a note that a speech model
-wrote them and may have misheard one. OGG, MP3, M4A, WAV and WebM work, up to Atlas's 20 MB.
+Atlas itself writes down an audio file you attach in the app, or a voice note you send on
+[Telegram](/docs/guides/telegram/), before it reads it, with or without this plugin: the model
+receives the words, with a note that a speech model wrote them and may have misheard one. OGG,
+MP3, M4A, WAV and WebM work, up to Atlas's 20 MB.
+
+Who writes it down is chosen in **Settings**, **Voice**:
+
+- **This computer**, as it comes: Parakeet TDT 0.6B v3, NVIDIA's speech model (CC BY 4.0), runs
+  where Atlas runs, and the recording never leaves it. The model is downloaded once, about 670 MB,
+  for every home of the computer: the first time a recording comes, Atlas asks above the
+  conversation, and Settings, Voice offers it at any time. A recording that comes before the model
+  keeps its note.
+- **OpenAI** or **Gemini**, on the key Atlas's provider of that name uses (`gpt-transcribe` or
+  `gemini-3.5-transcribe`).
+- **Nobody**: a recording keeps its note, and the model reads only that one came.
+
+If you used this plugin before, Atlas keeps writing recordings down with the provider it had.
 
 ## Hear the answer
 
@@ -88,7 +102,7 @@ You pay the provider on your key, at its prices (these were checked in October 2
 
 | | OpenAI | Gemini |
 |---|---|---|
-| Writing speech down | `gpt-transcribe`, about US$ 0.0045 a minute | `gemini-3.5-transcribe`, about US$ 0.005 a minute |
+| Writing speech down (dictation, and audio when chosen) | `gpt-transcribe`, about US$ 0.0045 a minute | `gemini-3.5-transcribe`, about US$ 0.005 a minute |
 | Speaking an answer | `gpt-4o-mini-tts`, OpenAI's speech price | `gemini-3.8-flash-tts`, about US$ 0.00225 for 10 seconds |
 | Talking live | `gpt-live-1`, about US$ 0.05 a minute, silence included | `gemini-3.8-live`, about US$ 0.005 a minute heard and US$ 0.018 a minute spoken |
 

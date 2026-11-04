@@ -53,6 +53,7 @@ import { SessionView } from './session-view'
 import { SettingsView } from './settings-view'
 import { SidePanel } from './side-panel'
 import { Sidebar } from './sidebar'
+import { SpeechBand } from './speech-view'
 import { StartScreen } from './start-screen'
 import { TabStrip } from './tab-strip'
 import { ThreadView } from './thread-view'
@@ -180,6 +181,7 @@ export function App() {
         <ConnectionBand />
         {keyBand && <KeyBand />}
         {setupAway && <FirstRunBand step={setup.step} />}
+        {state === 'open' && <SpeechBand />}
         {view === 'proposals' ? (
           <ProposalsView />
         ) : view === 'routines' ? (

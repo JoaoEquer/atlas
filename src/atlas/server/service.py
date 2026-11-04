@@ -33,7 +33,7 @@ import secrets
 import shutil
 import tempfile
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -93,6 +93,7 @@ from atlas.conversations import (
     StoredMessage,
 )
 from atlas.home import (
+    TRANSCRIPTIONS,
     Database,
     Home,
     HomeError,
@@ -157,6 +158,7 @@ from atlas.plugins import (
     ExecutorError,
     LoadedCall,
     LoadedExecutor,
+    LoadedReader,
     Pairing,
     PluginError,
     Plugins,
@@ -361,6 +363,7 @@ from atlas.server.protocol import (
     SlashCommandRow,
     Soul,
     SoulText,
+    SpeechState,
     StatusUpdate,
     SubagentControl,
     SubagentDecidesParams,
@@ -411,6 +414,7 @@ from atlas.server.updates import command as update_command
 from atlas.server.updates import run as run_update
 from atlas.server.updates import shown as shown_command
 from atlas.skills import SkillLibrary, SkillUsage, changed, read_manifest, retire_bundled
+from atlas.speech import ModelStore, Speech
 from atlas.terminals import TerminalError, Terminals
 from atlas.tools import (
     SECRET_REQUEST_SECONDS,
@@ -462,6 +466,10 @@ UPDATE_NEWS_SECONDS = 600.0
 ACCOUNTS_PLUGIN = "accounts"
 ACCOUNTS_BOOK = "accounts.json"
 ACCOUNTS_FROM_ATLAS = "from-atlas.json"
+#: The voice plugin, and the file in its data folder that says its provider was kept for writing
+#: down recordings (step 26).
+VOICE_PLUGIN = "voice"
+VOICE_MOVED = "transcription-moved"
 
 _logger = logging.getLogger("atlas.server")
 
@@ -508,6 +516,7 @@ class Gateway:
         environ: Mapping[str, str] | None = None,
         host_updater: HostChannel | None = None,
         update_transport: httpx2.AsyncBaseTransport | None = None,
+        speech: Speech | None = None,
     ) -> None:
         self.replay = Replay()
         #: Where each executor's newest version is published and how its install updates, as
@@ -572,6 +581,15 @@ class Gateway:
             browser_engine=browser_engine,
             clock=clock,
         )
+        #: Writing down recordings (step 26), the model at the root for every home: Atlas's own
+        #: reader of audio, on every channel.
+        self.speech = speech or Speech(
+            ModelStore(Home(home_root(home.root)).speech_folder),
+            lambda: self.assistant.settings.voice.transcription,
+            vault.get,
+        )
+        self.speech.on_changed = self._speech_changed
+        self.assistant.use_reader(LoadedReader("atlas", "audio", self.speech.transcribe))
         self.plugins = Plugins(home, Database(home.database_file), vault, clock=clock)
         self.plugins.host = AssistantPluginHost(self.assistant, self._told_accounts_changed)
         #: The marketplace (step 16s), installing into this home.
@@ -670,6 +688,9 @@ class Gateway:
             "soul.read": self._soul,
             "soul.write": self._soul_write,
             "settings.read": self._settings_read,
+            "speech.status": self._speech_status,
+            "speech.download": self._speech_download,
+            "speech.decline": self._speech_decline,
             "settings.write": self._settings_write,
             "memory.entries": self._memory_entries,
             "memory.edit": self._memory_edit,
@@ -763,6 +784,7 @@ class Gateway:
         if refreshed:
             _logger.info("Atlas's own plugins were put in place: %s.", ", ".join(refreshed))
         await asyncio.to_thread(self._skills_to_plugins)
+        await asyncio.to_thread(self._voice_to_speech)
         # In the background: a plugin may take its deadline to load, and the clients need not wait.
         self._channels_start = asyncio.create_task(self.channels.reconcile())
         self._plugins_start = asyncio.create_task(self.load_plugins())
@@ -957,6 +979,39 @@ class Gateway:
                 "Skills Atlas shipped come from a plugin now.",
                 extra={"plugin": name, "archived": archived, "kept": kept},
             )
+
+    def _voice_to_speech(self) -> None:
+        """Once, a home whose voice plugin wrote down recordings before step 26 keeps them written
+        down by the same provider: its `provider` becomes `[voice] transcription`, unless the
+        user set that already. Without it, the update would move them to this computer's model,
+        which asks for a download first."""
+        marker = self.plugins.data_folder(VOICE_PLUGIN) / VOICE_MOVED
+        if marker.exists():
+            return
+        try:
+            view = self.plugins.view(VOICE_PLUGIN)
+        except PluginError:
+            return
+        if not view.enabled:
+            return
+        provider = view.settings.get("provider", "").strip().lower() or "openai"
+        written = {
+            (value.setting.section, value.setting.key): value
+            for value in editable_values(self._home.root, self._environ)
+        }
+        chosen = written[("voice", "transcription")]
+        if chosen.written is None and chosen.variable is None and provider in TRANSCRIPTIONS:
+            try:
+                settings = edit_settings(
+                    self._home.root, self._environ, {("voice", "transcription"): provider}
+                )
+            except SettingsError as error:
+                _logger.warning("The voice's provider could not be kept: %s", error)
+                return
+            self.assistant.use_settings(settings)
+            _logger.info("Recordings stay written down by the voice's provider.")
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("", encoding="utf-8")
 
     def _move_accounts(self) -> None:
         """Once, the other accounts Atlas kept itself until step 22 go to the accounts plugin,
@@ -1828,6 +1883,29 @@ class Gateway:
         except (OSError, UnicodeDecodeError) as error:
             raise ProtocolError(INTERNAL_ERROR, f"SOUL.md cannot be read: {error}") from error
         return Soul(text or "", str(soul.path), IDENTITY, text is not None)
+
+    async def _speech_status(self, connection: Connection, params: Empty) -> SpeechState:
+        return await asyncio.to_thread(self._speech_now)
+
+    async def _speech_download(self, connection: Connection, params: Empty) -> SpeechState:
+        self._owner(connection)
+        self.speech.download()
+        return await asyncio.to_thread(self._speech_now)
+
+    async def _speech_decline(self, connection: Connection, params: Empty) -> SpeechState:
+        self._owner(connection)
+        await asyncio.to_thread(self.speech.decline)
+        return await asyncio.to_thread(self._speech_now)
+
+    def _speech_now(self) -> SpeechState:
+        return SpeechState(**asdict(self.speech.status()))
+
+    def _speech_changed(self) -> None:
+        """Tell every client where the speech model is: its download moved, or a recording
+        waited for it."""
+        frame = self._event_frame("speech.changed", self._speech_now())
+        for connection in self._connections:
+            connection.put(frame)
 
     async def _settings_read(self, connection: Connection, params: Empty) -> SettingsList:
         return await asyncio.to_thread(self._settings_now)

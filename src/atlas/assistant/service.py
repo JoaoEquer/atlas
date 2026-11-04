@@ -304,8 +304,11 @@ class _Shared:
     monitors: tuple[PluginMonitor, ...] = ()
     #: The plugins' slash commands (step 16l), by what is typed after the slash (`video:status`).
     slash: dict[str, LoadedCommand] = field(default_factory=dict[str, LoadedCommand])
-    #: The plugins' attachment readers (step 17a), by the kind each reads (`audio`).
+    #: The attachment readers, by the kind each reads (`audio`): Atlas's own (step 26) and the
+    #: plugins' (step 17a), a plugin's first for the kind it reads.
     readers: dict[str, LoadedReader] = field(default_factory=dict[str, LoadedReader])
+    #: Atlas's own readers, which the plugins' join.
+    own_readers: dict[str, LoadedReader] = field(default_factory=dict[str, LoadedReader])
     last_active: datetime | None = None
     #: The process's subagents, made once the assistant is.
     subagents: "Subagents | None" = None
@@ -658,13 +661,21 @@ class Assistant:
     def settings(self) -> Settings:
         return self._shared.settings
 
+    def use_reader(self, reader: LoadedReader) -> None:
+        """A reader of Atlas's own for one kind of attachment (step 26: audio, written down by
+        `atlas.speech`); a plugin's reader of the same kind still reads it first."""
+        shared = self._shared
+        shared.own_readers[reader.kind] = reader
+        shared.readers = {reader.kind: reader, **shared.readers}
+
     def use_settings(self, settings: Settings) -> None:
         """The editable settings changed on the settings screen (step 15b), handed to whoever
         holds them: the default model from the next turn of a conversation that picked none,
         the trust rules from the next request of every open conversation, the folder in new
         conversations, the zone the next time a routine is scheduled, the memory's limits from
-        the next write (the prompt shows them from the next conversation). A subagent already
-        running ends on the rules it started with."""
+        the next write (the prompt shows them from the next conversation), who writes down
+        recordings from the next one. A subagent already running ends on the rules it started
+        with."""
         shared = self._shared
         shared.settings = replace(
             shared.settings,
@@ -673,6 +684,7 @@ class Assistant:
             memory=settings.memory,
             workspace=settings.workspace,
             time=settings.time,
+            voice=settings.voice,
         )
         shared.models.use(settings.model)
         shared.memory.limits.update(limits_of(settings.memory))
@@ -798,7 +810,7 @@ class Assistant:
         shared.programs = tuple(programs)
         shared.agents = _agents(agents or {})
         shared.slash = {command.typed: command for command in slash}
-        shared.readers = {reader.kind: reader for reader in readers}
+        shared.readers = {**shared.own_readers, **{reader.kind: reader for reader in readers}}
         if tuple(monitors) != shared.monitors:
             shared.monitors = tuple(monitors)
             # Each conversation starts them again as they are now, when their time comes.

@@ -3783,6 +3783,35 @@ plugin on, the accounts in the user's order, a folder and a route kept, the acco
 untouched; a home with none gets no plugin), Vitest on its screen as the app loads it, and the
 e2e scenario of step 16h with the plugin turned on in a terminal.
 
+### Speech in the core — decided 2026-11-03
+
+Step 26, the core's rule (the agent's own capabilities are native, a link to a service is a
+plugin): writing down a recording is the agent's, so `atlas.speech` does it, for a file the user
+attaches and for every channel's voice note; the voice plugin keeps speaking and the live
+conversation. Decided with the user; how, our choice, marked:
+
+- **On this computer, by default** (`[voice] transcription = local | openai | gemini | off`, on the
+  settings screen's Voice section, read on each recording). The model, chosen on 03/11/2026
+  against Whisper small on 40 public Brazilian Portuguese recordings (FLEURS pt_br): NVIDIA's
+  Parakeet TDT 0.6B v3 (CC BY 4.0, credited where it is offered) in the int8 ONNX export onnx-asr
+  reads, 5.5% of the words wrong against 6.6%, at 31 times real time against 8. A recording above
+  25 seconds is cut at its silences first, by Silero's VAD (MIT). PyAV, FFmpeg's libraries in its
+  wheel, reads any format (the app's WebM, Telegram's OGG, a phone's M4A) and brings it to 16 kHz
+  mono. They are the `transcribe` extra, imported only once a recording comes.
+- **The model is downloaded once, after asking** (decided with the user): into the root's
+  `speech/` (MACHINE, for every home of the computer, out of the backup), each file pinned to a
+  commit and checked against its hash before it takes its place; its progress is told
+  (`speech.changed`). The first recording that waits for it marks it wanted, and the app asks
+  once above the conversation, with the size; a no is kept at the root, and Settings, Voice
+  offers it still. A recording that comes before it keeps its note.
+- **Or a provider**, on the key Atlas's provider of that name uses: OpenAI's transcription
+  endpoint, or a Gemini interaction (its Files API for a recording too large for the request),
+  ported from the voice plugin.
+- **Atlas's own reader of audio** (`Assistant.use_reader`): the readers of step 17a stay open to
+  plugins, and a plugin's reader of a kind reads before Atlas's. The voice plugin's is gone; a home
+  whose voice plugin was on keeps its provider as `[voice] transcription`, once, at the first
+  start.
+
 ### A session's environment, mode and plan by its box — decided 2026-11-01
 
 Step 18g, from what the user brought on 01/11/2026 (decided with the user: a worktree is the

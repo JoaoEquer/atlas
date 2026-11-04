@@ -1086,6 +1086,28 @@ class PluginsChanged:
 
 
 @dataclass(frozen=True, slots=True)
+class SpeechState:
+    """Who writes down recordings, and the model on this computer (step 26)."""
+
+    #: `local`, `openai`, `gemini` or `off`: `[voice] transcription`.
+    transcription: str
+    #: The model is on this computer, whole.
+    present: bool
+    #: Its download's size, in bytes.
+    size: int
+    #: The bytes downloaded so far while a download runs; `None` when none does.
+    downloading: int | None
+    #: A recording came for the model before it was there: the app asks once to download it.
+    wanted: bool
+    #: The user said no to the download, for every home of this machine.
+    declined: bool
+    #: Why the last download failed; empty when it did not.
+    error: str
+    #: Whose the model is, and its license, said where it is offered.
+    credit: str
+
+
+@dataclass(frozen=True, slots=True)
 class BotsChanged:
     #: How many bots the home has.
     count: int
@@ -2252,6 +2274,25 @@ METHODS: Mapping[str, Method] = {
             "without a restart; a refused value writes nothing.",
         ),
         Method(
+            "speech.status",
+            Empty,
+            SpeechState,
+            "Who writes down recordings (step 26), and whether the model is on this computer.",
+        ),
+        Method(
+            "speech.download",
+            Empty,
+            SpeechState,
+            "Download the speech model in the background, its progress told by speech.changed; "
+            "it takes back an earlier no.",
+        ),
+        Method(
+            "speech.decline",
+            Empty,
+            SpeechState,
+            "The user's no to the model's download: the app does not ask again on this machine.",
+        ),
+        Method(
             "memory.entries",
             MemoryEntriesParams,
             MemoryEntries,
@@ -3070,6 +3111,12 @@ EVENTS: Mapping[str, Event] = {
             PluginsChanged,
             "A plugin was turned on, off or failed, or someone asked to pair; read plugin.list "
             "and pairing.list.",
+            conversation=False,
+        ),
+        Event(
+            "speech.changed",
+            SpeechState,
+            "The speech model's download moved, ended or failed, or a recording waited for it.",
             conversation=False,
         ),
         Event(

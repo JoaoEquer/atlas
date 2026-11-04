@@ -6,6 +6,7 @@ button, a question answered by typing, the commands, and the Plugins screen's me
 import json
 import time
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from atlas.__main__ import main
 from atlas.home import Database, Home
 from atlas.plugins import Plugins
 from atlas.secrets import Vault
+from atlas.speech import OPENAI, ModelStore, Speech
 from claude_code_support import claude_code
 from fake_model import SPOKEN, FakeCall, FakeModelServer, FakeReply
 from fake_telegram import TOKEN, FakeTelegram
@@ -559,23 +561,23 @@ def test_a_photo_and_a_document_from_telegram_reach_the_model_as_a_dropped_file_
 def test_a_voice_message_from_telegram_reaches_the_model_written_down(
     serve: Serve, fake: FakeModelServer, telegram: FakeTelegram, home: Home, vault: Vault
 ) -> None:
-    """Step 17a: with the voice plugin on, the reader writes the voice note down before the turn,
-    through the same piece as a file dropped in the app; the fake model server is OpenAI's
-    transcription too."""
+    """Step 26: Atlas's own reader writes the voice note down before the turn, through the same
+    piece as a file dropped in the app, by the provider the user chose; the fake model server is
+    OpenAI's transcription too."""
     plugins = _turn_on(home, vault, telegram)
-    plugins.set_setting("voice", "api_url", fake.base_url)
-    plugins.set_secret("voice", "OPENAI_API_KEY", "fake-key")
-    manifest = plugins.view("voice").manifest
-    assert manifest is not None
     fake.transcribe("Book a table for two at eight.")
     fake.reply(
         FakeReply(text="Hi.", when="You are Atlas"),
         FakeReply(text="Booked for eight.", when="You are Atlas"),
     )
-    # OpenAI too on the fake: the key stored for the plugin is the title model's as well.
-    with serve(providers=("openai",)).client() as client:
-        # Turned on as the Plugins screen does, which answers once the plugins are loaded.
-        client.result("plugin.enable", {"name": "voice", "consent": manifest.fingerprint()})
+    speech = Speech(
+        ModelStore(home.speech_folder),
+        lambda: "openai",
+        lambda _name: "fake-key",
+        openai=replace(OPENAI, api_url=fake.base_url),
+    )
+    assert plugins.view("telegram").enabled
+    with serve(speech=speech).client() as client:
         _paired(client, telegram)
         telegram.say(ANA, "hello")
         _until(lambda: "Hi." in telegram.sent(ANA))

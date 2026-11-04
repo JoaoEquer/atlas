@@ -708,6 +708,7 @@ export const ptBR: Override<Messages> = {
       model: 'Modelo',
       personalization: 'Personalização',
       safety: 'Segurança',
+      voice: 'Voz',
       workspace: 'Área de trabalho'
     },
     theme: 'Aparência',
@@ -741,6 +742,22 @@ export const ptBR: Override<Messages> = {
 
       return act ? `${name} quer ${act}` : `${name} quer usar ${tool}`
     }
+  },
+  speech: {
+    ask: (size: string) =>
+      `Chegou um áudio. O Atlas transcreve áudios neste computador, com um modelo baixado uma vez (${size} MB).`,
+    download: 'Baixar',
+    downloadSize: (size: string) => `Baixar o modelo (${size} MB)`,
+    downloading: (done: string, total: string) => `Baixando o modelo de voz: ${done} de ${total} MB…`,
+    local: 'Este computador',
+    model: 'O modelo neste computador',
+    modelHint: (credit: string) => `Os áudios ficam no computador que roda o Atlas. ${credit}.`,
+    notNow: 'Agora não',
+    off: 'Ninguém',
+    present: 'Baixado: os áudios são transcritos aqui.',
+    transcription: 'Quem transcreve os áudios',
+    transcriptionHint:
+      'O áudio que você manda, em qualquer canal, e o que você dita. OpenAI e Gemini usam a chave guardada para eles em Modelo.'
   },
   subagents: {
     button: (agents: number, tasks: number) =>

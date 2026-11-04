@@ -72,6 +72,7 @@ import type {
   SkillRow,
   SlashCommandRow,
   Soul,
+  SpeechState,
   SubagentRow,
   TitleChanged,
   UserSaid
@@ -381,6 +382,8 @@ export class HomeSession {
   readonly $pairings = atom<PairingRow[]>([])
   /** What the server refused on the Plugins screen, said there. */
   readonly $pluginError = atom<null | string>(null)
+  /** Who writes recordings down, and the speech model on the server's computer (step 26). */
+  readonly $speech = atom<null | SpeechState>(null)
   /** The home's MCP servers and its skills, for the Extensions screen; `null` until it read them. */
   readonly $mcpServers = atom<McpList | null>(null)
   readonly $skills = atom<null | SkillRow[]>(null)
@@ -533,6 +536,7 @@ export class HomeSession {
           void this.refreshBots().catch(() => undefined)
           void this.refreshPicture().catch(() => undefined)
           void this.refreshPlugins().catch(() => undefined)
+          void this.refreshSpeech().catch(() => undefined)
           // The session on screen missed what its instance did while the socket was gone.
           void this.refreshWorkbench()
             .then(() => this.readSession())
@@ -2295,6 +2299,10 @@ export class HomeSession {
     return conversationId
   }
 
+  async refreshSpeech(): Promise<void> {
+    this.$speech.set(await this.client.call('speech.status', {}))
+  }
+
   async refreshProposals(): Promise<void> {
     await this.reading('proposals', async () => {
       const { proposals } = await this.client.call('memory.proposals', {})
@@ -2519,6 +2527,12 @@ export class HomeSession {
       const cancel = event.payload as RequestCancel
       this.requests.delete(cancel.id)
       this.$cards.set(this.$cards.get().filter(card => card.id !== cancel.id))
+
+      return
+    }
+
+    if (event.type === 'speech.changed') {
+      this.$speech.set(event.payload as SpeechState)
 
       return
     }
@@ -2823,6 +2837,7 @@ export const $plugins = atom<PluginRow[]>([])
 export const $screens = atom<PluginScreenRow[]>([])
 export const $pairings = atom<PairingRow[]>([])
 export const $pluginError = atom<null | string>(null)
+export const $speech = atom<null | SpeechState>(null)
 export const $mcpServers = atom<McpList | null>(null)
 export const $skills = atom<null | SkillRow[]>(null)
 export const $extensionsError = atom<null | string>(null)
@@ -2915,6 +2930,7 @@ const MIRRORS: Mirror[] = [
   mirror($screens, s => s.$screens),
   mirror($pairings, s => s.$pairings),
   mirror($pluginError, s => s.$pluginError),
+  mirror($speech, s => s.$speech),
   mirror($mcpServers, s => s.$mcpServers),
   mirror($skills, s => s.$skills),
   mirror($extensionsError, s => s.$extensionsError),
@@ -3411,6 +3427,23 @@ export function refreshPlugins(): void {
   const session = current()
   session.$pluginError.set(null)
   void session.refreshPlugins().catch(() => undefined)
+}
+
+/** Who writes recordings down, read again after the choice changed. */
+export function readSpeech(): Promise<void> {
+  return current().refreshSpeech()
+}
+
+/** Download the speech model on the server's computer; its progress comes as `speech.changed`. */
+export async function downloadSpeech(): Promise<void> {
+  const session = current()
+  session.$speech.set(await session.client.call('speech.download', {}))
+}
+
+/** The user's no to the speech model's download, kept on the server's computer. */
+export async function declineSpeech(): Promise<void> {
+  const session = current()
+  session.$speech.set(await session.client.call('speech.decline', {}))
 }
 
 /** The Atlas version the open home's server runs; `null` before it said. */

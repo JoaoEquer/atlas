@@ -100,8 +100,11 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `executor file` | arquivo do executor | An attachment sent with a prompt to an executor's session (`ExecutorFile`, step 16i): the harness gets it its own way, Claude Code an image as itself and every file by its path in the home's `attachments/`, which it reads as one of its folders |
 | `description model` | modelo de descrição | The model that describes an attached image for a conversation whose model does not see images: the title models, as side calls |
 | `image description` | descrição da imagem | What the description model wrote about an attached image, given to a model that does not see images in the image's place |
-| `reader` | leitor | A plugin's code that turns one kind of attachment into text before the turn (`register_reader`, SDK version 21): the voice plugin's, for audio |
+| `reader` | leitor | Code that turns one kind of attachment into text before the turn: Atlas's own for audio (`atlas.speech`, step 26), or a plugin's (`register_reader`, SDK version 21), which reads first |
 | `audio transcript` | transcrição do áudio | What a reader wrote down of an audio attachment, kept with it as its `description` and given to the model in the note's place |
+| `speech` | fala | `atlas.speech` (step 26): writing down recordings, on this computer or by a provider, as `[voice] transcription` says |
+| `speech model` | modelo de fala | The model that writes recordings down on this computer, Parakeet TDT 0.6B v3, downloaded once into the root's `speech/` |
+| `transcription` | transcrição | Who writes recordings down: `local` (this computer), `openai`, `gemini` or `off` |
 | `file sent` | arquivo mandado | A file a plugin's tool sends the user (`ToolHost.send_file`, `FileSent`, the `message.file` event, SDK version 22): kept in the home's attachments, shown in the turn, sent in a channel's chat |
 | `box button` | botão da caixa | A button a plugin's screen adds beside the words of the conversation's box (the `box` area, screen version 2): the voice plugin's microphone and its live conversation |
 | `dictation` | ditado | Speech recorded by the box's microphone and written down into the box, to be read before it is sent; never sent by itself |

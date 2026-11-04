@@ -43,6 +43,7 @@ from atlas.home.model import (
     LOG_LEVELS,
     MARKETPLACE_REPOSITORY,
     RAW_URL,
+    TRANSCRIPTIONS,
     BrowserSettings,
     Home,
     LogLevel,
@@ -56,6 +57,7 @@ from atlas.home.model import (
     TimeSettings,
     TrustSettings,
     VaultSettings,
+    VoiceSettings,
     WorkspaceSettings,
 )
 
@@ -157,6 +159,11 @@ def _settings(home: Path, source: "_Source") -> LoadedSettings:
             branch=source.text("marketplace", "branch", "main"),
             archive_url=source.text("marketplace", "archive_url", ARCHIVE_URL),
             raw_url=source.text("marketplace", "raw_url", RAW_URL),
+        ),
+        voice=VoiceSettings(
+            transcription=source.one_of(
+                "voice", "transcription", VoiceSettings().transcription, TRANSCRIPTIONS
+            ),
         ),
     )
     moved = source.refuse_unknown_keys()
@@ -275,6 +282,7 @@ EDITABLE = (
     Editable("memory", "memory_limit", "number"),
     Editable("workspace", "folder", "path"),
     Editable("time", "zone", "zone"),
+    Editable("voice", "transcription", "text"),
 )
 
 
@@ -570,6 +578,15 @@ class _Source:
         raise SettingsError(
             f"{where}={value!r} is not a log level. Use one of: {', '.join(LOG_LEVELS)}."
         )
+
+    def one_of(self, section: str, key: str, default: str, choices: tuple[str, ...]) -> str:
+        """One of a few names, given in any case."""
+        value = self.optional_text(section, key)
+        if value is None:
+            return default
+        if value.lower() not in choices:
+            raise SettingsError(f"[{section}] {key}={value!r} is not one of: {', '.join(choices)}.")
+        return value.lower()
 
     def zone(self, section: str, key: str) -> str | None:
         """An IANA time zone's name, refused when the zone database does not know it."""

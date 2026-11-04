@@ -266,8 +266,8 @@ may be `async`. A stop that raises is logged, and the others still run.
 
 ## Readers
 
-A reader turns one kind of attachment into text before the model reads it: the voice plugin
-writes down what an audio file says. Declare it under `atlas.readers` (`"api": 21`), and register
+A reader turns one kind of attachment into text before the model reads it: a service of your own
+that writes down what an audio file says, in place of Atlas's (Settings, Voice). Declare it under `atlas.readers` (`"api": 21`), and register
 it:
 
 ```python
@@ -284,8 +284,8 @@ def register(ctx: PluginContext) -> None:
 - **It reads every such file the user sends,** dropped in the app or sent on a channel, before
   the turn. What it returns goes to the model in the file's note, and Atlas keeps it with the
   file, so each is read once.
-- **One reader a kind:** when two plugins read audio, the first loaded reads it, and the other is
-  logged.
+- **One reader a kind:** a plugin's reader reads audio before Atlas's own; when two plugins read
+  it, the first loaded reads it, and the other is logged.
 - **It has 2 minutes.** One that raises, returns nothing or runs out leaves the file's note as it
   was, and the turn goes on.
 - `audio` is the only kind for now.

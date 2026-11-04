@@ -9,7 +9,9 @@ import {
   $modelOptions,
   $proposals,
   $remote,
+  $speech,
   readSettings,
+  readSpeech,
   serverVersion,
   showProposals,
   writeSettings
@@ -23,6 +25,7 @@ import { Providers } from './key-screen'
 import { MemoryEntries } from './memory-entries'
 import { withCurrent } from './model-picker'
 import { SoulSection } from './soul-view'
+import { SpeechModel } from './speech-view'
 
 /**
  * The settings screen's sections (step 15b, docs/ARCHITECTURE.md, The settings screen): a change
@@ -642,6 +645,44 @@ export function WorkspaceSection() {
           status={status['time.zone']}
         />
       )}
+    </div>
+  )
+}
+
+// -- Voice --------------------------------------------------------------------------------------
+
+/** Who writes down recordings (step 26): this computer, a provider with its key, or nobody. */
+export function VoiceSection() {
+  const { error, rows, save, status } = useSettings()
+  const speech = useStore($speech)
+  const row = rows?.['voice.transcription']
+
+  return (
+    <div className="space-y-6">
+      <Failure error={error} />
+      {row && (
+        <div className="space-y-1.5">
+          <Choice
+            current={row.value ?? 'local'}
+            hint={t.speech.transcriptionHint}
+            label={t.speech.transcription}
+            onChange={next => {
+              void save('voice.transcription', [
+                { key: 'transcription', section: 'voice', value: next === 'local' ? null : next }
+              ]).then(saved => (saved ? readSpeech() : undefined))
+            }}
+            options={[
+              ['local', t.speech.local],
+              ['openai', 'OpenAI'],
+              ['gemini', 'Gemini'],
+              ['off', t.speech.off]
+            ]}
+            testId="setting-voice.transcription"
+          />
+          <StatusLine status={status['voice.transcription']} variable={row.variable} />
+        </div>
+      )}
+      {speech && (row?.value ?? 'local') === 'local' && <SpeechModel speech={speech} />}
     </div>
   )
 }

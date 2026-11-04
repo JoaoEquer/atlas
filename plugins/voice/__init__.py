@@ -4,9 +4,8 @@ Everything goes through one provider, the `provider` setting's: OpenAI or Gemini
 key Atlas's provider of that name reads, and each with its own models where a setting is left
 empty.
 
-- **Audio the user sends**, dropped in the app or sent on a channel, is written down by the
-  provider's transcription model before the turn (a reader, SDK version 21), and the model reads
-  what it says.
+- **Audio the user sends** is written down by Atlas itself since step 26 (`atlas.speech`), on
+  this computer or by the provider the user chose there; the reader this plugin had is gone.
 - **Dictation**: the box's microphone (its screen, `desktop/plugin.js`) records, and the words come
   back into the box to be corrected before they are sent (the `dictate` call). **Anywhere** (step
   17b): a shortcut heard in every program records, and the words are pasted where the user is.
@@ -29,7 +28,6 @@ import binascii
 import secrets
 import time
 from dataclasses import asdict
-from pathlib import Path
 from typing import Any, Protocol, cast
 
 from atlas.plugins.sdk import PluginContext, ToolHost
@@ -94,9 +92,6 @@ def register(ctx: PluginContext) -> None:
         if provider() is GEMINI:
             return GeminiTranscriber(key(), api_url(), model)
         return Transcriber(key(), api_url(), model)
-
-    async def read(path: Path, media_type: str) -> str:
-        return await transcriber().transcribe_data(path.name, path.read_bytes(), media_type)
 
     async def speak(arguments: dict[str, Any], host: ToolHost) -> str:
         text = str(arguments.get("text") or "").strip()
@@ -241,7 +236,6 @@ def register(ctx: PluginContext) -> None:
             str(given.get("language") or "")[:20],
         )
 
-    ctx.register_reader("audio", read)
     ctx.register_tool("voice_speak", SPEAK_DESCRIPTION, SPEAK_PARAMETERS, speak)
     ctx.register_hook("UserPromptSubmit", note_spoken_turn)
     ctx.register_call("dictate", dictate)

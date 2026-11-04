@@ -81,6 +81,13 @@ deepseek = ["zstandard==0.25.0"]
 # nothing, the standard library's pty is enough. Optional, as node-pty was in the app: without it
 # the terminal says it is unavailable.
 terminal = ["pywinpty==3.1.0; sys_platform == 'win32'"]
+# Writing down audio on this computer (atlas.speech, step 26): onnx-asr runs NVIDIA's Parakeet v3
+# (chosen against Whisper small on public Brazilian Portuguese: fewer errors, four times faster)
+# on onnxruntime, with only numpy besides; PyAV, FFmpeg's libraries in its wheel, reads any
+# recording (the app's WebM, Telegram's OGG Opus, a phone's M4A) and brings it to 16 kHz mono.
+# The model itself is downloaded once, after asking, into the root's speech/. MIT, MIT and BSD;
+# 0.12.0 (15/07/2026), 1.31.0 (09/10/2026) and 19.0.2 (21/10/2026) for the 14-day rule.
+transcribe = ["onnx-asr==0.12.0", "onnxruntime==1.31.0", "av==19.0.2"]
 
 [project.scripts]
 atlas = "atlas.__main__:main"
@@ -111,7 +118,7 @@ dev = [
     "pytest-xdist==3.8.0",    # the tests on every core
     "ruff==0.16.10",          # lint and format
     "types-pyyaml==6.0.12.20260906",  # PyYAML's types, for pyright
-    "atlas-agent[ddgs,mcp,anthropic,terminal,deepseek]",  # the tests prove every extra
+    "atlas-agent[ddgs,mcp,anthropic,terminal,deepseek,transcribe]",  # the tests prove every extra
 ]
 
 # ---------------------------------------------------------------------------
@@ -444,6 +451,12 @@ protected_modules = ["atlas.browser.*"]
 allowed_importers = ["atlas.browser"]
 
 [[tool.importlinter.contracts]]
+name = "speech is reached only through its package root"
+type = "protected"
+protected_modules = ["atlas.speech.*"]
+allowed_importers = ["atlas.speech"]
+
+[[tool.importlinter.contracts]]
 name = "mcp is reached only through its package root"
 type = "protected"
 protected_modules = ["atlas.mcp.*"]
@@ -501,8 +514,9 @@ package_module_name_map = { pywinpty = "winpty" }
 
 [tool.deptry.per_rule_ignores]
 # zoneinfo reads tzdata's files on Windows, and browser-harness runs as a program
-# (atlas.browser); Atlas imports neither.
-DEP002 = ["tzdata", "browser-harness"]
+# (atlas.browser); Atlas imports neither. The transcribe extra is imported by name, once a
+# recording comes (atlas.speech.local), so a home that never gets one never loads it.
+DEP002 = ["tzdata", "browser-harness", "onnx-asr", "onnxruntime", "av"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -366,6 +366,25 @@ export interface SettingChange {
   /** The new value as the screen edits it; `null` or blank takes the setting out of the file. */
   value?: string | null
 }
+/** Who writes down recordings, and the model on this computer (step 26). */
+export interface SpeechState {
+  /** `local`, `openai`, `gemini` or `off`: `[voice] transcription`. */
+  transcription: string
+  /** The model is on this computer, whole. */
+  present: boolean
+  /** Its download's size, in bytes. */
+  size: number
+  /** The bytes downloaded so far while a download runs; `None` when none does. */
+  downloading: number | null
+  /** A recording came for the model before it was there: the app asks once to download it. */
+  wanted: boolean
+  /** The user said no to the download, for every home of this machine. */
+  declined: boolean
+  /** Why the last download failed; empty when it did not. */
+  error: string
+  /** Whose the model is, and its license, said where it is offered. */
+  credit: string
+}
 export interface MemoryEntriesParams {
   /** `user` is "About you", `USER.md`; `memory` is the memory, `MEMORY.md`. */
   target: 'user' | 'memory'
@@ -1821,6 +1840,12 @@ export interface RpcMethods {
   'soul.read': { params: Empty; result: Soul }
   /** Write the main agent's soul whole; it applies from the next conversation. */
   'soul.write': { params: SoulText; result: Soul }
+  /** The user's no to the model's download: the app does not ask again on this machine. */
+  'speech.decline': { params: Empty; result: SpeechState }
+  /** Download the speech model in the background, its progress told by speech.changed; it takes back an earlier no. */
+  'speech.download': { params: Empty; result: SpeechState }
+  /** Who writes down recordings (step 26), and whether the model is on this computer. */
+  'speech.status': { params: Empty; result: SpeechState }
   /** Who answers what an outside executor asks from now on: the user, or Atlas (the guardian for permissions, the conversation's model for questions). */
   'subagent.decides': { params: SubagentDecidesParams; result: SubagentControl }
   /** Stop a running subagent; what it had still reaches its parent. */
@@ -1975,6 +2000,9 @@ export const RPC_METHODS = [
   'skill.list',
   'soul.read',
   'soul.write',
+  'speech.decline',
+  'speech.download',
+  'speech.status',
   'subagent.decides',
   'subagent.interrupt',
   'subagent.list',
@@ -2078,6 +2106,8 @@ export interface EventMap {
   'routines.changed': RoutinesChanged
   /** The first frame of a connection: the version, and the epoch of event numbers. */
   'server.ready': Ready
+  /** The speech model's download moved, ended or failed, or a recording waited for it. */
+  'speech.changed': SpeechState
   /** Something happened to the conversation. */
   'status.update': StatusUpdate
   /** A subagent of the conversation started, ran a tool or ended. */
@@ -2126,6 +2156,7 @@ export const EVENT_NAMES = [
   'routine.finished',
   'routines.changed',
   'server.ready',
+  'speech.changed',
   'status.update',
   'subagent.update',
   'terminal.exit',

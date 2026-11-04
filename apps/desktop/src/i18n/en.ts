@@ -722,6 +722,7 @@ export const en = {
       model: 'Model',
       personalization: 'Personalization',
       safety: 'Safety',
+      voice: 'Voice',
       workspace: 'Workspace'
     },
     theme: 'Look',
@@ -754,6 +755,22 @@ export const en = {
 
       return act ? `${name} wants to ${act}` : `${name} wants to use ${tool}`
     }
+  },
+  speech: {
+    ask: (size: string) =>
+      `A recording came. Atlas writes recordings down on this computer, with a model downloaded once (${size} MB).`,
+    download: 'Download',
+    downloadSize: (size: string) => `Download the model (${size} MB)`,
+    downloading: (done: string, total: string) => `Downloading the speech model: ${done} of ${total} MB…`,
+    local: 'This computer',
+    model: 'The model on this computer',
+    modelHint: (credit: string) => `Recordings stay on the computer that runs Atlas. ${credit}.`,
+    notNow: 'Not now',
+    off: 'Nobody',
+    present: 'Downloaded: recordings are written down here.',
+    transcription: 'Who writes recordings down',
+    transcriptionHint:
+      'The audio you send, on any channel, and what you dictate. OpenAI and Gemini use the key stored for them in Model.'
   },
   subagents: {
     button: (agents: number, tasks: number) =>

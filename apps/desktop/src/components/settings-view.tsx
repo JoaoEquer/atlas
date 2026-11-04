@@ -31,15 +31,29 @@ import {
   ModelSection,
   PersonalizationSection,
   SafetySection,
+  VoiceSection,
   WorkspaceSection
 } from './settings-sections'
-import { Adjustments, Close, Computer, Copy, Cpu, Folder, Key, Machine, Plus, Shield, Sparkles } from './ui/icons'
+import {
+  Adjustments,
+  Close,
+  Computer,
+  Copy,
+  Cpu,
+  Folder,
+  Key,
+  Machine,
+  Microphone,
+  Plus,
+  Shield,
+  Sparkles
+} from './ui/icons'
 import { ICON_BUTTON } from './ui/tip'
 
 /**
  * The settings screen (step 15b, docs/ARCHITECTURE.md, The settings screen): one large screen with
  * its sections on the left, each opening on
- * the right. General, Model, Personalization, Safety, Workspace (Extensions, here from 28/10/2026,
+ * the right. General, Model, Personalization, Safety, Workspace, Voice (step 26; Extensions, here from 28/10/2026,
  * is a screen of its own in the sidebar since 01/11/2026), and Machines, which step 15
  * began with: this machine's home always on and open to the user's
  * machines, with its connection code and a new password; and the other machines, each with Test,
@@ -110,6 +124,7 @@ const ICONS = {
   model: Cpu,
   personalization: Sparkles,
   safety: Shield,
+  voice: Microphone,
   workspace: Folder
 } satisfies Record<SettingsSection, unknown>
 
@@ -125,6 +140,8 @@ function Section({ section }: { section: SettingsSection }) {
       return <SafetySection />
     case 'workspace':
       return <WorkspaceSection />
+    case 'voice':
+      return <VoiceSection />
     case 'machines':
       return (
         <>
