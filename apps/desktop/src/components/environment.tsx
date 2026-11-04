@@ -43,9 +43,9 @@ function useFolderGit(folder: string) {
 /**
  * Where an executor's session works, a pill by its box (step 18g, asked for by the user on
  * 01/11/2026): its project and the branch checked out there. Its menu says the folder whole, and
- * in a git repository offers a new worktree beside it, where a new session works apart from the
- * folder (decided with the user on 01/11/2026: a worktree is the executors', never Atlas's own
- * conversation's or a bot's); the cloud waits for Atlas Cloud.
+ * in a git repository offers a new workspace (step 21, a worktree in the home), where a new session
+ * works apart from the folder (decided with the user on 01/11/2026: a worktree is the executors',
+ * never Atlas's own conversation's or a bot's); the cloud waits for Atlas Cloud.
  */
 export function WherePill({ executor, folder }: { executor: string; folder: string }) {
   const git = useFolderGit(folder)

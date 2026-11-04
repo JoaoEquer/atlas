@@ -415,6 +415,65 @@ export interface DictationAudio {
   audio: string
   media_type: string
 }
+export interface WorkspaceListParams {
+  /** A folder of a project, for that project's workspaces; empty for every one. */
+  folder?: string
+}
+export interface WorkspaceList {
+  workspaces: WorkspaceRow[]
+}
+/** A workspace (step 21): a task of a project, a worktree on a branch of its own. */
+export interface WorkspaceRow {
+  id: string
+  /** The project's main folder, which its workspaces group under. */
+  project_root: string
+  name: string
+  branch: string
+  /** The branch it was made from, where its work goes back. */
+  base: string
+  folder: string
+  /** `ready`, `preparing`, `setup_failed` or `archived`. */
+  state: string
+  created_at: string
+  /** Its ports, `4000-4009`, when its project names a range; empty otherwise. */
+  ports: string
+  /** The setup script's last words, when it ran. */
+  setup_output: string
+}
+export interface WorkspaceCreate {
+  /** Any folder of the project. */
+  folder: string
+  name: string
+  /** The branch to start from; empty for the one the project has checked out. */
+  base?: string
+}
+export interface WorkspaceRef {
+  id: string
+}
+export interface WorkspaceDelete {
+  id: string
+  /** The user said yes to deleting work not delivered. */
+  force?: boolean
+}
+export interface FolderRef {
+  /** A project folder; a relative one is the workspace's. */
+  folder: string
+}
+/** How a project prepares a new workspace. */
+export interface ProjectRow {
+  root: string
+  setup_script: string
+  /** The first port of its workspaces, 0 for none, and how many each gets. */
+  ports_start: number
+  ports_size: number
+}
+export interface ProjectSettings {
+  /** Any folder of the project. */
+  folder: string
+  setup_script: string
+  ports_start: number
+  ports_size: number
+}
 export interface MemoryEntriesParams {
   /** `user` is "About you", `USER.md`; `memory` is the memory, `MEMORY.md`. */
   target: 'user' | 'memory'
@@ -1184,10 +1243,6 @@ export interface WorkbenchModelParams {
   model?: string | null
   effort?: string | null
 }
-export interface FolderRef {
-  /** A project folder; a relative one is the workspace's. */
-  folder: string
-}
 /** A folder's git, for a session's environment (step 18g); `repository` false outside one. */
 export interface FolderGit {
   folder: string
@@ -1946,8 +2001,22 @@ export interface RpcMethods {
   'workbench.stop': { params: InstanceRef; result: Empty }
   /** Go on with the instance's conversation in the same folder on another account of its executor (step 16h): that account keeps a copy of its session, the original left as it was; never while it works. */
   'workbench.use_account': { params: WorkbenchUseAccountParams; result: InstanceRow }
-  /** A new worktree of the folder's repository, beside it on a new branch from the one checked out, for a session apart from the folder; nothing in the folder changes. */
+  /** A new workspace of the folder's repository, in the home on a new branch from the one checked out, for a session apart from the folder; nothing in the folder changes. */
   'workbench.worktree': { params: WorktreeParams; result: FolderGit }
+  /** Keep a workspace's work in a commit on its branch and remove its folder. */
+  'workspace.archive': { params: WorkspaceRef; result: WorkspaceRow }
+  /** Make a workspace of a folder's project: a worktree in the home on a branch of its own, the listed files copied; its setup script runs after, told by workspaces.changed. */
+  'workspace.create': { params: WorkspaceCreate; result: WorkspaceRow }
+  /** Delete a workspace, its folder and its branch; one with work not delivered only with force. */
+  'workspace.delete': { params: WorkspaceDelete; result: Empty }
+  /** The workspaces of the home, or of a folder's project (step 21). */
+  'workspace.list': { params: WorkspaceListParams; result: WorkspaceList }
+  /** How a folder's project prepares a new workspace. */
+  'workspace.project': { params: FolderRef; result: ProjectRow }
+  /** Set how a folder's project prepares a new workspace: its setup script and ports. */
+  'workspace.set_project': { params: ProjectSettings; result: ProjectRow }
+  /** Bring an archived workspace's folder back, its work as it was. */
+  'workspace.unarchive': { params: WorkspaceRef; result: WorkspaceRow }
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
@@ -2078,7 +2147,14 @@ export const RPC_METHODS = [
   'workbench.start',
   'workbench.stop',
   'workbench.use_account',
-  'workbench.worktree'
+  'workbench.worktree',
+  'workspace.archive',
+  'workspace.create',
+  'workspace.delete',
+  'workspace.list',
+  'workspace.project',
+  'workspace.set_project',
+  'workspace.unarchive'
 ] as const satisfies readonly RpcMethod[]
 
 // -- Server requests (server to client, answered) --
@@ -2177,6 +2253,8 @@ export interface EventMap {
   'workbench.activity': InstanceActivityPayload
   /** An executor instance on the workbench started, changed or ended; the workbench is the same in every conversation. */
   'workbench.update': InstanceRow
+  /** A workspace was made, prepared, archived, brought back or deleted; read workspace.list. */
+  'workspaces.changed': Empty
 }
 export type EventName = keyof EventMap
 export const EVENT_NAMES = [
@@ -2215,7 +2293,8 @@ export const EVENT_NAMES = [
   'tool.start',
   'update.ended',
   'workbench.activity',
-  'workbench.update'
+  'workbench.update',
+  'workspaces.changed'
 ] as const satisfies readonly EventName[]
 /** Events that belong to a conversation: they carry its id and their number. */
 export const CONVERSATION_EVENT_NAMES = [

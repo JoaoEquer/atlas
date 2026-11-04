@@ -46,7 +46,8 @@ export async function readSessionContext(instanceId: string): Promise<void> {
   }
 }
 
-/** A new worktree of the folder's repository, beside it, and a new session of `executor` in it;
+/** A new workspace of the folder's project (step 21: a worktree in the home), and a new session of
+ *  `executor` in it;
  * what went wrong is the session's error. Its name is when it was made: `1101-1832`. */
 export async function startWorktree(executor: string, folder: string, now = new Date()): Promise<void> {
   const two = (value: number) => String(value).padStart(2, '0')

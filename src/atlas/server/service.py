@@ -317,6 +317,8 @@ from atlas.server.protocol import (
     PreviewPayload,
     PreviewRead,
     PreviewReadParams,
+    ProjectRow,
+    ProjectSettings,
     ProposalApproved,
     ProposalChange,
     ProposalCount,
@@ -409,6 +411,12 @@ from atlas.server.protocol import (
     WorkbenchStartParams,
     WorkbenchSwitchParams,
     WorkbenchUseAccountParams,
+    WorkspaceCreate,
+    WorkspaceDelete,
+    WorkspaceList,
+    WorkspaceListParams,
+    WorkspaceRef,
+    WorkspaceRow,
     WorktreeParams,
     dump,
     read,
@@ -442,6 +450,7 @@ from atlas.trust import (
     detect_hardline_command,
 )
 from atlas.trust import Outcome as ApprovalOutcome
+from atlas.workspaces import Project, Workspace, WorkspaceError, Workspaces, WorkspaceState
 
 #: How long ask_user's questions wait for an answer.
 ASK_SECONDS = 300
@@ -599,6 +608,12 @@ class Gateway:
             address=self._provider_address,
         )
         self.speech.on_changed = self._speech_changed
+        #: The home's workspaces (step 21), each a worktree on a branch of its own.
+        self.workspaces = Workspaces(
+            home.worktrees_folder, Database(home.database_file), clock=clock
+        )
+        #: The setup scripts running, kept so none is collected before it ends.
+        self._preparing: set[asyncio.Task[None]] = set()
         #: What the user dictated in this home (step 26), each recording with its words.
         self.dictations = Dictations(home.dictations_folder)
         self.assistant.use_reader(LoadedReader("atlas", "audio", self.speech.transcribe))
@@ -703,6 +718,13 @@ class Gateway:
             "speech.status": self._speech_status,
             "speech.download": self._speech_download,
             "speech.decline": self._speech_decline,
+            "workspace.list": self._workspace_list,
+            "workspace.create": self._workspace_create,
+            "workspace.archive": self._workspace_archive,
+            "workspace.unarchive": self._workspace_unarchive,
+            "workspace.delete": self._workspace_delete,
+            "workspace.project": self._workspace_project,
+            "workspace.set_project": self._workspace_set_project,
             "dictation.write": self._dictation_write,
             "dictation.list": self._dictation_list,
             "dictation.audio": self._dictation_audio,
@@ -1936,6 +1958,109 @@ class Gateway:
         for connection in self._connections:
             connection.put(frame)
 
+    async def _workspace_list(
+        self, connection: Connection, params: WorkspaceListParams
+    ) -> WorkspaceList:
+        folder = Path(params.folder) if params.folder else None
+        rows = await self._workspaces(self.workspaces.listed, folder)
+        return WorkspaceList([await asyncio.to_thread(self._workspace_row, row) for row in rows])
+
+    async def _workspace_create(
+        self, connection: Connection, params: WorkspaceCreate
+    ) -> WorkspaceRow:
+        self._owner(connection)
+        made = await self._new_workspace(Path(params.folder), params.name, params.base)
+        return await asyncio.to_thread(self._workspace_row, made)
+
+    async def _workspace_archive(
+        self, connection: Connection, params: WorkspaceRef
+    ) -> WorkspaceRow:
+        self._owner(connection)
+        done = await self._workspaces(self.workspaces.archive, params.id)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_unarchive(
+        self, connection: Connection, params: WorkspaceRef
+    ) -> WorkspaceRow:
+        self._owner(connection)
+        done = await self._workspaces(self.workspaces.unarchive, params.id)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_delete(self, connection: Connection, params: WorkspaceDelete) -> Empty:
+        self._owner(connection)
+        await self._workspaces(lambda: self.workspaces.delete(params.id, force=params.force))
+        self._workspaces_changed()
+        return Empty()
+
+    async def _workspace_project(self, connection: Connection, params: FolderRef) -> ProjectRow:
+        found = await self._workspaces(self.workspaces.project_of, Path(params.folder))
+        if found is None:
+            raise ProtocolError(INVALID_PARAMS, f"{params.folder} is not in a git repository.")
+        return _project_row(found)
+
+    async def _workspace_set_project(
+        self, connection: Connection, params: ProjectSettings
+    ) -> ProjectRow:
+        """The setup script is the owner's own command, typed in the app, as the box's `!` is."""
+        self._owner(connection)
+        done = await self._workspaces(
+            lambda: self.workspaces.set_project(
+                Path(params.folder),
+                setup_script=params.setup_script,
+                ports_start=params.ports_start,
+                ports_size=params.ports_size,
+            )
+        )
+        return _project_row(done)
+
+    async def _new_workspace(self, folder: Path, name: str, base: str) -> Workspace:
+        """A workspace made, and its setup script run in the background, every client told."""
+        made = await self._workspaces(self.workspaces.create, folder, name, base or None)
+        self._workspaces_changed()
+        if made.state is WorkspaceState.PREPARING:
+            task = asyncio.create_task(self._prepare(made.id))
+            self._preparing.add(task)
+            task.add_done_callback(self._preparing.discard)
+        return made
+
+    async def _prepare(self, workspace_id: str) -> None:
+        try:
+            await asyncio.to_thread(self.workspaces.prepare, workspace_id)
+        except WorkspaceError:
+            _logger.warning("A workspace could not be prepared.", exc_info=True)
+        self._workspaces_changed()
+
+    async def _workspaces[**P, T](
+        self, call: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        try:
+            return await asyncio.to_thread(call, *args, **kwargs)
+        except WorkspaceError as error:
+            raise ProtocolError(INVALID_PARAMS, str(error)) from error
+
+    def _workspace_row(self, workspace: Workspace) -> WorkspaceRow:
+        environment = self.workspaces.environment(workspace)
+        common = Path(workspace.project)
+        return WorkspaceRow(
+            id=workspace.id,
+            project_root=str(common.parent if common.name == ".git" else common),
+            name=workspace.name,
+            branch=workspace.branch,
+            base=workspace.base,
+            folder=workspace.folder,
+            state=workspace.state.value,
+            created_at=workspace.created_at,
+            ports=environment.get("ATLAS_WORKSPACE_PORTS", ""),
+            setup_output=workspace.setup_output,
+        )
+
+    def _workspaces_changed(self) -> None:
+        frame = self._event_frame("workspaces.changed", Empty())
+        for connection in self._connections:
+            connection.put(frame)
+
     async def _dictation_write(
         self, connection: Connection, params: DictationWrite
     ) -> DictationRow:
@@ -2866,9 +2991,14 @@ class Gateway:
     async def _workbench_worktree(
         self, connection: Connection, params: WorktreeParams
     ) -> FolderGit:
-        workbench = self.assistant.workbench
-        made = await self._on_workbench(workbench.add_worktree(Path(params.folder), params.name))
-        return _folder_git(str(made), await self._on_workbench(workbench.git(made)))
+        """Step 18g's new worktree, a workspace since step 21: in the home, not beside the
+        project."""
+        self._owner(connection)
+        made = await self._new_workspace(Path(params.folder), params.name, "")
+        folder = Path(made.folder)
+        return _folder_git(
+            made.folder, await self._on_workbench(self.assistant.workbench.git(folder))
+        )
 
     async def _workbench_context(
         self, connection: Connection, params: InstanceRef
@@ -3707,3 +3837,7 @@ def _dictation_row(dictation: Dictation) -> DictationRow:
         dictation.where,
         dictation.error,
     )
+
+
+def _project_row(project: Project) -> ProjectRow:
+    return ProjectRow(project.root, project.setup_script, project.ports_start, project.ports_size)

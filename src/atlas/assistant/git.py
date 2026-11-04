@@ -1,10 +1,6 @@
 """A project folder's git, as an executor's session shows it (step 18g): the branch it is on, the
-repository it belongs to, and whether it is a worktree of another; and a new worktree, where a
-session works apart from the folder it was opened on.
-
-A worktree goes beside the repository, `<repository>-<name>` on a new branch `atlas/<name>` from
-the one checked out, as `git worktree add` makes it: Atlas never checks out, resets or deletes
-anything in the user's folder.
+repository it belongs to, and whether it is a worktree of another. A new worktree is a workspace
+since step 21 (`atlas.workspaces`), in the home rather than beside the repository.
 """
 
 from __future__ import annotations
@@ -60,23 +56,6 @@ def git_state(folder: Path) -> GitState:
         root=str(Path(top)),
         worktree=Path(own).resolve() != shared.resolve(),
     )
-
-
-def add_worktree(folder: Path, name: str) -> Path:
-    """A new worktree of `folder`'s repository, beside it, on a new branch from the one checked
-    out. Raises `ExecutorError` outside a repository, or when the folder or branch exists."""
-    state = git_state(folder)
-    if not state.repository:
-        raise ExecutorError(f"{folder} is not in a git repository.")
-    slug = _NAME.sub("-", name.strip().lower()).strip("-.")
-    if not slug:
-        raise ExecutorError("A worktree needs a name.")
-    root = Path(state.root)
-    target = root.parent / f"{root.name}-{slug}"
-    if target.exists():
-        raise ExecutorError(f"{target} already exists.")
-    _git(root, "worktree", "add", "-b", f"atlas/{slug}", str(target))
-    return target
 
 
 def _git(folder: Path, *arguments: str) -> str:

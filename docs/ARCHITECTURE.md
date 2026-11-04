@@ -3858,8 +3858,9 @@ executors' alone, never Atlas's own conversation's or a bot's; the cloud waits f
 
 - **Where it works**, a pill by the box: the folder and the branch its git has checked out
   (`workbench.git`, read with the user's own `git`). In a repository its menu makes a new
-  worktree beside it (`workbench.worktree`: `<repository>-<name>` on a new branch `atlas/<name>`
-  from the one checked out, `git worktree add`), and opens a new session there. Atlas never checks
+  worktree (`workbench.worktree`, on a new branch `atlas/<name>` from the one checked out), and
+  opens a new session there; since step 21 that worktree is a workspace in the home's
+  `worktrees/` (Workspaces, below), not a folder beside the project. Atlas never checks
   out, resets or deletes anything in the folder.
 - **The permission mode**, a menu by the box, for a harness that lists its modes (SDK version 28,
   `Capabilities.modes`, `ExecutorInstance.set_mode`, `workbench.mode`): Claude Code's default,

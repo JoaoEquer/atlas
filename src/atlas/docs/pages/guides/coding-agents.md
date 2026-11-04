@@ -59,7 +59,7 @@ The route is drawn as a path above the session's box, from its pill: each stop i
 
 ## Under the session's box
 
-- **Where it works**: the project and the branch checked out there. Its menu shows the whole folder and, in a git repository, offers **New worktree**: a folder beside the project, `<project>-<date-time>`, on a new branch `atlas/<date-time>` from the one checked out, where a new session works apart from it. Nothing in the project's folder changes.
+- **Where it works**: the project and the branch checked out there. Its menu shows the whole folder and, in a git repository, offers **New worktree**: a workspace in Atlas's home (`worktrees/`), on a new branch `atlas/<date-time>` from the one checked out, where a new session works apart from it. Nothing in the project's folder changes.
 - **The mode**, for a harness that lists its permission modes: Claude Code's **Manual** (it asks before it changes anything), **Accept edits**, **Plan** and **Automatic**. Press 1 to 4 in its menu to pick one. Automatic is read about before it turns on. A harness with only an automatic mode keeps the **Auto** switch.
 - **The plan ring** fills with the fullest of the account's plan limits, and turns amber near the limit. Hover over it to see each limit and when it starts again.
 

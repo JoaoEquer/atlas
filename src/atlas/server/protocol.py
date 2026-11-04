@@ -1597,6 +1597,79 @@ class WorktreeParams:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkspaceRow:
+    """A workspace (step 21): a task of a project, a worktree on a branch of its own."""
+
+    id: str
+    #: The project's main folder, which its workspaces group under.
+    project_root: str
+    name: str
+    branch: str
+    #: The branch it was made from, where its work goes back.
+    base: str
+    folder: str
+    #: `ready`, `preparing`, `setup_failed` or `archived`.
+    state: str
+    created_at: str
+    #: Its ports, `4000-4009`, when its project names a range; empty otherwise.
+    ports: str
+    #: The setup script's last words, when it ran.
+    setup_output: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceListParams:
+    #: A folder of a project, for that project's workspaces; empty for every one.
+    folder: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceList:
+    workspaces: list[WorkspaceRow]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceCreate:
+    #: Any folder of the project.
+    folder: str
+    name: str
+    #: The branch to start from; empty for the one the project has checked out.
+    base: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceRef:
+    id: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceDelete:
+    id: str
+    #: The user said yes to deleting work not delivered.
+    force: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectRow:
+    """How a project prepares a new workspace."""
+
+    root: str
+    setup_script: str
+    #: The first port of its workspaces, 0 for none, and how many each gets.
+    ports_start: int
+    ports_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectSettings:
+    #: Any folder of the project.
+    folder: str
+    setup_script: str
+    ports_start: int
+    ports_size: int
+
+
+@dataclass(frozen=True, slots=True)
 class SessionContext:
     """How full a session's context is (step 18g): its tokens, when its harness says, and the
     window of the model it runs as, when the models' catalog knows it."""
@@ -2350,6 +2423,51 @@ METHODS: Mapping[str, Method] = {
         ),
         Method("dictation.delete", DictationRef, Empty, "Delete a dictation and its recording."),
         Method(
+            "workspace.list",
+            WorkspaceListParams,
+            WorkspaceList,
+            "The workspaces of the home, or of a folder's project (step 21).",
+        ),
+        Method(
+            "workspace.create",
+            WorkspaceCreate,
+            WorkspaceRow,
+            "Make a workspace of a folder's project: a worktree in the home on a branch of its "
+            "own, the listed files copied; its setup script runs after, told by "
+            "workspaces.changed.",
+        ),
+        Method(
+            "workspace.archive",
+            WorkspaceRef,
+            WorkspaceRow,
+            "Keep a workspace's work in a commit on its branch and remove its folder.",
+        ),
+        Method(
+            "workspace.unarchive",
+            WorkspaceRef,
+            WorkspaceRow,
+            "Bring an archived workspace's folder back, its work as it was.",
+        ),
+        Method(
+            "workspace.delete",
+            WorkspaceDelete,
+            Empty,
+            "Delete a workspace, its folder and its branch; one with work not delivered only "
+            "with force.",
+        ),
+        Method(
+            "workspace.project",
+            FolderRef,
+            ProjectRow,
+            "How a folder's project prepares a new workspace.",
+        ),
+        Method(
+            "workspace.set_project",
+            ProjectSettings,
+            ProjectRow,
+            "Set how a folder's project prepares a new workspace: its setup script and ports.",
+        ),
+        Method(
             "memory.entries",
             MemoryEntriesParams,
             MemoryEntries,
@@ -2759,7 +2877,7 @@ METHODS: Mapping[str, Method] = {
             "workbench.worktree",
             WorktreeParams,
             FolderGit,
-            "A new worktree of the folder's repository, beside it on a new branch from the one "
+            "A new workspace of the folder's repository, in the home on a new branch from the one "
             "checked out, for a session apart from the folder; nothing in the folder changes.",
         ),
         Method(
@@ -3180,6 +3298,13 @@ EVENTS: Mapping[str, Event] = {
             "dictations.changed",
             Empty,
             "A dictation was kept, written down or deleted, from any client; read dictation.list.",
+            conversation=False,
+        ),
+        Event(
+            "workspaces.changed",
+            Empty,
+            "A workspace was made, prepared, archived, brought back or deleted; read "
+            "workspace.list.",
             conversation=False,
         ),
         Event(

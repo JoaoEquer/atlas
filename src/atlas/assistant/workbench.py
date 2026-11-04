@@ -64,7 +64,7 @@ from atlas.assistant.executors import (
     split_account,
     usage_view,
 )
-from atlas.assistant.git import GitState, add_worktree, git_state
+from atlas.assistant.git import GitState, git_state
 from atlas.assistant.handoff import Handoff, entries_of, handoff_packet
 from atlas.assistant.model import (
     AccountList,
@@ -1100,10 +1100,6 @@ class Workbench:
         """The folder's git, for the session's environment: its branch, and whether it is a
         worktree."""
         return await asyncio.to_thread(git_state, self._folder(folder))
-
-    async def add_worktree(self, folder: Path, name: str) -> Path:
-        """A new worktree of the folder's repository, beside it, for a session apart from it."""
-        return await asyncio.to_thread(add_worktree, self._folder(folder), name)
 
     async def context(self, instance_id: str) -> tuple[int | None, int | None]:
         """How many tokens of context the instance's session holds, when its harness says, and
