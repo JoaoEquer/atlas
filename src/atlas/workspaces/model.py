@@ -21,6 +21,7 @@ PORTS_SIZE = 10
 NAME_LENGTH = 48
 
 _NOT_NAME = re.compile(r"[^a-z0-9._-]+")
+_BESIDE_DASH = re.compile(r"[-.]*-[-.]*")
 
 
 class WorkspaceState(StrEnum):
@@ -70,8 +71,10 @@ class Workspace:
 
 
 def slug(name: str) -> str:
-    """A workspace's name as a folder and a branch take it; empty when nothing is left."""
-    return _NOT_NAME.sub("-", name.strip().lower()).strip("-.")[:NAME_LENGTH].strip("-.")
+    """A workspace's name as a folder and a branch take it; empty when nothing is left. A dot
+    stays inside a word (`v1.2`), not beside a dash (`page.-2` is `page-2`)."""
+    dashed = _BESIDE_DASH.sub("-", _NOT_NAME.sub("-", name.strip().lower()))
+    return dashed.strip("-.")[:NAME_LENGTH].strip("-.")
 
 
 def ports(project: Project, workspace_slot: int) -> tuple[int, int] | None:

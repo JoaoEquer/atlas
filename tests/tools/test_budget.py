@@ -153,8 +153,9 @@ class _WithClaudeCode(_Delegator):
 #: and resume a session: 200 tokens more in the estimate, measured on 12/10/2026, about 137 on
 #: gpt-6-luna. Its `approval`, manual or Claude Code's own automatic mode for one delegation, took
 #: 56 more (17/10/2026). Picking the account (`name@account`) and the `route` took 71 more
-#: (258 to 329, 21/10/2026), and each account an executor has about 5.
-EXECUTOR_EXTRA = 340
+#: (258 to 329, 21/10/2026), and each account an executor has about 5. A task's `workspace: "new"`
+#: (step 21) took 35 more (329 to 364, 04/11/2026).
+EXECUTOR_EXTRA = 370
 
 
 def test_an_installed_executor_costs_only_its_own_words() -> None:

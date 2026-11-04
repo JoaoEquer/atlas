@@ -51,7 +51,7 @@ from atlas.assistant.service import (
     OpenConversation,
     stop,
 )
-from atlas.assistant.subagents import Subagents
+from atlas.assistant.subagents import Subagents, TaskWorkspaces
 from atlas.assistant.workbench import Workbench
 
 __all__ = [
@@ -89,6 +89,7 @@ __all__ = [
     "SlashCommandView",
     "SubagentChanged",
     "Subagents",
+    "TaskWorkspaces",
     "Titled",
     "TurnStarted",
     "TurnStopped",

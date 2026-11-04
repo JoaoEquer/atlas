@@ -111,7 +111,7 @@ from atlas.assistant.model import (
     review_actions,
     skill_action,
 )
-from atlas.assistant.subagents import Subagents
+from atlas.assistant.subagents import Subagents, TaskWorkspaces
 from atlas.assistant.titles import TITLE_TURNS, TitleQuarantine, write_title
 from atlas.assistant.workbench import Workbench, answer_for_user
 from atlas.bots import MAIN_AGENT, Bot, BotError, Bots, roster_section
@@ -290,6 +290,8 @@ class _Shared:
     #: The harnesses' other accounts, from the plugin that brings them (step 22); `None`, each
     #: harness on its own login alone.
     accounts: Accounts | None = None
+    #: The workspaces a delegated task may ask for (step 21), from the server; `None`, none.
+    task_workspaces: TaskWorkspaces | None = None
     #: The plugins' tools, one line per plugin for tool search's list of sources.
     plugin_sources: dict[str, str] = field(default_factory=dict[str, str])
     #: The plugins' MCP servers, as an MCP file's document, for the MCP client.
@@ -711,6 +713,15 @@ class Assistant:
         """The harnesses' other accounts, from the plugin that brings them (step 22); `None` when
         no plugin does."""
         return self._shared.accounts
+
+    @property
+    def task_workspaces(self) -> TaskWorkspaces | None:
+        """The workspaces a delegated task may ask for (step 21); `None` until the server gives
+        them."""
+        return self._shared.task_workspaces
+
+    def use_workspaces(self, workspaces: TaskWorkspaces) -> None:
+        self._shared.task_workspaces = workspaces
 
     def set_accounts(self, accounts: Accounts | None) -> None:
         self._shared.accounts = accounts

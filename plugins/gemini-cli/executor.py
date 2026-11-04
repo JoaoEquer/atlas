@@ -803,5 +803,7 @@ def no_personal_login() -> str:
 def untrusted_note() -> str:
     return (
         "[Atlas: the Gemini CLI does not trust this folder, so it asks before each tool even in "
-        "the automatic mode. Trust the folder in the Gemini CLI to let it decide by itself.]"
+        "the automatic mode. Trust the folder in the Gemini CLI to let it decide by itself. "
+        "Atlas's workspaces are all in the worktrees folder of its home: trusting that folder "
+        "once covers every one.]"
     )

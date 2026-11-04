@@ -379,6 +379,9 @@ class Task:
     #: The predefined subagent it runs as (a plugin's agent, `video:editor`, step 16k); empty,
     #: the plain subagent.
     agent: str = ""
+    #: For an outside executor: it works in a new workspace of `folder`'s project (step 21), a
+    #: worktree on a branch of its own, and not in `folder` itself.
+    workspace: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -448,6 +451,10 @@ def parse_agent(text: str, plugin: str, stem: str) -> AgentDefinition:
 _AGENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
+#: A task's `workspace` that asks for a new one (step 21).
+NEW_WORKSPACE = "new"
+
+
 def read_tasks(tasks: object) -> tuple[Task, ...]:
     """The tasks of a spawn, checked. Raises `DelegationError` with a message for the model."""
     if isinstance(tasks, str):
@@ -479,12 +486,19 @@ def read_tasks(tasks: object) -> tuple[Task, ...]:
         if not isinstance(goal, str) or not goal.strip():
             raise DelegationError(f"Task {i} is missing a 'goal'.")
         folder, agent = fields.get("folder"), fields.get("agent")
+        workspace = fields.get("workspace")
+        if workspace not in (None, "", NEW_WORKSPACE):
+            raise DelegationError(
+                f"Task {i}: 'workspace' is '{NEW_WORKSPACE}' (a new workspace) or left out (the "
+                "folder itself)."
+            )
         read.append(
             Task(
                 goal.strip(),
                 context.strip() if isinstance(context, str) else "",
                 folder.strip() if isinstance(folder, str) else "",
                 agent.strip() if isinstance(agent, str) else "",
+                workspace == NEW_WORKSPACE,
             )
         )
     for i, task in enumerate(read if len(read) >= 2 else ()):

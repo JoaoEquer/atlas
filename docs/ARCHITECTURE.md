@@ -3848,6 +3848,13 @@ in any folder. `atlas.workspaces` (A1), decided with the user; how, our choice, 
   holds work its branch of origin has not asks the user first.
 - **Never touched:** the project's own folder, but to read its `.worktreeinclude` and to make,
   list and remove worktrees; the branch of origin is never checked out, reset or deleted.
+- **A delegated task gets one only when asked:** `delegate`'s task takes `workspace: "new"`,
+  for an outside executor alone; the server makes it and runs its setup script before the task
+  starts there (`TaskWorkspaces`, which the server gives the assistant), and the result ends with
+  its branch and what it changed (`git diff --shortstat` from where it left its branch of origin,
+  its own commits and its new files). Without it, the task runs in the folder as before, and the
+  spawn's answer warns when another agent works there now, a session of the user's or another
+  delegated task: no lock on a folder (decided with the user on 03/11/2026).
 - **Named `workspace`;** the file tools' folder of before is the `starting folder` (GLOSSARY), its
   `[workspace] folder` setting kept as it was.
 
@@ -3860,7 +3867,7 @@ executors' alone, never Atlas's own conversation's or a bot's; the cloud waits f
   (`workbench.git`, read with the user's own `git`). In a repository its menu makes a new
   worktree (`workbench.worktree`, on a new branch `atlas/<name>` from the one checked out), and
   opens a new session there; since step 21 that worktree is a workspace in the home's
-  `worktrees/` (Workspaces, below), not a folder beside the project. Atlas never checks
+  `worktrees/` (Workspaces, above), not a folder beside the project. Atlas never checks
   out, resets or deletes anything in the folder.
 - **The permission mode**, a menu by the box, for a harness that lists its modes (SDK version 28,
   `Capabilities.modes`, `ExecutorInstance.set_mode`, `workbench.mode`): Claude Code's default,

@@ -6,6 +6,8 @@ user's screen, or Atlas answers it. The database and the tools are real, in a te
 import asyncio
 import json
 import os
+import shutil
+import subprocess
 import weakref
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
@@ -28,11 +30,12 @@ from atlas.assistant import (
     WorkbenchEvent,
 )
 from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
-from atlas.jobs import SubagentStatus, SubagentStore
+from atlas.jobs import DelegationError, SubagentStatus, SubagentStore
 from atlas.models import AssistantMessage, CallLedger, ToolResult, UserMessage
 from atlas.plugins import Answers, Executor, Permission, Question, Verdict
 from atlas.secrets import Vault
 from atlas.trust import ApprovalAnswer, ApprovalRequest, Choice, Outcome
+from atlas.workspaces import WorkspaceError, Workspaces
 from claude_code_support import claude_code
 from codex_support import codex
 from fake_model import FakeCall, FakeModelServer, FakeReply
@@ -988,3 +991,121 @@ def test_executor_accounts_tells_each_accounts_login_usage_and_limit(
         "[Atlas: w@example.com is logged in already on claude-code@work: delegate with "
         "executor='claude-code@work' (or resume with it) instead of logging in again.]"
     )
+
+
+# -- a delegated task in a workspace of its own (step 21) ------------------------------------------
+
+
+class _Workspaces:
+    """The server's part, as `atlas.workspaces` does it, in the test's home."""
+
+    def __init__(self, home: Home) -> None:
+        database = Database(home.database_file)
+        migrate(database, SCHEMAS)
+        self.made = Workspaces(home.worktrees_folder, database)
+
+    async def make(self, folder: Path, name: str) -> tuple[Path, str]:
+        try:
+            made = self.made.create(folder, name)
+        except WorkspaceError as error:
+            raise DelegationError(str(error)) from error
+        return Path(made.folder), made.branch
+
+    async def changes(self, folder: Path) -> str:
+        found = self.made.found_at(folder)
+        return "" if found is None else self.made.changes(found.id)
+
+
+def _git_project(folder: Path) -> None:
+    identity = {
+        "GIT_AUTHOR_NAME": "Ana",
+        "GIT_AUTHOR_EMAIL": "ana@example.com",
+        "GIT_COMMITTER_NAME": "Ana",
+        "GIT_COMMITTER_EMAIL": "ana@example.com",
+    }
+    (folder / "app.py").write_text("print('shop')\n", encoding="utf-8")
+    for arguments in (
+        ("init", "--quiet", "--initial-branch", "main"),
+        ("add", "--all"),
+        ("commit", "--quiet", "--message", "The shop"),
+    ):
+        subprocess.run(  # noqa: S603 - the system's git, on a test's own repository
+            ["git", "-C", str(folder), *arguments],  # noqa: S607
+            check=True,
+            capture_output=True,
+            env={**os.environ, **identity},
+        )
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_a_task_asking_for_a_new_workspace_works_there_and_says_its_branch_and_changes(
+    make: Make, fake: FakeModelServer, claude: Callable[..., None], home: Home, tmp_path: Path
+) -> None:
+    claude({"sleep": 1.0}, {"result": "Added the page."})
+    asked = {"goal": "Add the about page.", "folder": "project", "workspace": "new"}
+    fake.reply(
+        FakeReply(
+            calls=[FakeCall("delegate", json.dumps({"executor": CLAUDE_CODE, "tasks": [asked]}))],
+            when=PARENT,
+        ),
+        FakeReply(text="Claude Code is on it.", when=PARENT),
+        FakeReply(text="Done.", when=PARENT),
+        FakeReply(
+            calls=[FakeCall("delegate", json.dumps({"tasks": [{**asked, "folder": ""}]}))],
+            when=PARENT,
+        ),
+        FakeReply(text="Only for an executor.", when=PARENT),
+    )
+    assistant, _ = make(None)
+    project = tmp_path / "work" / "project"
+    _git_project(project)
+    assistant.use_workspaces(_Workspaces(home))
+
+    async def scenario() -> tuple[OpenConversation, Path, str]:
+        conversation = await _start(assistant, "Add an about page.")
+        while not assistant.workbench.runs():
+            await asyncio.sleep(0.02)
+        folder = assistant.workbench.runs()[0].spec.folder
+        (folder / "about.md").write_text("About us.\n", encoding="utf-8")
+        await _settle(assistant, conversation)
+        conversation.send("And a contact page, by a subagent.")
+        await _settle(assistant, conversation)
+        refused = [m.text for m in conversation.history if isinstance(m, ToolResult)][-1]
+        await assistant.close()
+        return conversation, folder, refused
+
+    conversation, folder, refused = _run(scenario)
+
+    assert folder.is_relative_to(home.worktrees_folder), "a copy in the home, not the project"
+    notice = _notice(conversation)
+    assert "Added the page." in notice
+    assert "It worked in the workspace atlas/add-the-about-page-" in notice
+    assert "changed: 1 new file not yet committed" in notice
+    assert not (project / "about.md").exists(), "the project itself untouched"
+    assert "A new workspace is for an outside executor's tasks" in refused
+
+
+def test_a_task_in_a_folder_another_agent_works_in_is_warned_of(
+    make: Make, fake: FakeModelServer, claude: Callable[..., None], tmp_path: Path
+) -> None:
+    claude({"sleep": 1.0}, {"result": "Done."})
+    fake.reply(
+        _delegate(),
+        FakeReply(text="Claude Code is on it.", when=PARENT),
+        FakeReply(text="Done.", when=PARENT),
+    )
+    assistant, _ = make(None)
+
+    async def scenario() -> str:
+        workbench = assistant.workbench
+        mine = await workbench.start(CLAUDE_CODE, tmp_path / "work" / "project")
+        await workbench.prompt(mine.id, "Refactor the views.")
+        conversation = await _start(assistant, "Fix my failing test.")
+        await _settle(assistant, conversation)
+        said = next(m.text for m in conversation.history if isinstance(m, ToolResult))
+        await assistant.close()
+        return said
+
+    said = _run(scenario)
+
+    assert "Another agent works in" in json.loads(said)["warning"]

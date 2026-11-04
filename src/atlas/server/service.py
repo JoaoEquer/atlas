@@ -130,7 +130,15 @@ from atlas.installation import (
     compose_log,
     compose_progress,
 )
-from atlas.jobs import AccountStore, JobsError, Routine, Run, RunStatus, Scheduler
+from atlas.jobs import (
+    AccountStore,
+    DelegationError,
+    JobsError,
+    Routine,
+    Run,
+    RunStatus,
+    Scheduler,
+)
 from atlas.marketplace import Kind as MarketKind
 from atlas.marketplace import Marketplace, MarketplaceError, MarketplaceStore
 from atlas.marketplace import Page as MarketPage
@@ -617,6 +625,7 @@ class Gateway:
         #: What the user dictated in this home (step 26), each recording with its words.
         self.dictations = Dictations(home.dictations_folder)
         self.assistant.use_reader(LoadedReader("atlas", "audio", self.speech.transcribe))
+        self.assistant.use_workspaces(_TaskWorkspaces(self))
         self.plugins = Plugins(home, Database(home.database_file), vault, clock=clock)
         self.plugins.host = AssistantPluginHost(self.assistant, self._told_accounts_changed)
         #: The marketplace (step 16s), installing into this home.
@@ -2014,6 +2023,31 @@ class Gateway:
             )
         )
         return _project_row(done)
+
+    async def task_workspace(self, folder: Path, name: str) -> tuple[Path, str]:
+        """A workspace for a delegated task (step 21), made as the app's are and prepared before
+        the task starts in it: its folder and its branch."""
+        try:
+            made = await asyncio.to_thread(self.workspaces.create, folder, name)
+        except WorkspaceError as error:
+            raise DelegationError(f"The workspace could not be made: {error}") from error
+        self._workspaces_changed()
+        if made.state is WorkspaceState.PREPARING:
+            await self._prepare(made.id)
+            made = await asyncio.to_thread(self.workspaces.get, made.id)
+        if made.state is WorkspaceState.SETUP_FAILED:
+            raise DelegationError(
+                f"The workspace {made.branch} was made at {made.folder}, but its setup script "
+                f"failed: {made.setup_output.strip()[-500:]} It is kept for the user."
+            )
+        return Path(made.folder), made.branch
+
+    async def task_workspace_changes(self, folder: Path) -> str:
+        """What the workspace at `folder` changed since it was made; empty when none is there."""
+        found = await asyncio.to_thread(self.workspaces.found_at, folder)
+        if found is None:
+            return ""
+        return await asyncio.to_thread(self.workspaces.changes, found.id)
 
     async def _new_workspace(self, folder: Path, name: str, base: str) -> Workspace:
         """A workspace made, and its setup script run in the background, every client told."""
@@ -3657,6 +3691,19 @@ async def _maybe_await(value: object) -> None:
     callbacks that may be sync or async, as the restart hooks of a stored secret are."""
     if asyncio.iscoroutine(value):
         await value
+
+
+class _TaskWorkspaces:
+    """The gateway as the maker of the workspaces delegated tasks ask for (step 21)."""
+
+    def __init__(self, gateway: Gateway) -> None:
+        self._gateway = gateway
+
+    async def make(self, folder: Path, name: str) -> tuple[Path, str]:
+        return await self._gateway.task_workspace(folder, name)
+
+    async def changes(self, folder: Path) -> str:
+        return await self._gateway.task_workspace_changes(folder)
 
 
 class _Desk:

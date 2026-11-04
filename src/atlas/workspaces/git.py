@@ -171,5 +171,22 @@ def ahead(folder: Path, base: str, branch: str) -> int:
         return 0
 
 
+def summary(folder: Path, base: str) -> str:
+    """What `folder` changed since it left `base`, in a line: its commits, its files changed,
+    committed or not, and its new files git does not track yet."""
+    start = run(folder, "merge-base", base, "HEAD").strip()
+    parts: list[str] = []
+    commits = ahead(folder, base, "HEAD")
+    if commits:
+        parts.append(f"{commits} commit{'s' if commits != 1 else ''} of its own")
+    shortstat = run(folder, "diff", "--shortstat", start).strip()
+    if shortstat:
+        parts.append(shortstat)
+    new = [line for line in run(folder, "ls-files", "--others", "--exclude-standard").splitlines()]
+    if new:
+        parts.append(f"{len(new)} new file{'s' if len(new) != 1 else ''} not yet committed")
+    return "; ".join(parts) or "nothing changed"
+
+
 def delete_branch(root: Path, branch: str) -> None:
     run(root, "branch", "-D", branch)

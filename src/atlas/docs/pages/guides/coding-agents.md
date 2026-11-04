@@ -83,7 +83,7 @@ This is Claude Code's browser. Atlas's own, for its conversations, is another on
 
 ## Let Atlas hand out the work
 
-Ask Atlas in plain words, and it delegates to the right executor on the account you name, with a route of its own when you give one, for example `claude-code@company` and then `codex`. It follows along and brings back the result.
+Ask Atlas in plain words, and it delegates to the right executor on the account you name, with a route of its own when you give one, for example `claude-code@company` and then `codex`. It follows along and brings back the result. Ask for the work to be done apart, in a new workspace, and it runs in a copy of the project on a branch of its own, made in Atlas's home and prepared as the project says; the result names the branch and what changed. Otherwise it works in the folder itself, and Atlas is told when another agent is working there too.
 
 ## How Atlas talks to them
 

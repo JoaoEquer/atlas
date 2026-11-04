@@ -23,7 +23,7 @@ from collections.abc import Sequence
 from typing import Any, Protocol, cast
 
 from atlas.agent import Tool
-from atlas.jobs import MAX_TASKS, DelegationError, Task, read_tasks
+from atlas.jobs import MAX_TASKS, NEW_WORKSPACE, DelegationError, Task, read_tasks
 
 NAME = "delegate"
 
@@ -181,6 +181,7 @@ EXECUTORS_DESCRIPTION = (
     "action='resume' goes on later, elsewhere if `executor` says. Only when the user asks: "
     "action='account' logs an account in."
 )
+WORKSPACE_DESCRIPTION = "'new': works in a copy of the folder's git project, on its own branch."
 ROUTE_DESCRIPTION = (
     "Where to go on at a plan limit, in order; another executor starts from a handoff."
 )
@@ -233,6 +234,11 @@ def delegate(delegator: Delegator | None, *, agents: Sequence[tuple[str, str]] =
         parameters["properties"]["tasks"]["items"]["properties"]["folder"] = {
             "type": "string",
             "description": "For an outside executor: the project folder it works in.",
+        }
+        parameters["properties"]["tasks"]["items"]["properties"]["workspace"] = {
+            "type": "string",
+            "enum": [NEW_WORKSPACE],
+            "description": WORKSPACE_DESCRIPTION,
         }
         parameters["properties"]["action"]["enum"] = [
             "spawn", "list", "steer", "stop", "resume", "account",

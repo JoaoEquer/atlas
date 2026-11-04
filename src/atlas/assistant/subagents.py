@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from atlas.agent import ToolFinished, ToolStarted, TurnOutcome
 from atlas.assistant.executors import (
@@ -47,6 +47,7 @@ from atlas.assistant.model import (
     Decides,
     ExecutorUsage,
     InstanceActivity,
+    InstanceState,
     Owner,
     SubagentChanged,
 )
@@ -63,6 +64,7 @@ from atlas.jobs import (
     STEER_OPEN,
     WAITED_NOTES,
     AgentDefinition,
+    DelegationError,
     Subagent,
     SubagentStatus,
     Task,
@@ -120,6 +122,20 @@ MAIN_TARGET = "main"
 AUTO_EXECUTORS = frozenset({"claude-code", "codex", "deepseek", "gemini-cli"})
 
 
+class TaskWorkspaces(Protocol):
+    """The workspaces a delegated task may ask for (step 21), as the server makes them: a
+    worktree of a project's on a branch of its own, prepared before the task starts in it."""
+
+    async def make(self, folder: Path, name: str) -> tuple[Path, str]:
+        """A new workspace of `folder`'s project named `name`, once its setup script ended: its
+        folder and its branch. Raises `DelegationError` with what the model is told."""
+        ...
+
+    async def changes(self, folder: Path) -> str:
+        """What the workspace at `folder` changed since it was made, in a line."""
+        ...
+
+
 @dataclass
 class _Child:
     """A running child and what its dock shows."""
@@ -140,6 +156,8 @@ class _Child:
     in_tool: int = 0
     #: Its parent, or the user, asked it to stop.
     stopping: bool = False
+    #: The branch of the new workspace it works in (step 21); empty, it works in its folder.
+    workspace: str = ""
 
 
 class Subagents:
@@ -278,6 +296,11 @@ class Subagents:
             targets = routed
         elif route:
             return "[Atlas: A route is for an outside executor's tasks. Nothing was delegated.]"
+        elif any(task.workspace for task in tasks):
+            return (
+                "[Atlas: A new workspace is for an outside executor's tasks: give `executor`. "
+                "Nothing was delegated.]"
+            )
         #: Each task's predefined subagent, a plugin's agent (step 16k), or `None`.
         agents: list[AgentDefinition | None] = []
         for task in tasks:
@@ -298,6 +321,8 @@ class Subagents:
             agents.append(agent)
         found: Executor | None = None
         folders: list[Path] = []
+        #: The branch of the new workspace each task asked for (step 21), empty for none.
+        branches: list[str] = [""] * len(tasks)
         #: Each task's executor on its folder's account (step 16h), its name and its login.
         accounts: list[tuple[Executor, str, Account]] = []
         if executor is not None:
@@ -322,6 +347,10 @@ class Subagents:
                         "Give each task the project folder it works in.]"
                     )
                 folders.append(folder)
+            made = await self._workspaces(tasks, folders)
+            if isinstance(made, str):
+                return made
+            folders, branches = made
             on = await self._accounts(executor, folders, account)
             if isinstance(on, str):
                 return on
@@ -370,7 +399,16 @@ class Subagents:
                     on_account, name, spec, parent, record, atlas_answers=answers
                 )
                 prompt = f"{task.goal}\n\n{task.context}".strip()
-                children.append(_Child(record, parent, run=run, prompt=prompt, last_activity=now))
+                children.append(
+                    _Child(
+                        record,
+                        parent,
+                        run=run,
+                        prompt=prompt,
+                        last_activity=now,
+                        workspace=branches[index],
+                    )
+                )
                 continue
             agent = agents[index]
             model = choice if agent is None else agent_model(agent) or choice
@@ -397,7 +435,54 @@ class Subagents:
                 tools=None if agent is None else agent_tools(agent),
             )
             children.append(_Child(record, parent, conversation=conversation))
-        return await self._launch(parent, delegation_id, children)
+        shared = self._shared_folders(children)
+        return await self._launch(parent, delegation_id, children, shared)
+
+    async def _workspaces(
+        self, tasks: Sequence[Task], folders: list[Path]
+    ) -> tuple[list[Path], list[str]] | str:
+        """Each task's folder, a new workspace's where it asked for one, and that workspace's
+        branch (empty for the others); or what the model is told when one cannot be made, the
+        ones made already left for the user, listed in the app."""
+        maker = self._assistant.task_workspaces
+        branches = [""] * len(tasks)
+        if not any(task.workspace for task in tasks):
+            return folders, branches
+        if maker is None:
+            return "[Atlas: Workspaces are not available here. Nothing was delegated.]"
+        made = list(folders)
+        for index, task in enumerate(tasks):
+            if not task.workspace:
+                continue
+            name = f"{title_from(task.goal)[:40]}-{secrets.token_hex(2)}"
+            try:
+                made[index], branches[index] = await maker.make(folders[index], name)
+            except DelegationError as error:
+                return f"[Atlas: {error} Nothing was delegated.]"
+        return made, branches
+
+    def _shared_folders(self, children: Sequence[_Child]) -> list[str]:
+        """The folders of a batch's tasks where another agent works now: a session of the
+        user's, or another delegated task (decided with the user on 03/11/2026, in place of a
+        lock on the folder)."""
+        busy = {
+            run.spec.folder.resolve()
+            for run in self._assistant.workbench.runs()
+            if run.state in (InstanceState.STARTING, InstanceState.WORKING)
+        }
+        mine = {child.record.id for child in children}
+        busy |= {
+            Path(other.record.folder).resolve()
+            for other in self._live.values()
+            if other.record.folder and other.record.id not in mine and other.run is not None
+        }
+        return sorted(
+            {
+                child.record.folder
+                for child in children
+                if child.record.folder and Path(child.record.folder).resolve() in busy
+            }
+        )
 
     async def resume(
         self,
@@ -710,9 +795,14 @@ class Subagents:
         return entry
 
     async def _launch(
-        self, parent: "OpenConversation", delegation_id: str, children: list[_Child]
+        self,
+        parent: "OpenConversation",
+        delegation_id: str,
+        children: list[_Child],
+        shared: Sequence[str] = (),
     ) -> str:
-        """Start a batch's children: in the background, or waited for (a routine, a full pool)."""
+        """Start a batch's children: in the background, or waited for (a routine, a full pool).
+        `shared`: the folders another agent works in, which the answer warns of."""
         assistant = self._assistant
         assistant.subagent_store.add([child.record for child in children])
         waits = None
@@ -750,15 +840,17 @@ class Subagents:
                 raise
             records = self._trimmed(parent, [child.record for child in children])
             assistant.subagent_store.delivered(delegation_id)
-            return json.dumps(
-                {"results": [_entry(record) for record in records], "note": WAITED_NOTES[waits]},
-                ensure_ascii=False,
-            )
+            waited: dict[str, object] = {
+                "results": [_entry(record) for record in records],
+                "note": WAITED_NOTES[waits],
+            }
+            return json.dumps(_warned(waited, shared), ensure_ascii=False)
         self._background += 1
         batch = asyncio.create_task(self._deliver(parent.id, children))
         self._batches.add(batch)
         batch.add_done_callback(self._batches.discard)
-        return json.dumps(dispatched([child.record for child in children]), ensure_ascii=False)
+        sent = dispatched([child.record for child in children])
+        return json.dumps(_warned(sent, shared), ensure_ascii=False)
 
     async def _deliver(self, parent_id: str, children: Sequence[_Child]) -> None:
         """When the batch's last child ends, its one notice to the parent."""
@@ -896,6 +988,8 @@ class Subagents:
             await run.stop()
             assistant.workbench.drop(run)
             child.record = self._executor_ended(child, finished, error, stalled)
+            if child.workspace:
+                child.record = await self._workspace_said(child)
             assistant.subagent_store.finish(child.record)
             self._live.pop(child.record.id, None)
             self._changed(child)
@@ -995,6 +1089,20 @@ class Subagents:
                 raise
             workbench.notify(InstanceActivity(run.id, "note", not_compacted(error)))
         return run, await run.turn(CONTINUE)
+
+    async def _workspace_said(self, child: _Child) -> Subagent:
+        """A task's result, with the workspace it worked in: its branch, and what it changed."""
+        record = child.record
+        maker = self._assistant.task_workspaces
+        changes = ""
+        if maker is not None:
+            try:
+                changes = await maker.changes(Path(record.folder))
+            except Exception:  # a git that fails: the result goes without its changes, logged
+                _logger.exception("A workspace's changes could not be read.")
+        said = f"[Atlas: It worked in the workspace {child.workspace}, at {record.folder}"
+        said += f"; changed: {changes}.]" if changes else ".]"
+        return dataclasses.replace(record, summary=f"{record.summary}\n\n{said}".strip())
 
     def _executor_ended(
         self,
@@ -1517,6 +1625,16 @@ def _last_words(history: Sequence[Message]) -> str:
 
 def _unwrapped(steer: str) -> str:
     return steer.removeprefix(STEER_OPEN).removesuffix(STEER_CLOSE).strip()
+
+
+def _warned(answer: dict[str, object], shared: Sequence[str]) -> dict[str, object]:
+    """A spawn's answer, warning of the folders another agent works in."""
+    if shared:
+        answer["warning"] = (
+            f"Another agent works in {', '.join(shared)} now: the two may change the same "
+            'files. workspace: "new" gives a task a copy of its own.'
+        )
+    return answer
 
 
 def _entry(record: Subagent) -> dict[str, object]:

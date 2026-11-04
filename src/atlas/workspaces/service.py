@@ -95,6 +95,21 @@ class Workspaces:
             raise WorkspaceError(f"There is no workspace {workspace_id!r}.")
         return found
 
+    def found_at(self, folder: Path) -> Workspace | None:
+        """The workspace whose folder `folder` is, or is in."""
+        inside = folder.resolve()
+        for workspace in self._store.listed():
+            if inside.is_relative_to(Path(workspace.folder).resolve()):
+                return workspace
+        return None
+
+    def changes(self, workspace_id: str) -> str:
+        """What a workspace changed since it left its branch of origin, in a line."""
+        workspace = self.get(workspace_id)
+        if workspace.state is WorkspaceState.ARCHIVED:
+            return "archived"
+        return git.summary(Path(workspace.folder), workspace.base)
+
     def create(self, folder: Path, name: str, base: str | None = None) -> Workspace:
         """A new workspace of the project of `folder`, named `name`, on a new branch from `base`
         (the branch the project has checked out when none is named): its worktree made and the
