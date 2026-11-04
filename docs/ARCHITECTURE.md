@@ -3826,6 +3826,31 @@ conversation. Decided with the user; how, our choice, marked:
 - **Left for later:** a mouse button as the key, which Electron's shortcuts do not hear, needs a
   native listener of its own, optional as the terminal's.
 
+### Workspaces — decided 2026-11-03
+
+Step 21, the base A: a workspace is a task of a project, a worktree Atlas makes in the home's
+`worktrees/` (MACHINE: its work goes back through git, not a backup) on a branch of its own,
+`atlas/<name>`, from the branch the project had checked out; sessions of any harness run in it, as
+in any folder. `atlas.workspaces` (A1), decided with the user; how, our choice, marked:
+
+- **The git is the server's, never the agent's:** making and removing the worktree, the archive's
+  commit, later the checkpoints and the delivery. A harness that guards `.git` is left as it is,
+  and no plugin changes: a workspace's folder is one more folder for `ExecutorSpec.folder`.
+- **The project comes from git** (`git rev-parse --git-common-dir`, kept per folder): every
+  worktree of a repository, Atlas's, a harness's or the user's, groups under it.
+- **A new one is prepared once:** the files the project's `.worktreeinclude` lists copied in (a
+  path that leaves the project skipped), then the project's setup script, set in the app, run in
+  its folder with its block of ports (`ATLAS_WORKSPACE_PORT`, `ATLAS_WORKSPACE_PORTS`); a script
+  that fails marks the workspace and leaves it usable.
+- **Archiving loses nothing:** its changes committed on its branch with a message of Atlas's (the
+  project's hooks left out: our choice, marked), its folder removed, its branch kept; unarchiving
+  makes the folder again and undoes that commit, its changes back as they were. Deleting one that
+  holds work its branch of origin has not asks the user first.
+- **Never touched:** the project's own folder, but to read its `.worktreeinclude` and to make,
+  list and remove worktrees; the branch of origin is never checked out, reset or deleted.
+- **Named `workspace`;** the file tools' folder of before is the `starting folder` (GLOSSARY), its
+  `[workspace] folder` setting kept as it was.
+
 ### A session's environment, mode and plan by its box — decided 2026-11-01
 
 Step 18g, from what the user brought on 01/11/2026 (decided with the user: a worktree is the

@@ -16,7 +16,7 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `restore` | restaurar | Putting a backup's entries back over a home, checked whole before anything is written |
 | `settings` | configurações | The typed values read at startup, from `ATLAS_*` variables and `config.toml`; the editable ones change from the settings screen while the server runs |
 | `settings screen` | tela de Configurações | The app's screen of every setting, a section at a time on its left: General, Model, Personalization, Safety, Workspace and Machines. A change saves itself and applies without a restart |
-| `editable setting` | ajuste editável | A `config.toml` setting the settings screen writes (`settings.write`): the default model, the trust rules, the approval timeout, the workspace folder and the time zone. One set by an `ATLAS_*` variable is shown locked |
+| `editable setting` | ajuste editável | A `config.toml` setting the settings screen writes (`settings.write`): the default model, the trust rules, the approval timeout, the starting folder and the time zone. One set by an `ATLAS_*` variable is shown locked |
 | `extensions` | extensões | The app's screen of what the home adds to Atlas, its entry in the sidebar below the marketplace's, a tab per `item kind` in the marketplace's look: its plugins (turned on with their consent), its skills (with where each came from), its MCP servers (with their `server state`) and its executors. Replaced the settings' sections Plugins and Executors on 28/10/2026, and left the settings for a screen of its own on 01/11/2026 |
 | `server state` | estado do servidor | How an MCP server the home declares stands now, for the Extensions screen (`ServerStatus`): `connecting`, `connected` with its tools, or `left_out` with why; and whether it signs in with OAuth, which the app sends to `atlas mcp login` in a terminal |
 | `personalization` | personalização | The settings screen's section of who Atlas is and what it knows: the soul, "About you" (`USER.md`) and the memory (`MEMORY.md`), each entry read, edited and removed there |
@@ -68,7 +68,14 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `home copy` | versão da home | One version of the home's opening words, a letter (`a`, `b`, ...), drawn for a new visitor and kept by its cookie for 30 days, so two can be compared |
 | `key screen` | tela de chave | What the app opens on when no provider has a key in the vault: pick a provider, paste its key, which `provider.connect` checks and stores |
 | `first run` | primeira abertura | The app's first steps, numbered on its left; not the `Setup`, which installs it: Model (the `key screen`), Executors, Telegram, Connections, and Bring your work; each step skipped at will, the whole reopened from the settings' General. It opens by itself while no provider has a key |
-| `worktree` | worktree | A folder beside a project's, on a branch of its own, made by `git worktree add` for a new executor session apart from the project; the executors' alone |
+| `worktree` | worktree | A folder of a project's repository on a branch of its own, made by `git worktree add`: a `workspace`'s, in the home's `worktrees/`, or one the user or a harness made |
+| `workspace` | workspace | A task of a project (step 21): a worktree Atlas made, its branch and, once delivered, its pull request or merge; sessions of any harness run in it. Its git is the server's, never the agent's |
+| `project` | projeto | A git repository as Atlas groups its folders: the folder and every worktree that share its common git folder (`git rev-parse --git-common-dir`) |
+| `setup script` | script de preparo | A project's command, set in the app, that runs in a new workspace's folder before its first session, with its port range in the environment |
+| `worktree include` | arquivos copiados | The files a project's `.worktreeinclude` lists (`.env`, for one), copied into a new workspace once, at its making, never back |
+| `checkpoint` | ponto de volta | A workspace's state after a turn, kept as a private git ref; going back makes a copy of the session there, deleting nothing |
+| `review comment` | comentário de revisão | A note on a line of a workspace's diff, sent to its session as a message that names the file and the line |
+| `archived workspace` | workspace arquivada | A workspace whose folder is gone and whose work is kept in a commit on its branch; unarchived, the folder comes back and the commit is undone |
 | `first steps` | primeiros passos | The card at the sidebar's foot after the `first run`: five tasks that teach Atlas by doing them, each seen done in what the home has, each with its Start; it goes once all are done or it is hidden |
 | `permission mode` | modo de permissão | One of the permission modes an executor's harness lists (SDK version 28): Claude Code's default, accept edits, plan, and its automatic one; chosen in the menu by the session's box |
 | `program login` | login do programa | A service Atlas reaches through a program logged in on the server's machine, GitHub through `gh` and Google Workspace through `gws`, as their own `auth status` says (`atlas.logins`); the first run's Connections reads them and starts GitHub's |
@@ -164,8 +171,8 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `loaded tool` | ferramenta carregada | A deferred tool a tool search made callable in a conversation; it stays callable while the search's result is in the history |
 | `toolset` | conjunto de ferramentas | The tools of an agent loop, always-on and deferred, which change while Atlas runs (an MCP server connects or leaves) |
 | `tool gate` | portão de ferramenta | The check every tool call passes before it runs, whatever tool it is; approvals plug in here |
-| `workspace` | pasta de trabalho | The folder the file tools start from: a relative path is read from it. The vault's folder is out of their reach |
-| `user home folder` | pasta do usuário | The system's home folder (`~`) of the user Atlas runs as, where the workspace starts by default; in the container it is `/data/home`, inside the volume |
+| `starting folder` | pasta inicial | The folder the file tools start from: a relative path is read from it (`[workspace] folder`, the setting's name kept from before step 21). The vault's folder is out of their reach |
+| `user home folder` | pasta do usuário | The system's home folder (`~`) of the user Atlas runs as, where the starting folder is by default; in the container it is `/data/home`, inside the volume |
 | `background command` | comando em segundo plano | A command run_command started without waiting for it: its output goes to a file in `commands/` in the home, and it lives while Atlas runs |
 | `MCP server` | servidor MCP | A program that offers tools over the Model Context Protocol, declared in the home's `mcp.json`; its tools are deferred |
 | `image` | imagem | A picture a tool returns for the model to see, such as one read_file opened; it travels with the tool's result |

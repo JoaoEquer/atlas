@@ -143,6 +143,7 @@ def test_the_vault_never_travels_and_the_database_does() -> None:
         "browser": EntryClass.MACHINE,
         "speech": EntryClass.MACHINE,
         "dictations": EntryClass.USER,
+        "worktrees": EntryClass.MACHINE,
     }
 
 

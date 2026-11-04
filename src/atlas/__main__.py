@@ -177,6 +177,7 @@ from atlas.skills import (
 )
 from atlas.skills import share as share_skill
 from atlas.trust import SCHEMA as TRUST_SCHEMA
+from atlas.workspaces import SCHEMA as WORKSPACES_SCHEMA
 
 __all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "SCHEMAS", "build_parser", "listen_address", "main"]
 
@@ -190,6 +191,7 @@ SCHEMAS: tuple[Schema, ...] = (
     MEMORY_SCHEMA,
     JOBS_SCHEMA,
     PLUGINS_SCHEMA,
+    WORKSPACES_SCHEMA,
 )
 
 _logger = logging.getLogger("atlas.cli")

@@ -451,6 +451,12 @@ protected_modules = ["atlas.browser.*"]
 allowed_importers = ["atlas.browser"]
 
 [[tool.importlinter.contracts]]
+name = "workspaces is reached only through its package root"
+type = "protected"
+protected_modules = ["atlas.workspaces.*"]
+allowed_importers = ["atlas.workspaces"]
+
+[[tool.importlinter.contracts]]
 name = "speech is reached only through its package root"
 type = "protected"
 protected_modules = ["atlas.speech.*"]

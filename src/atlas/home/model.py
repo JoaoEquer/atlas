@@ -42,6 +42,8 @@ SOUL_FILE = "SOUL.md"
 #: The home's picture, beside its name in the app (home/picture.py).
 PICTURE_FILE = "picture.png"
 DOCUMENTS_FOLDER = "documents"
+#: The workspaces' worktrees, one folder per project (step 21).
+WORKTREES_FOLDER = "worktrees"
 #: The user's dictations, each recording with what it said (step 26).
 DICTATIONS_FOLDER = "dictations"
 #: The speech model, downloaded once for every home of the machine, at the root (step 26).
@@ -180,6 +182,13 @@ LAYOUT: tuple[Entry, ...] = (
         "in a container, the user's home folder, where the workspace starts: what the agent made",
     ),
     Entry(
+        WORKTREES_FOLDER,
+        True,
+        EntryClass.MACHINE,
+        "the workspaces' worktrees, copies of the user's repositories each on a branch of its own; "
+        "their work goes back through git, not a backup",
+    ),
+    Entry(
         DICTATIONS_FOLDER,
         True,
         EntryClass.USER,
@@ -316,6 +325,10 @@ class Home:
     @property
     def documents_folder(self) -> Path:
         return self.root / DOCUMENTS_FOLDER
+
+    @property
+    def worktrees_folder(self) -> Path:
+        return self.root / WORKTREES_FOLDER
 
     @property
     def dictations_folder(self) -> Path:
