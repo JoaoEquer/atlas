@@ -1418,7 +1418,8 @@ def test_a_session_taken_up_by_hand_or_whose_limit_says_no_reset_does_not_go_on_
     monkeypatch.setattr(workbench_module, "RESUME_CHECK_SECONDS", 0.02)
     monkeypatch.setattr(workbench_module, "RESUME_AFTER_SECONDS", 0)
     b = bench(Screen())
-    soon = int(datetime.now(UTC).timestamp()) + 1
+    # A whole second at least before the reset, so the user's own prompt always comes first.
+    soon = int(datetime.now(UTC).timestamp()) + 2
     site = _turns(b, "site", [{"limit": soon}], [{"result": "Done by hand."}])
     docs = b.script("docs", {"say": "Stopped."}, {"limit": None})
 
@@ -1432,7 +1433,7 @@ def test_a_session_taken_up_by_hand_or_whose_limit_says_no_reset_does_not_go_on_
         unsaid = await workbench.start("claude-code", docs)
         await workbench.prompt(unsaid.id, "Write the docs.")
         await _idle(b, unsaid.id)
-        await asyncio.sleep(1.5)  # past the reset
+        await asyncio.sleep(max(0.0, soon - datetime.now(UTC).timestamp()) + 0.5)  # past it
         kept = workbench.get(run.id), workbench.get(unsaid.id)
         await b.assistant.close()
         return kept
