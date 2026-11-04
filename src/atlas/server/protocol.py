@@ -1679,6 +1679,10 @@ class WorkspaceDiff:
     files: list[DiffFileRow]
     #: More files changed than are listed.
     more: bool
+    #: It holds changes not committed (A4).
+    uncommitted: bool
+    #: The commits its branch has that its branch of origin has not.
+    ahead: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -1695,6 +1699,18 @@ class CheckpointRow:
 class CheckpointList:
     #: The newest first.
     checkpoints: list[CheckpointRow]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceCommit:
+    id: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspacePushed:
+    #: What git said.
+    said: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -2529,6 +2545,26 @@ METHODS: Mapping[str, Method] = {
             WorkspaceRow,
             "Put a workspace's files back as they were at one of its checkpoints, what they are "
             "now kept first as another; refused while a session works in it.",
+        ),
+        Method(
+            "workspace.commit",
+            WorkspaceCommit,
+            WorkspaceRow,
+            "Commit every change in a workspace on its branch, as the user's own commit.",
+        ),
+        Method(
+            "workspace.merge",
+            WorkspaceRef,
+            WorkspaceRow,
+            "Merge a workspace's branch into its branch of origin, the user's yes given in the "
+            "app; refused with changes not committed, or when it does not merge cleanly.",
+        ),
+        Method(
+            "workspace.push",
+            WorkspaceRef,
+            WorkspacePushed,
+            "Send a workspace's branch to the project's remote origin, the user's yes given in the "
+            "app.",
         ),
         Method(
             "workspace.project",

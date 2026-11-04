@@ -423,11 +423,13 @@ from atlas.server.protocol import (
     WorkbenchStartParams,
     WorkbenchSwitchParams,
     WorkbenchUseAccountParams,
+    WorkspaceCommit,
     WorkspaceCreate,
     WorkspaceDelete,
     WorkspaceDiff,
     WorkspaceList,
     WorkspaceListParams,
+    WorkspacePushed,
     WorkspaceRef,
     WorkspaceRestore,
     WorkspaceRow,
@@ -741,6 +743,9 @@ class Gateway:
             "workspace.diff": self._workspace_diff,
             "workspace.checkpoints": self._workspace_checkpoints,
             "workspace.restore": self._workspace_restore,
+            "workspace.commit": self._workspace_commit,
+            "workspace.merge": self._workspace_merge,
+            "workspace.push": self._workspace_push,
             "workspace.project": self._workspace_project,
             "workspace.set_project": self._workspace_set_project,
             "dictation.write": self._dictation_write,
@@ -2015,6 +2020,7 @@ class Gateway:
     async def _workspace_diff(self, connection: Connection, params: WorkspaceRef) -> WorkspaceDiff:
         self._owner(connection)
         files, more = await self._workspaces(self.workspaces.diff, params.id)
+        uncommitted, ahead = await self._workspaces(self.workspaces.status, params.id)
         return WorkspaceDiff(
             [
                 DiffFileRow(
@@ -2029,7 +2035,33 @@ class Gateway:
                 for found in files
             ],
             more,
+            uncommitted,
+            ahead,
         )
+
+    async def _workspace_commit(
+        self, connection: Connection, params: WorkspaceCommit
+    ) -> WorkspaceRow:
+        self._owner(connection)
+        done = await self._workspaces(self.workspaces.commit, params.id, params.message)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_merge(self, connection: Connection, params: WorkspaceRef) -> WorkspaceRow:
+        """Into the project's own branch: the app asked the user first."""
+        self._owner(connection)
+        done = await self._workspaces(self.workspaces.merge, params.id)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_push(
+        self, connection: Connection, params: WorkspaceRef
+    ) -> WorkspacePushed:
+        """Outward, to the project's remote: the app asked the user first."""
+        self._owner(connection)
+        said = await self._workspaces(self.workspaces.push, params.id)
+        self._workspaces_changed()
+        return WorkspacePushed(said)
 
     async def _workspace_checkpoints(
         self, connection: Connection, params: WorkspaceRef

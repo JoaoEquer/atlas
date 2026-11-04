@@ -948,6 +948,20 @@ export const en = {
 
   changes: {
     add: 'Add',
+    ahead: (count: number, base: string) =>
+      `${count === 1 ? '1 commit' : `${String(count)} commits`} not in ${base} yet`,
+    commit: 'Commit',
+    commitMessage: 'What these changes do',
+    committed: 'Committed on the branch.',
+    merge: (base: string) => `Merge into ${base}`,
+    mergeNote: (branch: string, base: string) =>
+      `${branch} is merged into ${base}, in the project's own folder where ${base} is checked out.`,
+    mergeYes: 'Merge',
+    merged: (base: string) => `Merged into ${base}.`,
+    push: 'Send the branch',
+    pushNote: (branch: string) => `${branch} is sent to the project's remote, origin: others with access see it.`,
+    pushYes: 'Send',
+    pushed: (branch: string) => `${branch} was sent.`,
     binary: 'A binary file.',
     checkpoints: (count: number) => (count === 1 ? '1 checkpoint' : `${String(count)} checkpoints`),
     goBack: 'Go back here',

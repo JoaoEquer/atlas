@@ -934,6 +934,20 @@ export const ptBR: Override<Messages> = {
 
   changes: {
     add: 'Adicionar',
+    ahead: (count: number, base: string) =>
+      `${count === 1 ? '1 commit' : `${String(count)} commits`} ainda fora de ${base}`,
+    commit: 'Fazer o commit',
+    commitMessage: 'O que estas mudanças fazem',
+    committed: 'Commit feito no branch.',
+    merge: (base: string) => `Juntar em ${base}`,
+    mergeNote: (branch: string, base: string) =>
+      `${branch} é juntado em ${base}, na própria pasta do projeto onde ${base} está aberto.`,
+    mergeYes: 'Juntar',
+    merged: (base: string) => `Juntado em ${base}.`,
+    push: 'Enviar o branch',
+    pushNote: (branch: string) => `${branch} é enviado ao remoto do projeto, origin: quem tem acesso vê.`,
+    pushYes: 'Enviar',
+    pushed: (branch: string) => `${branch} foi enviado.`,
     binary: 'Um arquivo binário.',
     checkpoints: (count: number) => (count === 1 ? '1 ponto de volta' : `${String(count)} pontos de volta`),
     goBack: 'Voltar aqui',

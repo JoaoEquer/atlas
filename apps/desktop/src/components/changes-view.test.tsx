@@ -16,6 +16,7 @@ const WORKSPACE = {
 } as WorkspaceRow
 
 const DIFF: WorkspaceDiff = {
+  ahead: 0,
   files: [
     {
       added: 1,
@@ -32,7 +33,8 @@ const DIFF: WorkspaceDiff = {
     },
     { added: 0, binary: true, lines: [], path: 'logo.png', removed: 0, status: 'added', truncated: false }
   ],
-  more: false
+  more: false,
+  uncommitted: true
 }
 
 beforeEach(() => {
@@ -133,5 +135,30 @@ describe("a workspace's changes", () => {
       expect(screen.getByTestId('checkpoint-back').textContent).toContain('before “Add the cart.”')
     })
     expect(back).toHaveBeenCalledWith('w-cart', 'c1')
+  })
+
+  it('commits the changes, then merges the branch into its origin after a yes', async () => {
+    const committed = vi.spyOn(workspaces, 'commitWorkspace').mockResolvedValue(WORKSPACE)
+    const merged = vi.spyOn(workspaces, 'mergeWorkspace').mockResolvedValue(WORKSPACE)
+    render(<ChangesView workspace={WORKSPACE} />)
+
+    fireEvent.change(await screen.findByTestId('commit-message'), { target: { value: 'Round the total' } })
+    fireEvent.click(screen.getByTestId('commit'))
+    await waitFor(() => {
+      expect(screen.getByTestId('deliver-said').textContent).toBe('Committed on the branch.')
+    })
+    expect(committed).toHaveBeenCalledWith('w-cart', 'Round the total')
+
+    vi.spyOn(workspaces, 'readDiff').mockResolvedValue({ ...DIFF, ahead: 1, uncommitted: false })
+    fireEvent.click(screen.getByTestId('changes-refresh'))
+    fireEvent.click(await screen.findByTestId('merge'))
+    expect(screen.getByTestId('deliver-confirm').textContent).toContain('atlas/cart is merged into main')
+    expect(merged).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('deliver-yes'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('deliver-said').textContent).toBe('Merged into main.')
+    })
+    expect(merged).toHaveBeenCalledWith('w-cart')
   })
 })

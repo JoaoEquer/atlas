@@ -460,6 +460,10 @@ export interface WorkspaceDiff {
   files: DiffFileRow[]
   /** More files changed than are listed. */
   more: boolean
+  /** It holds changes not committed (A4). */
+  uncommitted: boolean
+  /** The commits its branch has that its branch of origin has not. */
+  ahead: number
 }
 export interface DiffFileRow {
   path: string
@@ -495,6 +499,14 @@ export interface WorkspaceRestore {
   id: string
   /** One of its checkpoints. */
   commit: string
+}
+export interface WorkspaceCommit {
+  id: string
+  message: string
+}
+export interface WorkspacePushed {
+  /** What git said. */
+  said: string
 }
 export interface FolderRef {
   /** A project folder; a relative one is the workspace's. */
@@ -2048,6 +2060,8 @@ export interface RpcMethods {
   'workspace.archive': { params: WorkspaceRef; result: WorkspaceRow }
   /** A workspace's checkpoints, its folder as it was before each prompt, the newest first. */
   'workspace.checkpoints': { params: WorkspaceRef; result: CheckpointList }
+  /** Commit every change in a workspace on its branch, as the user's own commit. */
+  'workspace.commit': { params: WorkspaceCommit; result: WorkspaceRow }
   /** Make a workspace of a folder's project: a worktree in the home on a branch of its own, the listed files copied; its setup script runs after, told by workspaces.changed. */
   'workspace.create': { params: WorkspaceCreate; result: WorkspaceRow }
   /** Delete a workspace, its folder and its branch; one with work not delivered only with force. */
@@ -2056,8 +2070,12 @@ export interface RpcMethods {
   'workspace.diff': { params: WorkspaceRef; result: WorkspaceDiff }
   /** The workspaces of the home, or of a folder's project (step 21). */
   'workspace.list': { params: WorkspaceListParams; result: WorkspaceList }
+  /** Merge a workspace's branch into its branch of origin, the user's yes given in the app; refused with changes not committed, or when it does not merge cleanly. */
+  'workspace.merge': { params: WorkspaceRef; result: WorkspaceRow }
   /** How a folder's project prepares a new workspace. */
   'workspace.project': { params: FolderRef; result: ProjectRow }
+  /** Send a workspace's branch to the project's remote origin, the user's yes given in the app. */
+  'workspace.push': { params: WorkspaceRef; result: WorkspacePushed }
   /** Put a workspace's files back as they were at one of its checkpoints, what they are now kept first as another; refused while a session works in it. */
   'workspace.restore': { params: WorkspaceRestore; result: WorkspaceRow }
   /** Set how a folder's project prepares a new workspace: its setup script and ports. */
@@ -2197,11 +2215,14 @@ export const RPC_METHODS = [
   'workbench.worktree',
   'workspace.archive',
   'workspace.checkpoints',
+  'workspace.commit',
   'workspace.create',
   'workspace.delete',
   'workspace.diff',
   'workspace.list',
+  'workspace.merge',
   'workspace.project',
+  'workspace.push',
   'workspace.restore',
   'workspace.set_project',
   'workspace.unarchive'

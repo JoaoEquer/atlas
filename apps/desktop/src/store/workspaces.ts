@@ -98,6 +98,21 @@ export async function goBack(id: string, commit: string): Promise<void> {
   await goOnInCopy()
 }
 
+/** Every change of the workspace committed on its branch, as the user's own commit (A4). */
+export function commitWorkspace(id: string, message: string): Promise<WorkspaceRow> {
+  return current().client.call('workspace.commit', { id, message })
+}
+
+/** Its branch merged into its branch of origin, after the user's yes. */
+export function mergeWorkspace(id: string): Promise<WorkspaceRow> {
+  return current().client.call('workspace.merge', { id })
+}
+
+/** Its branch sent to the project's remote, after the user's yes; what git said. */
+export async function pushWorkspace(id: string): Promise<string> {
+  return (await current().client.call('workspace.push', { id })).said
+}
+
 export function readDiff(id: string): Promise<WorkspaceDiff> {
   return current().client.call('workspace.diff', { id })
 }

@@ -876,9 +876,17 @@ test('a file pasted or picked in a session goes to Claude Code as the SDK sends 
   await expect(prompt.getByTestId('attachment-chip')).toHaveCount(2)
 })
 
-test("the box's new worktree is a workspace in the home, listed under its project and deleted from there", async () => {
+test("the box's new worktree is a workspace in the home, listed under its project, delivered and deleted from there", async () => {
   const scripts = await scriptsFolder()
-  desktop = await launch(withClaude(scripts))
+  // The user's name in git, which their commit takes: a machine of CI has none of its own.
+  desktop = await launch(
+    withClaude(scripts, {
+      GIT_AUTHOR_EMAIL: 'ana@example.com',
+      GIT_AUTHOR_NAME: 'Ana',
+      GIT_COMMITTER_EMAIL: 'ana@example.com',
+      GIT_COMMITTER_NAME: 'Ana'
+    })
+  )
   const { claude, folder, home, page } = desktop
   keepOldSession(claude, folder)
   writeFileSync(path.join(folder, 'README.md'), 'The shop.\n')
@@ -915,7 +923,21 @@ test("the box's new worktree is a workspace in the home, listed under its projec
   const made = readdirSync(path.join(home, 'worktrees'))
   expect(made).toHaveLength(1)
 
-  // Nothing done in it: deleted on the first yes, its folder gone.
+  // Delivered by the user's clicks (step 21, A4): committed, then merged into main after a yes.
+  const [name] = readdirSync(path.join(home, 'worktrees', made[0] ?? ''))
+  writeFileSync(path.join(home, 'worktrees', made[0] ?? '', name ?? '', 'NOTES.md'), 'Open late.\n')
+  if (await page.getByTestId('panel-show').isVisible()) {
+    await page.getByTestId('panel-show').click()
+  }
+  await page.getByTestId('changes-tab').click()
+  await page.getByTestId('commit-message').fill('Add the notes')
+  await page.getByTestId('commit').click()
+  await page.getByTestId('merge').click()
+  await page.getByTestId('deliver-yes').click()
+  await expect(page.getByTestId('deliver-said')).toHaveText('Merged into main.')
+  expect(readFileSync(path.join(folder, 'NOTES.md'), 'utf8').replace(/\r\n/g, '\n')).toBe('Open late.\n')
+
+  // Delivered: deleted on the first yes, its folder gone.
   await workspace.hover()
   await workspace.getByTestId('workspace-delete').click()
   await page.getByTestId('workspace-delete-yes').click()

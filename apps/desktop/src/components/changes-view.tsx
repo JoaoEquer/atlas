@@ -14,7 +14,10 @@ import {
   $reviewComments,
   addComment,
   commentsOf,
+  commitWorkspace,
   goBack,
+  mergeWorkspace,
+  pushWorkspace,
   readCheckpoints,
   readDiff,
   removeComment,
@@ -67,6 +70,7 @@ export function ChangesView({ workspace }: { workspace: WorkspaceRow }) {
           {error}
         </p>
       )}
+      {diff && <Deliver diff={diff} onDone={read} workspace={workspace} />}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {diff?.files.length === 0 && <p className="p-2 text-muted-foreground">{t.changes.none}</p>}
         {diff?.files.map(file => (
@@ -116,6 +120,153 @@ export function ChangesView({ workspace }: { workspace: WorkspaceRow }) {
             {t.changes.send(comments.length)}
           </button>
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Delivering the workspace (step 21, A4), by the user's clicks: its changes committed as the
+ * user's own commit, then its branch merged into the one it came from, or sent to the project's
+ * remote; each of the last two asks first, the push being an act outside this computer. The
+ * pull request and its checks are the GitHub plugin's, beside these (`workspace`).
+ */
+function Deliver({ diff, onDone, workspace }: { diff: WorkspaceDiff; onDone: () => void; workspace: WorkspaceRow }) {
+  const [message, setMessage] = useState('')
+  const [asking, setAsking] = useState<'' | 'merge' | 'push'>('')
+  const [said, setSaid] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const run = (work: () => Promise<string>) => {
+    setBusy(true)
+    setError('')
+    work().then(
+      done => {
+        setSaid(done)
+        setAsking('')
+        setBusy(false)
+        onDone()
+      },
+      (failed: unknown) => {
+        setError(failed instanceof Error ? failed.message : String(failed))
+        setBusy(false)
+      }
+    )
+  }
+
+  if (!diff.uncommitted && diff.ahead === 0 && !said && !error) {
+    return null
+  }
+
+  return (
+    <div className="space-y-1.5 border-b border-border p-2" data-testid="deliver">
+      {diff.uncommitted ? (
+        <form
+          className="flex gap-1.5"
+          onSubmit={event => {
+            event.preventDefault()
+
+            if (message.trim()) {
+              run(() =>
+                commitWorkspace(workspace.id, message.trim()).then(() => {
+                  setMessage('')
+
+                  return t.changes.committed
+                })
+              )
+            }
+          }}
+        >
+          <input
+            aria-label={t.changes.commitMessage}
+            className="min-w-0 flex-1 rounded border border-border-strong bg-raised px-2 py-1"
+            data-testid="commit-message"
+            onChange={event => {
+              setMessage(event.target.value)
+            }}
+            placeholder={t.changes.commitMessage}
+            value={message}
+          />
+          <button
+            className="shrink-0 rounded bg-primary px-2 py-1 font-medium text-primary-foreground disabled:opacity-60"
+            data-testid="commit"
+            disabled={busy || !message.trim()}
+            type="submit"
+          >
+            {t.changes.commit}
+          </button>
+        </form>
+      ) : (
+        diff.ahead > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-muted-foreground">{t.changes.ahead(diff.ahead, workspace.base)}</span>
+            <button
+              className="link"
+              data-testid="merge"
+              onClick={() => {
+                setAsking('merge')
+              }}
+              type="button"
+            >
+              {t.changes.merge(workspace.base)}
+            </button>
+            <button
+              className="link"
+              data-testid="push"
+              onClick={() => {
+                setAsking('push')
+              }}
+              type="button"
+            >
+              {t.changes.push}
+            </button>
+          </div>
+        )
+      )}
+      {asking && (
+        <div className="space-y-1" data-testid="deliver-confirm">
+          <p className="text-soft">
+            {asking === 'merge'
+              ? t.changes.mergeNote(workspace.branch, workspace.base)
+              : t.changes.pushNote(workspace.branch)}
+          </p>
+          <div className="flex gap-2">
+            <button
+              className="rounded bg-primary px-2 py-0.5 font-medium text-primary-foreground disabled:opacity-60"
+              data-testid="deliver-yes"
+              disabled={busy}
+              onClick={() => {
+                run(
+                  asking === 'merge'
+                    ? () => mergeWorkspace(workspace.id).then(() => t.changes.merged(workspace.base))
+                    : () => pushWorkspace(workspace.id).then(done => done || t.changes.pushed(workspace.branch))
+                )
+              }}
+              type="button"
+            >
+              {asking === 'merge' ? t.changes.mergeYes : t.changes.pushYes}
+            </button>
+            <button
+              className="rounded px-2 py-0.5 text-muted-foreground"
+              onClick={() => {
+                setAsking('')
+              }}
+              type="button"
+            >
+              {t.workspaces.cancel}
+            </button>
+          </div>
+        </div>
+      )}
+      {said && (
+        <p className="break-words whitespace-pre-wrap text-soft" data-testid="deliver-said" role="status">
+          {said}
+        </p>
+      )}
+      {error && (
+        <p className="text-failed-text" role="alert">
+          {error}
+        </p>
       )}
     </div>
   )

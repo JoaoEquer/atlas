@@ -3868,6 +3868,15 @@ in any folder. `atlas.workspaces` (A1), decided with the user; how, our choice, 
   a click on a line takes a `review comment`, kept in the app per workspace until sent, and the
   comments go to the session as one message of the user's (`sendToSession`): each its file and
   line, the line quoted, then the comment. Nothing new for a harness: it reads a message.
+- **Delivering** (A4, the core's part; the pull request, its checks and the issue are the GitHub
+  plugin's, by the core rule): by the user's clicks, never the agent's. `workspace.commit` commits
+  every change as the user's own (their git identity, the project's hooks run, unlike the
+  archive's); `workspace.merge` merges the branch into its branch of origin with a merge commit,
+  in the worktree that has it checked out (refused when that one holds changes of its own; a
+  conflict aborts, leaving everything as it was) or, checked out nowhere, without a folder
+  (`git merge-tree --write-tree`, git 2.38, then `commit-tree` and a compare-and-swap
+  `update-ref`); `workspace.push` sends the branch to `origin`, setting its upstream. The app asks
+  before a merge and before a push, the one outward act.
 - **Checkpoints** (A3): before each prompt the server sends a session in a workspace
   (`workbench.prompt`), its folder is kept as a commit on top of its HEAD that no branch holds,
   under `refs/atlas/checkpoints/<workspace>/<time>` (a ref of Atlas's own, which a push leaves

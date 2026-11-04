@@ -253,5 +253,67 @@ def restore(folder: Path, commit: str) -> None:
     run(folder, "reset", "--quiet", f"{commit}^")
 
 
+#: How long a push may take, over the network.
+PUSH_SECONDS = 300.0
+
+
+def commit(folder: Path, message: str) -> None:
+    """Every change in `folder` committed as the user's own: their name from their git, the
+    project's hooks run, as a commit they typed would."""
+    run(folder, "add", "--all")
+    run(folder, "commit", "--quiet", "--message", message)
+
+
+def checked_out(root: Path, branch: str) -> Path | None:
+    """The worktree `branch` is checked out in, if any."""
+    folder: Path | None = None
+    for line in run(root, "worktree", "list", "--porcelain").splitlines():
+        if line.startswith("worktree "):
+            folder = Path(line.removeprefix("worktree "))
+        elif line == f"branch refs/heads/{branch}" and folder is not None:
+            return folder
+    return None
+
+
+def merge(root: Path, base: str, branch: str) -> None:
+    """`branch` merged into `base`, a merge commit of its own. Where `base` is checked out, the
+    merge happens there, refused when that folder holds changes of its own; elsewhere git merges
+    without a folder. Conflicts leave everything as it was, said."""
+    message = f"Merge branch '{branch}' into {base}"
+    where = checked_out(root, base)
+    if where is not None:
+        if run(where, "status", "--porcelain", "--untracked-files=no").strip():
+            raise WorkspaceError(
+                f"{where} has changes of its own on {base}: commit or put them away first."
+            )
+        try:
+            run(where, "merge", "--no-ff", "--no-edit", "--message", message, branch)
+        except WorkspaceError as error:
+            run(where, "merge", "--abort")
+            raise WorkspaceError(
+                f"{branch} does not merge into {base} cleanly: ask the agent to merge {base} into "
+                "its branch and settle the conflicts, then deliver again."
+            ) from error
+        return
+    try:
+        tree = run(root, "merge-tree", "--write-tree", base, branch).splitlines()[0].strip()
+    except WorkspaceError as error:
+        raise WorkspaceError(
+            f"{branch} does not merge into {base} cleanly: ask the agent to merge {base} into its "
+            "branch and settle the conflicts, then deliver again."
+        ) from error
+    old = run(root, "rev-parse", f"refs/heads/{base}").strip()
+    made = run(root, "commit-tree", tree, "-p", old, "-p", branch, "-m", message).strip()
+    run(root, "update-ref", f"refs/heads/{base}", made, old)
+
+
+def push(folder: Path, branch: str) -> str:
+    """`branch` sent to the remote `origin`, set as where it goes from now on; what git said."""
+    if "origin" not in run(folder, "remote").split():
+        raise WorkspaceError("The project has no remote named origin to send the branch to.")
+    done = run(folder, "push", "--set-upstream", "origin", branch, timeout=PUSH_SECONDS)
+    return done.strip()
+
+
 def delete_branch(root: Path, branch: str) -> None:
     run(root, "branch", "-D", branch)

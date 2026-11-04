@@ -170,6 +170,44 @@ class Workspaces:
         git.restore(Path(workspace.folder), commit)
         return workspace
 
+    def commit(self, workspace_id: str, message: str) -> Workspace:
+        """Every change in the workspace committed on its branch, as the user's own commit."""
+        workspace = self._open(workspace_id)
+        folder = Path(workspace.folder)
+        if not message.strip():
+            raise WorkspaceError("A commit needs a message.")
+        if not git.changed(folder):
+            raise WorkspaceError(f"The workspace {workspace.name} has nothing to commit.")
+        git.commit(folder, message.strip())
+        return workspace
+
+    def merge(self, workspace_id: str) -> Workspace:
+        """The workspace's branch merged into its branch of origin: its work delivered there. Its
+        changes not committed are refused first, so nothing is left behind unsaid."""
+        workspace = self._open(workspace_id)
+        if git.changed(Path(workspace.folder)):
+            raise WorkspaceError(
+                f"The workspace {workspace.name} has changes not committed: commit them first."
+            )
+        root = Path(self._root(workspace))
+        if git.ahead(root, workspace.base, workspace.branch) == 0:
+            raise WorkspaceError(f"{workspace.base} has all of {workspace.branch} already.")
+        git.merge(root, workspace.base, workspace.branch)
+        return workspace
+
+    def push(self, workspace_id: str) -> str:
+        """The workspace's branch sent to the project's remote; what git said."""
+        workspace = self._open(workspace_id)
+        return git.push(Path(workspace.folder), workspace.branch)
+
+    def status(self, workspace_id: str) -> tuple[bool, int]:
+        """Whether the workspace holds changes not committed, and how many commits its branch
+        has that its branch of origin has not."""
+        workspace = self._open(workspace_id)
+        root = Path(self._root(workspace))
+        changed = git.changed(Path(workspace.folder))
+        return changed, git.ahead(root, workspace.base, workspace.branch)
+
     def create(self, folder: Path, name: str, base: str | None = None) -> Workspace:
         """A new workspace of the project of `folder`, named `name`, on a new branch from `base`
         (the branch the project has checked out when none is named): its worktree made and the
@@ -311,6 +349,15 @@ class Workspaces:
         self._store.delete(workspace_id)
 
     # -- helpers ---------------------------------------------------------------------------------
+
+    def _open(self, workspace_id: str) -> Workspace:
+        """A workspace that is not archived, whose folder is there to work in."""
+        workspace = self.get(workspace_id)
+        if workspace.state is WorkspaceState.ARCHIVED:
+            raise WorkspaceError(
+                f"The workspace {workspace.name} is archived: bring it back first."
+            )
+        return workspace
 
     def _project(self, folder: Path) -> Project:
         project = self.project_of(folder)
