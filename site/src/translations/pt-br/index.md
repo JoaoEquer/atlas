@@ -12,7 +12,7 @@ Ele também é onde os seus agentes de código moram. Claude Code, Codex, Gemini
 ## O que dá para fazer com ele
 
 - **Rodar todos os agentes de código numa só janela.** Cada um que você tem instalado aparece na aba Executores, com as pastas, as sessões e o uso do plano.
-- **Usar todas as suas contas ao mesmo tempo.** Pessoal, empresa A, empresa B: cada conta tem a própria pasta, configurações e histórico, e elas rodam lado a lado. Quando uma chega ao limite do plano, a sessão segue na próxima. Veja [Agentes de código e contas](/pt-br/docs/guides/coding-agents/).
+- **Usar todas as suas contas ao mesmo tempo,** com o plugin Contas. Pessoal, empresa A, empresa B: cada conta tem a própria pasta, configurações e histórico, e elas rodam lado a lado. Quando uma chega ao limite do plano, a sessão segue na próxima; com uma conta só, ela continua sozinha quando o plano volta. Veja [Agentes de código e contas](/pt-br/docs/guides/coding-agents/).
 - **Alcançar as suas outras máquinas.** Instale o Atlas num homelab, numa VPS ou no PC do escritório e abra pelo app no seu notebook, pelo Tailscale ou por SSH. Veja [Várias máquinas](/pt-br/docs/guides/machines/).
 - **Passar trabalho para o Atlas.** Peça em palavras comuns, e o Atlas delega ao agente de código certo, na conta que você disser, acompanha e traz o resultado.
 - **Deixar que ele aprenda.** A cada poucas mensagens, uma cópia do agente relê a conversa e guarda o que aprendeu: quem você é no seu perfil, fatos sobre o seu ambiente nas notas dele, o jeito de fazer uma tarefa numa skill.
