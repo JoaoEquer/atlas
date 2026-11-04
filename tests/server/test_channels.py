@@ -449,8 +449,8 @@ def test_the_plugins_screen_turns_it_on_with_consent_and_shows_why_it_stopped(
         voice = next(r for r in client.result("plugin.list")["plugins"] if r["name"] == "voice")
         listed = {s["name"]: (s["choices"], s["choices_from"]) for s in voice["settings"]}
         assert listed["provider"] == (["openai", "gemini"], "")
-        assert listed["transcription_model"] == ([], "plugin")
-        assert listed["dictation_shortcut"] == ([], "")
+        assert listed["speech_model"] == ([], "plugin")
+        assert listed["quiet_close_seconds"] == ([], "")
 
         refused = client.call("plugin.enable", {"name": "telegram", "consent": "stale"})
         assert "other than what was shown" in refused["error"]["message"]

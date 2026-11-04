@@ -20,6 +20,7 @@ import {
 import { $terminalAvailable } from '@/store/terminals'
 
 import { AgentsButton } from './agent-map'
+import { DictateButton } from './dictation'
 import { MessageBox } from './message-box'
 import { ModelPicker } from './model-picker'
 import { TerminalButton } from './side-panel'
@@ -81,7 +82,12 @@ export function Composer({ connected, running, to }: { connected: boolean; runni
 
   return (
     <MessageBox
-      actions={<BoxActions />}
+      actions={
+        <>
+          <DictateButton />
+          <BoxActions />
+        </>
+      }
       auto={{
         label: t.composer.autoModeLabel,
         on: autoMode[owner] ?? owner === DRAFT,

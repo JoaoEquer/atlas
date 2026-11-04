@@ -317,10 +317,10 @@ export const ptBR: Override<Messages> = {
     routinePrompt: 'Toda segunda às 9h, me lembre de revisar o que tenho para a semana.',
     start: 'Começar',
     tasks: {
-      account: 'Adicionar uma segunda conta',
       bot: 'Criar um bot',
       delegate: 'Entregar uma tarefa a um executor',
       routine: 'Agendar uma rotina',
+      store: 'Instalar algo da loja',
       telegram: 'Falar com o Atlas pelo Telegram'
     },
     title: 'Primeiros passos'
@@ -742,6 +742,38 @@ export const ptBR: Override<Messages> = {
 
       return act ? `${name} quer ${act}` : `${name} quer usar ${tool}`
     }
+  },
+  dictation: {
+    again: 'Escrever de novo',
+    anywhere: 'em qualquer lugar',
+    cancel: 'Cancelar',
+    change: 'Trocar tecla',
+    choose: 'Escolher uma tecla',
+    copied: 'Este programa não aceita a colagem: o texto está copiado, cole com Ctrl+V',
+    copy: 'Copiar',
+    copyDone: 'Copiado',
+    dictate: 'Ditar: clique para gravar, clique de novo para escrever na caixa',
+    failed: (why: string) => `O ditado falhou: ${why}`,
+    inBox: 'na caixa',
+    listen: 'Ouvir',
+    none: 'Nenhum ditado ainda.',
+    notWritten: (why: string) => `Não foi escrito: ${why}`,
+    nothing: 'Não ouvi nada',
+    page: 'Ditados',
+    pageIntro: (key: string) =>
+      key
+        ? `Aperte ${key} em qualquer programa para gravar, e de novo para o texto cair onde você está. Os ditados ficam guardados aqui, com o áudio.`
+        : 'O ditado em qualquer lugar está desligado: escolha uma tecla e aperte-a em qualquer programa para ditar ali. Os ditados da caixa também ficam guardados aqui, com o áudio.',
+    pasted: 'Pronto',
+    pressKey: 'Aperte a tecla…',
+    recording: (key: string) => `Gravando: ${key} para parar`,
+    recordingBox: 'Gravando: clique para parar',
+    remove: 'Apagar',
+    shortcut: 'Tecla',
+    shortcutFailed: (why: string) => `A tecla não pôde ser usada: ${why}`,
+    transcribing: 'Escrevendo o que você disse…',
+    turnOff: 'Desligar',
+    writing: 'Escrevendo o que você disse…'
   },
   speech: {
     ask: (size: string) =>

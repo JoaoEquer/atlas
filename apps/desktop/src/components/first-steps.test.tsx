@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BotRow, ExecutorRow, InstanceRow, PairingRow, RoutineRow } from '@/protocol/protocol.generated'
+import type { BotRow, ExecutorRow, InstanceRow, PairingRow, PluginRow, RoutineRow } from '@/protocol/protocol.generated'
 import * as app from '@/store/app'
 import { $firstSteps, firstStepsOf, markDone } from '@/store/first-steps'
 import { $firstRun, finishStep, firstRunOf, openStep } from '@/store/setup'
@@ -38,6 +38,7 @@ afterEach(() => {
   app.$read.setKey('workbench', false)
   app.$read.setKey('bots', false)
   app.$workbench.set({ executors: [], instances: [] })
+  app.$plugins.set([])
   app.$bots.set([])
   app.$pairings.set([])
   app.$routines.set([])
@@ -76,7 +77,7 @@ describe('the first steps', () => {
   })
 
   it('go once every task is done', () => {
-    markDone('default', ['delegate', 'account', 'telegram', 'routine', 'bot'])
+    markDone('default', ['delegate', 'store', 'telegram', 'routine', 'bot'])
     opened()
     render(<FirstSteps />)
 
@@ -94,16 +95,17 @@ describe('the first steps', () => {
     })
   })
 
-  it('see a session run on an executor and another account as done', () => {
+  it('see a session run on an executor and a plugin from outside Atlas as done', () => {
     app.$workbench.set({
-      executors: [CLAUDE, { ...CLAUDE, base: 'claude-code', name: 'claude-code-work' }],
+      executors: [CLAUDE],
       instances: [{ executor: 'claude-code', instance_id: 'i1' } as InstanceRow]
     })
+    app.$plugins.set([{ bundled: true, name: 'voice' } as PluginRow, { bundled: false, name: 'weather' } as PluginRow])
     opened()
     render(<FirstSteps />)
 
     expect(screen.getByTestId('first-step-delegate').dataset.done).toBe('true')
-    expect(screen.getByTestId('first-step-account').dataset.done).toBe('true')
+    expect(screen.getByTestId('first-step-store').dataset.done).toBe('true')
   })
 
   it('start a routine in a new conversation, its words in the box', () => {

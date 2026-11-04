@@ -3,11 +3,10 @@ provider the voice uses, so a new model shows up without a new Atlas.
 
 Each provider lists every model its key may use; the voice keeps those that do the setting's job.
 Gemini says what each model does (`supportedGenerationMethods`: a live model takes
-`bidiGenerateContent`), and names its speech models `-tts` and its transcription ones
-`-transcribe`. OpenAI says only the names, which carry the job the same way: `transcribe` and
-`whisper`, `tts`, `gpt-live`. Gemini lists its voices too, by language: those of the app's
-language first, then the ones of its first voices, which speak every language. OpenAI lists no
-voices, so its voice is typed.
+`bidiGenerateContent`), and names its speech models `-tts`. OpenAI says only the names, which
+carry the job the same way: `tts`, `gpt-live`. Gemini lists its voices too, by language: those of
+the app's language first, then the ones of its first voices, which speak every language. OpenAI
+lists no voices, so its voice is typed.
 """
 
 import hashlib
@@ -25,9 +24,6 @@ KEPT_SECONDS = 600.0
 #: The setting whose choices are the models that answer spoken turns.
 TURNS_SETTING = "voice_turns_model"
 CONVERSATION_MODEL = "conversation"
-#: Words in the name of a Gemini model that does something else than talk: images, music,
-#: embeddings, robots, a computer, research.
-NOT_TALK = ("tts", "image", "banana", "embedding", "lyria", "robotics", "computer-use", "research")
 #: An OpenAI snapshot's date, listed after the name it pins.
 DATED = re.compile(r"-\d{4}-\d{2}-\d{2}$")
 
@@ -52,7 +48,6 @@ async def setting_choices(
     `models` are the models Atlas's picker offers, and `language` the app's, as the app sends
     them."""
     default = {
-        "transcription_model": provider.transcription_model,
         "speech_model": provider.speech_model,
         "live_model": provider.live_model,
         "voice": provider.voice,
@@ -94,9 +89,6 @@ async def _asked(
 
 def _openai(setting: str, names: list[str]) -> list[Choice]:
     def fits(name: str) -> bool:
-        if setting == "transcription_model":
-            streamed = any(word in name for word in ("live", "realtime", "diarize"))
-            return ("transcribe" in name or "whisper" in name) and not streamed
         if setting == "speech_model":
             return "tts" in name
         if setting == "live_model":
@@ -110,30 +102,23 @@ def _openai(setting: str, names: list[str]) -> list[Choice]:
 
 
 def _gemini(setting: str, listed: list[dict[str, Any]]) -> list[Choice]:
-    first: list[Choice] = []
-    rest: list[Choice] = []
+    found: list[Choice] = []
     for model in listed:
         name = str(model.get("name") or "").removeprefix("models/")
         methods = model.get("supportedGenerationMethods")
         does = set(cast("list[str]", methods)) if isinstance(methods, list) else set[str]()
         label = str(model.get("displayName") or name)
-        choice = {"value": name, "label": label}
         if not name:
             continue
-        if setting == "transcription_model":
-            if "generateContent" not in does or not name.startswith("gemini"):
-                continue
-            if "transcribe" in name:
-                first.append(choice)
-            elif not any(word in name for word in NOT_TALK):
-                rest.append(choice)
-        elif setting == "speech_model":
-            if "generateContent" in does and "tts" in name:
-                first.append(choice)
-        elif setting == "live_model" and "bidiGenerateContent" in does:
-            if not any(word in name for word in ("transcribe", "translate", "robotics")):
-                first.append(choice)
-    return first + rest
+        speaks = setting == "speech_model" and "generateContent" in does and "tts" in name
+        talks = (
+            setting == "live_model"
+            and "bidiGenerateContent" in does
+            and not any(word in name for word in ("transcribe", "translate", "robotics"))
+        )
+        if speaks or talks:
+            found.append({"value": name, "label": label})
+    return found
 
 
 def _gemini_voices(local: list[dict[str, Any]], first: list[dict[str, Any]]) -> list[Choice]:

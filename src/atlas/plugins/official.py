@@ -11,13 +11,15 @@ and tested with it, but no longer part of it.
   in step and nothing the record does not give.
 - **Whoever used one before step 26 keeps it**: a plugin of Atlas's the user ever turned on or off
   is installed by the first start, in the state the user left it.
+- **A consent carried when one of them declares less**: the user consented to more than it asks
+  now, so asking again would ask for nothing new (`NARROWED`, each pair pinned).
 - **The executors are looked at before they are installed**, so the first run and the executors
   tab offer the harnesses found on the computer: their code is Atlas's own, at the version that
   runs, as the shipped plugins' was.
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +29,16 @@ from atlas.plugins.service import PluginError, Plugins
 from atlas.plugins.store import OFFICIAL_FOLDER, OFFICIAL_SOURCE, Found, find_plugins
 
 _logger = logging.getLogger("atlas.plugins")
+
+#: The plugins of Atlas's whose declaration lost something and gained nothing, by name: the
+#: fingerprint the user consented to, and the one it has now. Step 26: the voice's reader, its
+#: dictation calls, its desktop powers and two settings became Atlas's own.
+NARROWED: dict[str, tuple[str, str]] = {
+    "voice": (
+        "82baa2909c9036c844ba79a196d8807aa03c5ddd3902f2151123d190a785dc66",
+        "ffad1173ac77c4ba88ec32ec52bc408f27e9ae100e94bb747e8bbbfcccb9607c",
+    ),
+}
 
 
 def official_plugins(folder: Path = OFFICIAL_FOLDER) -> dict[str, Found]:
@@ -86,14 +98,28 @@ def refresh_official(
     *,
     folder: Path = OFFICIAL_FOLDER,
     clock: Callable[[], datetime] = utc_now,
+    narrowed: Mapping[str, tuple[str, str]] = NARROWED,
 ) -> list[str]:
     """Install each plugin of Atlas's the user decided on before step 26, when Atlas shipped it
     inside itself and nothing recorded it; the names it installed. One a plugin of the user's has
-    taken is logged and left out."""
-    decided = plugins.store.states().keys()
+    taken is logged and left out. A consent to a declaration that only narrowed since is carried
+    to the new one (`NARROWED`)."""
+    states = plugins.store.states()
+    decided = states.keys()
     present = installed(plugins.folder)
     done: list[str] = []
-    for name in official_plugins(folder):
+    found = official_plugins(folder)
+    for name, (before, after) in narrowed.items():
+        state = states.get(name)
+        manifest = found[name].manifest if name in found else None
+        if state is None or state.consent != before or manifest is None:
+            continue
+        if manifest.fingerprint() == after:
+            plugins.store.decide(name, enabled=state.enabled, consent=after, now=clock())
+            _logger.info(
+                "A plugin's consent was carried: it declares less.", extra={"plugin": name}
+            )
+    for name in found:
         if name not in decided or name in present:
             continue
         try:

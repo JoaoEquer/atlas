@@ -23,6 +23,7 @@ import {
   $workbench,
   moreConversations,
   newConversation,
+  showDictations,
   showExtensions,
   showMarketplace,
   showProposals,
@@ -49,6 +50,7 @@ import {
   LayoutSidebar,
   MessagePlus,
   Messages,
+  Microphone,
   Plug,
   Puzzle,
   Robot,
@@ -154,6 +156,13 @@ export function Sidebar() {
           label={t.routines.title}
           onClick={showRoutines}
           testId="routines-entry"
+        />
+        <Entry
+          current={view === 'dictations'}
+          icon={Microphone}
+          label={t.dictation.page}
+          onClick={showDictations}
+          testId="dictations-entry"
         />
         <Entry
           current={view === 'marketplace'}

@@ -39,6 +39,7 @@ import { AskCard } from './ask-card'
 import { BotDialogHost } from './bot-dialog'
 import { BotEmpty, BotHeader } from './bot-header'
 import { Composer } from './composer'
+import { DictationsView } from './dictation'
 import { ExtensionsView } from './extensions-view'
 import { FirstRun, FirstRunBand } from './first-run'
 import { HomeDialogHost } from './home-dialog'
@@ -186,6 +187,8 @@ export function App() {
           <ProposalsView />
         ) : view === 'routines' ? (
           <RoutinesView />
+        ) : view === 'dictations' ? (
+          <DictationsView />
         ) : view === 'marketplace' ? (
           <MarketplaceView />
         ) : view === 'extensions' ? (

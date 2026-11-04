@@ -1,9 +1,6 @@
-"""The voice through Gemini: writing down, speaking and the live conversation, with the Gemini key
-Atlas's Gemini provider uses.
+"""The voice through Gemini: speaking and the live conversation, with the Gemini key Atlas's
+Gemini provider uses (writing down is Atlas's own since step 26, `atlas.speech`).
 
-- **Writing down**: an interaction (`POST /interactions`) with the audio. A transcription model
-  (`gemini-3.5-transcribe`) takes the audio alone; any other model is asked, beside it, for the
-  words only. A recording too large for one request goes up through the Files API first.
 - **Speaking**: an interaction with a speech model, which answers a WAV file (24 kHz, 16-bit mono).
 - **The live conversation**: the app talks to Gemini's Live API over a WebSocket; this makes a
   token for one session (`POST /auth_tokens`), so the key never leaves this computer, and the
@@ -23,14 +20,6 @@ from .endpoint import GEMINI, VoiceError, refusal, unreachable
 from .live import PERSONA
 
 REQUEST_SECONDS = 110.0
-#: The largest recording sent inside the request: Gemini takes 20 MB a request, and base64 grows
-#: a file by a third.
-INLINE_BYTES = 14 * 1024 * 1024
-#: What a model that is not a transcription model is asked, beside the audio.
-TRANSCRIBE_PROMPT = (
-    "Write down exactly what is said in this audio, in the language it is spoken. Answer with the "
-    "words only: no title, no notes, no timestamps, no quotes."
-)
 #: The one function the live voice has.
 ASK_ATLAS = "ask_atlas"
 LIVE_PERSONA = (
@@ -41,79 +30,6 @@ LIVE_PERSONA = (
 LIVE_PATH = (
     "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
 )
-
-
-class GeminiTranscriber:
-    """Gemini's writing down, with one key and one model."""
-
-    def __init__(self, key: str | None, api_url: str, model: str) -> None:
-        self._key = key
-        self._api_url = api_url.rstrip("/")
-        self._model = model.strip()
-
-    async def transcribe_data(self, name: str, data: bytes, media_type: str) -> str:
-        """What a recording says, as text; raises `VoiceError`."""
-        if not self._key:
-            raise VoiceError(GEMINI.no_key())
-        media_type = (media_type or "audio/ogg").split(";", 1)[0]
-        async with httpx2.AsyncClient(timeout=REQUEST_SECONDS) as client:
-            audio: dict[str, str] = {"type": "audio", "mime_type": media_type}
-            if len(data) > INLINE_BYTES:
-                audio["uri"] = await self._upload(client, name, data, media_type)
-            else:
-                audio["data"] = _base64(data)
-            items: list[dict[str, str]] = [audio]
-            if "transcribe" not in self._model:
-                items.insert(0, {"type": "text", "text": TRANSCRIBE_PROMPT})
-            found = await _interaction(
-                client,
-                self._api_url,
-                self._key,
-                {"model": self._model, "input": items},
-                "the transcription",
-            )
-        texts = [
-            str(content.get("text") or "")
-            for content in _outputs(found)
-            if content.get("type") == "text"
-        ]
-        if not texts:
-            raise VoiceError("Gemini's answer held no text.")
-        return "".join(texts).strip()
-
-    async def _upload(
-        self, client: httpx2.AsyncClient, name: str, data: bytes, media_type: str
-    ) -> str:
-        """The Files API's resumable upload, in its two requests: the file's URI."""
-        address = urlsplit(self._api_url)
-        start = f"{address.scheme}://{address.netloc}/upload{address.path}/files"
-        try:
-            begun = await client.post(
-                start,
-                headers={
-                    "x-goog-api-key": self._key or "",
-                    "X-Goog-Upload-Protocol": "resumable",
-                    "X-Goog-Upload-Command": "start",
-                    "X-Goog-Upload-Header-Content-Length": str(len(data)),
-                    "X-Goog-Upload-Header-Content-Type": media_type,
-                },
-                json={"file": {"display_name": name}},
-            )
-            if begun.status_code != 200 or not begun.headers.get("x-goog-upload-url"):
-                raise VoiceError(refusal(GEMINI, "the upload", begun))
-            sent = await client.post(
-                begun.headers["x-goog-upload-url"],
-                headers={"X-Goog-Upload-Offset": "0", "X-Goog-Upload-Command": "upload, finalize"},
-                content=data,
-            )
-        except httpx2.HTTPError as error:
-            raise unreachable(GEMINI, error) from error
-        if sent.status_code != 200:
-            raise VoiceError(refusal(GEMINI, "the upload", sent))
-        uri = _object(_object(_json(sent)).get("file")).get("uri")
-        if not isinstance(uri, str) or not uri:
-            raise VoiceError("Gemini's upload answered no file.")
-        return uri
 
 
 class GeminiSpeaker:
@@ -334,10 +250,6 @@ def _object(value: object) -> dict[str, Any]:
 
 def _stamp(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _base64(data: bytes) -> str:
-    return base64.b64encode(data).decode("ascii")
 
 
 def _bytes(text: str) -> bytes:

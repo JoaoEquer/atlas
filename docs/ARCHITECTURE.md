@@ -3811,6 +3811,20 @@ conversation. Decided with the user; how, our choice, marked:
   plugins, and a plugin's reader of a kind reads before Atlas's. The voice plugin's is gone; a home
   whose voice plugin was on keeps its provider as `[voice] transcription`, once, at the first
   start.
+- **Dictation is the app's** (the voice plugin's since step 17b): the box's microphone (Atlas's
+  and a bot's box) and dictation anywhere, with the Dictations page, call `dictation.*`: each
+  recording kept in the home's `dictations/` (USER, a backup carries it) before it is written down,
+  so a failed transcription keeps its speech and why; every client told (`dictations.changed`).
+  The window's desktop powers (step 17b) hold the key, paste and show the bar as they did for the
+  plugin, under a key of the app's own. **Off until the user chooses a key** (decided with the
+  user): the key is the computer's, kept by the app. The voice plugin's dictations move to the
+  home's at the first start.
+- **The voice plugin keeps speaking and the live conversation.** Its declaration only lost things
+  (the reader, the dictation's calls, the desktop powers, two settings), so the consent the user
+  gave it is carried to the new one (`atlas.plugins.official.NARROWED`, each pair pinned): asking
+  again would ask for nothing new.
+- **Left for later:** a mouse button as the key, which Electron's shortcuts do not hear, needs a
+  native listener of its own, optional as the terminal's.
 
 ### A session's environment, mode and plan by its box — decided 2026-11-01
 

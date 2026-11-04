@@ -13,7 +13,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -77,6 +77,7 @@ class Speech:
         engine: Engine | None = None,
         on_changed: Callable[[], None] = lambda: None,
         transport: httpx2.BaseTransport | None = None,
+        address: Callable[[str], str | None] = lambda _provider: None,
         openai: CloudProvider = OPENAI,
         gemini: CloudProvider = GEMINI,
     ) -> None:
@@ -87,6 +88,9 @@ class Speech:
         #: Told when the status changes, on the event loop: the server tells its clients.
         self.on_changed = on_changed
         self._transport = transport
+        #: The address of Atlas's provider of a name (`openai`, `gemini`), as its model catalog
+        #: has it, so a recording goes where the provider's other calls go; `None` for its own.
+        self._address = address
         self._openai = openai
         self._gemini = gemini
         self._lock = threading.Lock()
@@ -160,14 +164,20 @@ class Speech:
             return await asyncio.to_thread(self._engine.transcribe, path)
         data = await asyncio.to_thread(path.read_bytes)
         if chosen is Transcription.OPENAI:
-            openai = self._openai
+            openai = self._at(self._openai, "openai")
             return await transcribe_openai(
                 openai, self._secret(openai.key), path.name, data, media_type
             )
-        gemini = self._gemini
+        gemini = self._at(self._gemini, "gemini")
         return await transcribe_gemini(
             gemini, self._secret(gemini.key), path.name, data, media_type
         )
+
+    def _at(self, provider: CloudProvider, name: str) -> CloudProvider:
+        """The provider at the address Atlas's provider of that name has. Gemini's is its
+        OpenAI-compatible one, `/openai` under the API this speaks."""
+        found = (self._address(name) or "").rstrip("/").removesuffix("/openai")
+        return replace(provider, api_url=found) if found else provider
 
     async def _fetch(self, loop: asyncio.AbstractEventLoop) -> None:
         told = 0.0

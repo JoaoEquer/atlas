@@ -142,6 +142,7 @@ def test_the_vault_never_travels_and_the_database_does() -> None:
         "always_on.json": EntryClass.MACHINE,
         "browser": EntryClass.MACHINE,
         "speech": EntryClass.MACHINE,
+        "dictations": EntryClass.USER,
     }
 
 

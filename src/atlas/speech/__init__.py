@@ -1,6 +1,7 @@
 """Speech: writing down what a recording says, on this computer or at a provider (step 26)."""
 
 from atlas.speech.cloud import GEMINI, OPENAI, CloudProvider
+from atlas.speech.dictations import Dictation, Dictations
 from atlas.speech.errors import SpeechError
 from atlas.speech.model import CREDIT, ModelFile, Transcription
 from atlas.speech.service import Engine, Speech, SpeechStatus
@@ -11,6 +12,8 @@ __all__ = [
     "GEMINI",
     "OPENAI",
     "CloudProvider",
+    "Dictation",
+    "Dictations",
     "Engine",
     "ModelFile",
     "ModelStore",

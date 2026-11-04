@@ -1108,6 +1108,47 @@ class SpeechState:
 
 
 @dataclass(frozen=True, slots=True)
+class DictationRow:
+    """One dictation kept in the home (step 26): its recording, and what it said."""
+
+    id: str
+    #: When it was recorded, ISO 8601 in the server's time zone.
+    at: str
+    text: str
+    media_type: str
+    #: `box`, the conversation's microphone, or `anywhere`, the shortcut in any program.
+    where: str
+    #: Why it was not written down, when it was not; the recording is kept all the same.
+    error: str
+
+
+@dataclass(frozen=True, slots=True)
+class DictationWrite:
+    #: The recording, base64, 10 MB at most.
+    audio: str
+    media_type: str = "audio/webm"
+    where: str = "box"
+
+
+@dataclass(frozen=True, slots=True)
+class DictationList:
+    #: Newest first, the last 500.
+    dictations: list[DictationRow]
+
+
+@dataclass(frozen=True, slots=True)
+class DictationRef:
+    id: str
+
+
+@dataclass(frozen=True, slots=True)
+class DictationAudio:
+    #: The recording, base64.
+    audio: str
+    media_type: str
+
+
+@dataclass(frozen=True, slots=True)
 class BotsChanged:
     #: How many bots the home has.
     count: int
@@ -2293,6 +2334,22 @@ METHODS: Mapping[str, Method] = {
             "The user's no to the model's download: the app does not ask again on this machine.",
         ),
         Method(
+            "dictation.write",
+            DictationWrite,
+            DictationRow,
+            "Keep a recording the user dictated, then write it down as [voice] transcription "
+            "says; one that could not be is kept with why.",
+        ),
+        Method("dictation.list", Empty, DictationList, "The home's dictations, newest first."),
+        Method("dictation.audio", DictationRef, DictationAudio, "A dictation's recording."),
+        Method(
+            "dictation.again",
+            DictationRef,
+            DictationRow,
+            "Write a kept dictation down again, as [voice] transcription says now.",
+        ),
+        Method("dictation.delete", DictationRef, Empty, "Delete a dictation and its recording."),
+        Method(
             "memory.entries",
             MemoryEntriesParams,
             MemoryEntries,
@@ -3117,6 +3174,12 @@ EVENTS: Mapping[str, Event] = {
             "speech.changed",
             SpeechState,
             "The speech model's download moved, ended or failed, or a recording waited for it.",
+            conversation=False,
+        ),
+        Event(
+            "dictations.changed",
+            Empty,
+            "A dictation was kept, written down or deleted, from any client; read dictation.list.",
             conversation=False,
         ),
         Event(

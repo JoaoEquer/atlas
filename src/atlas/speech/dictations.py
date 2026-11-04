@@ -1,10 +1,11 @@
-"""The dictations kept in the home (step 17b): each recording with what it said.
+"""The dictations kept in the home (step 17b, in the core since step 26): each recording with what
+it said.
 
-A dictation is two files in the plugin's data folder, under `dictations/`: the recording as the app
-made it, and a JSON beside it with the words, when, where it was said (the box's microphone or the
-shortcut anywhere) and, when OpenAI could not write it down, why. A recording is kept before it is
-written down, so speech is never lost to a failed transcription: the page writes it down again.
-Kept until the user deletes them (decided by the user on 25/10/2026).
+A dictation is two files in the home's `dictations/`: the recording as the app made it, and a JSON
+beside it with the words, when, where it was said (the box's microphone or the shortcut anywhere)
+and, when it could not be written down, why. A recording is kept before it is written down, so
+speech is never lost to a failed transcription: the page writes it down again. Kept until the user
+deletes them (decided by the user on 25/10/2026).
 """
 
 import json
@@ -14,6 +15,8 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
+
+from atlas.speech.errors import SpeechError
 
 #: A dictation's id: when it was made and a few random letters, so it names files safely.
 _ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{4}$")
@@ -32,7 +35,7 @@ class Dictation:
     media_type: str
     #: `box`, the conversation's microphone, or `anywhere`, the shortcut in any program.
     where: str
-    #: Why OpenAI did not write it down, when it did not.
+    #: Why it was not written down, when it was not.
     error: str = ""
 
 
@@ -74,14 +77,18 @@ class Dictations:
         return found
 
     def get(self, dictation_id: str) -> Dictation:
-        """One dictation; raises `ValueError` for one the home does not keep."""
+        """One dictation; raises `SpeechError` for one the home does not keep."""
         found = self._read(self._json_path(dictation_id)) if _ID.match(dictation_id) else None
         if found is None:
-            raise ValueError("There is no such dictation.")
+            raise SpeechError("There is no such dictation.")
         return found
 
     def audio(self, dictation: Dictation) -> bytes:
-        return self._audio_path(dictation).read_bytes()
+        return self.path(dictation).read_bytes()
+
+    def path(self, dictation: Dictation) -> Path:
+        """Where its recording is kept."""
+        return self._audio_path(dictation)
 
     def delete(self, dictation_id: str) -> None:
         dictation = self.get(dictation_id)

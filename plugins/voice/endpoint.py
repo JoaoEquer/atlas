@@ -20,7 +20,6 @@ class Provider:
     #: The vault name of its key, the same one Atlas's provider of that name reads.
     key: str
     api_url: str
-    transcription_model: str
     speech_model: str
     live_model: str
     voice: str
@@ -41,7 +40,6 @@ OPENAI = Provider(
     name="OpenAI",
     key="OPENAI_API_KEY",
     api_url="https://api.openai.com/v1",
-    transcription_model="gpt-transcribe",
     speech_model="gpt-4o-mini-tts",
     live_model="gpt-live-1",
     voice="marin",
@@ -52,7 +50,6 @@ GEMINI = Provider(
     name="Gemini",
     key="GEMINI_API_KEY",
     api_url="https://generativelanguage.googleapis.com/v1beta",
-    transcription_model="gemini-3.5-transcribe",
     speech_model="gemini-3.8-flash-tts",
     live_model="gemini-3.8-live",
     voice="Kore",

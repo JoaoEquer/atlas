@@ -80,6 +80,7 @@ import type {
 
 import { applyCommand } from './commands'
 import type { ExtensionKind } from './extensions'
+import { markDone } from './first-steps'
 import { guarded } from './guarded'
 import { EMPTY_MARKET, type Market, type MarketKind, withRow } from './marketplace'
 import { closePreview, openPreview, targetOf } from './previews'
@@ -233,7 +234,16 @@ export function folderKey(executor: string, folder: string): string {
 
 /** The bot dialog on screen: a new bot, or one being edited, with its definition as read. */
 export type BotDialog = { definition: BotDefinition | null; mode: 'create' | 'edit' }
-type View = 'conversation' | 'extensions' | 'marketplace' | 'plugin' | 'proposals' | 'routines' | 'session' | 'start'
+type View =
+  | 'conversation'
+  | 'dictations'
+  | 'extensions'
+  | 'marketplace'
+  | 'plugin'
+  | 'proposals'
+  | 'routines'
+  | 'session'
+  | 'start'
 
 /**
  * What the user chose for a session open in another program (decided with the user on 15/10/2026):
@@ -2099,6 +2109,11 @@ export class HomeSession {
           brought: done.changed.filter(changed => changed !== name),
           confirming: done.local_changes ? name : null
         })
+
+        if (action === 'install') {
+          // A first step (store/first-steps.ts): a skill installed shows nowhere else.
+          markDone($home.get(), ['store'])
+        }
       }
     } catch (error) {
       this.market({ failed: error instanceof Error ? error.message : String(error) })
@@ -2531,6 +2546,12 @@ export class HomeSession {
       return
     }
 
+    if (event.type === 'dictations.changed') {
+      $dictationsSeen.set($dictationsSeen.get() + 1)
+
+      return
+    }
+
     if (event.type === 'speech.changed') {
       this.$speech.set(event.payload as SpeechState)
 
@@ -2838,6 +2859,9 @@ export const $screens = atom<PluginScreenRow[]>([])
 export const $pairings = atom<PairingRow[]>([])
 export const $pluginError = atom<null | string>(null)
 export const $speech = atom<null | SpeechState>(null)
+/** Counted up when a dictation was kept, written down or deleted: the Dictations page reads them
+ *  again (step 26). */
+export const $dictationsSeen = atom(0)
 export const $mcpServers = atom<McpList | null>(null)
 export const $skills = atom<null | SkillRow[]>(null)
 export const $extensionsError = atom<null | string>(null)
@@ -3305,6 +3329,11 @@ export function showProposals(): void {
   const session = current()
   session.$view.set('proposals')
   void session.refreshProposals().catch(() => undefined)
+}
+
+/** Open the Dictations page (step 26). */
+export function showDictations(): void {
+  current().$view.set('dictations')
 }
 
 /** Open the routines, read again. */

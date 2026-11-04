@@ -1,29 +1,18 @@
 {
   "name": "voice",
   "displayName": "Voice",
-  "version": "0.4.0",
-  "description": "Talk to Atlas by voice, through OpenAI or Gemini: audio you send is written down, you dictate in the box or anywhere on the computer with a shortcut, Atlas speaks when you ask, and a live voice conversation hands the work to Atlas.",
-  "author": { "name": "the Atlas contributors" },
+  "version": "0.5.0",
+  "description": "Talk to Atlas by voice, through OpenAI or Gemini: Atlas speaks when you ask, and a live voice conversation hands the work to Atlas. Writing audio down and dictation are Atlas's own.",
+  "author": {
+    "name": "the Atlas contributors"
+  },
   "license": "MIT",
-  "keywords": ["voice", "audio", "transcription", "speech"],
+  "keywords": ["voice", "speech", "live"],
   "atlas": {
     "api": 25,
-    "readers": ["audio"],
     "tools": ["voice_speak"],
     "hooks": ["UserPromptSubmit"],
-    "calls": [
-      "dictate",
-      "dictation_status",
-      "dictations",
-      "dictation_audio",
-      "dictation_again",
-      "dictation_delete",
-      "live_status",
-      "live_session",
-      "live_turn",
-      "setting_choices"
-    ],
-    "desktop": ["shortcut", "paste"],
+    "calls": ["live_status", "live_session", "live_turn", "setting_choices"],
     "secrets": [
       {
         "name": "OPENAI_API_KEY",
@@ -41,18 +30,7 @@
         "name": "provider",
         "default": "openai",
         "choices": ["openai", "gemini"],
-        "description": "Who writes down, speaks and talks: openai or gemini, each with its key above."
-      },
-      {
-        "name": "transcription_model",
-        "default": "",
-        "choices": "plugin",
-        "description": "The model that writes down what you say; empty for the provider's own choice."
-      },
-      {
-        "name": "dictation_shortcut",
-        "default": "Capslock",
-        "description": "The key that dictates anywhere on the computer: press it to record, press it again to write it where you are. Named as Electron names keys (Capslock, F9, Control+Shift+Space); empty turns it off."
+        "description": "Who speaks and talks: openai or gemini, each with its key above."
       },
       {
         "name": "speech_model",

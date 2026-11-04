@@ -385,6 +385,36 @@ export interface SpeechState {
   /** Whose the model is, and its license, said where it is offered. */
   credit: string
 }
+export interface DictationWrite {
+  /** The recording, base64, 10 MB at most. */
+  audio: string
+  media_type?: string
+  where?: string
+}
+/** One dictation kept in the home (step 26): its recording, and what it said. */
+export interface DictationRow {
+  id: string
+  /** When it was recorded, ISO 8601 in the server's time zone. */
+  at: string
+  text: string
+  media_type: string
+  /** `box`, the conversation's microphone, or `anywhere`, the shortcut in any program. */
+  where: string
+  /** Why it was not written down, when it was not; the recording is kept all the same. */
+  error: string
+}
+export interface DictationList {
+  /** Newest first, the last 500. */
+  dictations: DictationRow[]
+}
+export interface DictationRef {
+  id: string
+}
+export interface DictationAudio {
+  /** The recording, base64. */
+  audio: string
+  media_type: string
+}
 export interface MemoryEntriesParams {
   /** `user` is "About you", `USER.md`; `memory` is the memory, `MEMORY.md`. */
   target: 'user' | 'memory'
@@ -1716,6 +1746,16 @@ export interface RpcMethods {
   'conversation.terminal': { params: TerminalParams; result: SendResult }
   /** Bring an archived conversation back to the list (step 9e), where its last activity puts it; every client hears it (`conversations.changed`). */
   'conversation.unarchive': { params: ConversationRef; result: Empty }
+  /** Write a kept dictation down again, as [voice] transcription says now. */
+  'dictation.again': { params: DictationRef; result: DictationRow }
+  /** A dictation's recording. */
+  'dictation.audio': { params: DictationRef; result: DictationAudio }
+  /** Delete a dictation and its recording. */
+  'dictation.delete': { params: DictationRef; result: Empty }
+  /** The home's dictations, newest first. */
+  'dictation.list': { params: Empty; result: DictationList }
+  /** Keep a recording the user dictated, then write it down as [voice] transcription says; one that could not be is kept with why. */
+  'dictation.write': { params: DictationWrite; result: DictationRow }
   /** Log an executor's harness into another account on the user's browser, from its place in the sidebar; the user's instances of it go on with their sessions on it. Refused while one of its instances works. */
   'executor.account': { params: ExecutorAccountParams; result: ExecutorRow }
   /** An executor's accounts, in the order they take over in at a plan's limit, each with who it is logged in as (step 16h). */
@@ -1938,6 +1978,11 @@ export const RPC_METHODS = [
   'conversation.send',
   'conversation.terminal',
   'conversation.unarchive',
+  'dictation.again',
+  'dictation.audio',
+  'dictation.delete',
+  'dictation.list',
+  'dictation.write',
   'executor.account',
   'executor.accounts',
   'executor.commands',
@@ -2066,6 +2111,8 @@ export interface EventMap {
   'command.update': CommandRow
   /** A channel made a conversation, or a turn in one began or ended; read conversation.list. */
   'conversations.changed': ConversationsChanged
+  /** A dictation was kept, written down or deleted, from any client; read dictation.list. */
+  'dictations.changed': Empty
   /** An executor's accounts, or the account of one of its folders, changed; read executor.accounts and executor.folders. */
   'executor.accounts': AccountsChanged
   /** An executor's plan usage changed: read with executor.usage, or told by its harness as one of its instances worked. */
@@ -2136,6 +2183,7 @@ export const EVENT_NAMES = [
   'bots.changed',
   'command.update',
   'conversations.changed',
+  'dictations.changed',
   'executor.accounts',
   'executor.usage',
   'marketplace.changed',

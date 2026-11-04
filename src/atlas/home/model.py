@@ -42,6 +42,8 @@ SOUL_FILE = "SOUL.md"
 #: The home's picture, beside its name in the app (home/picture.py).
 PICTURE_FILE = "picture.png"
 DOCUMENTS_FOLDER = "documents"
+#: The user's dictations, each recording with what it said (step 26).
+DICTATIONS_FOLDER = "dictations"
 #: The speech model, downloaded once for every home of the machine, at the root (step 26).
 SPEECH_FOLDER = "speech"
 #: The files the user attached to messages, one folder each (step 16g).
@@ -178,6 +180,12 @@ LAYOUT: tuple[Entry, ...] = (
         "in a container, the user's home folder, where the workspace starts: what the agent made",
     ),
     Entry(
+        DICTATIONS_FOLDER,
+        True,
+        EntryClass.USER,
+        "what the user dictated, each recording with its words, kept until deleted",
+    ),
+    Entry(
         SPEECH_FOLDER,
         True,
         EntryClass.MACHINE,
@@ -308,6 +316,10 @@ class Home:
     @property
     def documents_folder(self) -> Path:
         return self.root / DOCUMENTS_FOLDER
+
+    @property
+    def dictations_folder(self) -> Path:
+        return self.root / DICTATIONS_FOLDER
 
     @property
     def speech_folder(self) -> Path:

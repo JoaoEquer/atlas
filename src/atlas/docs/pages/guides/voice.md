@@ -1,37 +1,25 @@
 ---
 title: "Voice and dictation"
-description: "Dictate into any program on your computer with one key, send Atlas audio, hear its answers, and talk to it live, through OpenAI or Gemini on your own key."
+description: "Dictate into the box or any program on your computer, send Atlas audio, written down on your computer or by a provider, hear its answers, and talk to it live."
 sidebar:
   order: 9
 ---
 
-The Voice plugin, one of Atlas's own (installed when you turn it on), lets you speak to Atlas and to the rest of your computer.
-Everything goes through one provider, OpenAI or Gemini, on the key Atlas's provider of that name
-already uses: `OPENAI_API_KEY` or `GEMINI_API_KEY`.
+Atlas writes down what you say and send it, with nothing to turn on: in the message box, in
+any program on your computer, and in the audio files and voice notes you send. The Voice plugin,
+one of Atlas's own, adds a spoken answer when you ask for one, and a live voice conversation.
 
-## Turn it on
+## The microphone in the message box
 
-Open **Extensions**, in the sidebar, and on the **Plugins** tab choose **Turn on…** on Voice's card. Atlas shows what it may
-do (reach `api.openai.com` and `generativelanguage.googleapis.com`, read the two keys, hold a key on
-your keyboard and paste where you are) and turns it on once you agree. With no key yet, add one
-first ([Models and keys](/docs/guides/models/)).
-
-## OpenAI or Gemini
-
-The `provider` setting picks who writes down, speaks and talks: `openai`, as it comes, or `gemini`.
-Change it in the plugin's settings, and everything after goes through the other provider, with its
-own models and voices.
-
-The models and the voices are picked from lists, which Atlas asks of the provider when you open the
-settings: a model the provider adds shows up without a new Atlas, and only the ones that do the
-job are listed (a speech model for `speech_model`, a live one for `live_model`). Gemini lists the
-voices of the app's language first, then the ones that speak every language. OpenAI lists no
-voices, so its voice is typed. **Other…**, at the end of a list, types a value it does not hold.
+The microphone button beside the message box dictates: click to record, click again, and the words
+land in the box, unsent, for you to read and send.
 
 ## Dictate anywhere
 
-Press **Caps Lock** in any program to start recording, and press it again: the words land where your
-cursor is. A small bar above the taskbar shows that Atlas is listening, without taking the focus.
+Off until you choose a key: on the **Dictations** page, in the sidebar, choose **Choose a key** and
+press it (a key or a combination, such as `Caps Lock`, `F9` or `Control+Shift+Space`). Then press
+it in any program to start recording, and press it again: the words land where your cursor is. A
+small bar above the taskbar shows that Atlas is listening, without taking the focus.
 
 - **In Atlas's own window**, the words are typed into the message box or an executor's terminal,
   and the clipboard is not touched.
@@ -41,15 +29,9 @@ cursor is. A small bar above the taskbar shows that Atlas is listening, without 
   the words stay on the clipboard and the bar says to paste them.
 - A recording shorter than half a second is dropped, and one stops by itself at 10 minutes.
 
-The key is yours to change: the **Dictations** page, in the sidebar, has **Change the key**
-(a key or a combination such as `F9` or `Control+Shift+Space`) and **Turn off**. Caps Lock keeps
+The key is this computer's: the same page has **Change the key** and **Turn off**. Caps Lock keeps
 its capitals as they were: Atlas presses it once more for you. Pasting uses the system's own keys:
 on a Mac through `osascript`, on Linux through `xdotool` or `wtype`, which must be installed there.
-
-## The microphone in the message box
-
-The microphone button beside the message box dictates too: the words land in the box, unsent, for
-you to read and send.
 
 ## Your dictations
 
@@ -59,12 +41,12 @@ with why, and **Write it down again** tries once more. A backup carries them.
 
 ## Send audio
 
-Atlas itself writes down an audio file you attach in the app, or a voice note you send on
-[Telegram](/docs/guides/telegram/), before it reads it, with or without this plugin: the model
+Atlas writes down an audio file you attach in the app, or a voice note you send on
+[Telegram](/docs/guides/telegram/), before it reads it: the model
 receives the words, with a note that a speech model wrote them and may have misheard one. OGG,
 MP3, M4A, WAV and WebM work, up to Atlas's 20 MB.
 
-Who writes it down is chosen in **Settings**, **Voice**:
+Who writes it down, and what you dictate, is chosen in **Settings**, **Voice**:
 
 - **This computer**, as it comes: Parakeet TDT 0.6B v3, NVIDIA's speech model (CC BY 4.0), runs
   where Atlas runs, and the recording never leaves it. The model is downloaded once, about 670 MB,
@@ -75,7 +57,23 @@ Who writes it down is chosen in **Settings**, **Voice**:
   `gemini-3.5-transcribe`).
 - **Nobody**: a recording keeps its note, and the model reads only that one came.
 
-If you used this plugin before, Atlas keeps writing recordings down with the provider it had.
+If you used the Voice plugin before, Atlas keeps writing recordings down with the provider it
+had, and its dictations are on the Dictations page.
+
+## The Voice plugin
+
+Open **Extensions**, in the sidebar, and on the **Plugins** tab choose **Turn on…** on Voice's
+card. Atlas shows what it may do (reach `api.openai.com` and `generativelanguage.googleapis.com`,
+read the two keys) and turns it on once you agree. With no key yet, add one first
+([Models and keys](/docs/guides/models/)).
+
+Its `provider` setting picks who speaks and talks: `openai`, as it comes, or `gemini`, each on the
+key Atlas's provider of that name already uses, `OPENAI_API_KEY` or `GEMINI_API_KEY`. The models
+and the voices are picked from lists, which Atlas asks of the provider when you open the settings:
+a model the provider adds shows up without a new Atlas, and only the ones that do the job are
+listed (a speech model for `speech_model`, a live one for `live_model`). Gemini lists the voices of
+the app's language first, then the ones that speak every language. OpenAI lists no voices, so its
+voice is typed. **Other…**, at the end of a list, types a value it does not hold.
 
 ## Hear the answer
 
@@ -102,7 +100,7 @@ You pay the provider on your key, at its prices (these were checked in October 2
 
 | | OpenAI | Gemini |
 |---|---|---|
-| Writing speech down (dictation, and audio when chosen) | `gpt-transcribe`, about US$ 0.0045 a minute | `gemini-3.5-transcribe`, about US$ 0.005 a minute |
+| Writing speech down, when chosen in Settings, Voice | `gpt-transcribe`, about US$ 0.0045 a minute | `gemini-3.5-transcribe`, about US$ 0.005 a minute |
 | Speaking an answer | `gpt-4o-mini-tts`, OpenAI's speech price | `gemini-3.8-flash-tts`, about US$ 0.00225 for 10 seconds |
 | Talking live | `gpt-live-1`, about US$ 0.05 a minute, silence included | `gemini-3.8-live`, about US$ 0.005 a minute heard and US$ 0.018 a minute spoken |
 
@@ -116,9 +114,7 @@ Under **Extensions**, on Voice's card on the **Plugins** tab:
 
 | Setting | Default | What it does |
 |---|---|---|
-| `provider` | `openai` | Who writes down, speaks and talks: `openai` or `gemini` |
-| `dictation_shortcut` | `Capslock` | The key that dictates anywhere; empty turns it off |
-| `transcription_model` | the provider's | The model that writes down what you say: `gpt-transcribe` or `gemini-3.5-transcribe` |
+| `provider` | `openai` | Who speaks and talks: `openai` or `gemini` |
 | `speech_model` | the provider's | The model that speaks Atlas's answers: `gpt-4o-mini-tts` or `gemini-3.8-flash-tts` |
 | `live_model` | the provider's | The model of the live conversation: `gpt-live-1` or `gemini-3.8-live` |
 | `voice` | the provider's | The voice that speaks: `marin` or `Kore` |

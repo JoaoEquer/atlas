@@ -639,7 +639,7 @@ export default {
 
 - `area: 'page'` is a page of the main area, with an entry in the sidebar; `area: 'panel'` is a tab
   of the side panel; `area: 'box'` is a button beside the words of the conversation's box, as the
-  voice plugin's microphone.
+  voice plugin's live conversation.
 - With `"api": 29` (screen version 4), `area: 'session'` sits by an executor's session box and
   `area: 'executor'` atop an executor's tree in the sidebar, once opened; `render(place)` gets where
   it is: `{ executor, folder, instance, conversation }` for a session (`instance` and
@@ -662,8 +662,8 @@ export default {
   text where the app's cursor is when its window has the focus (`app`), else pastes it in the
   program in focus (`pasted`), or leaves it on the clipboard when that program takes no keys
   (`copied`). `ctx.bar({ text, tone })` shows a floating bar that never takes the focus (`tone`:
-  `recording`, `working`, `done`, `error`), `null` hides it. The voice plugin's dictation anywhere
-  uses all three.
+  `recording`, `working`, `done`, `error`), `null` hides it. Atlas's own dictation anywhere does
+  the same with them.
 - `ctx.call(name, params)` calls the plugin's Python, which registers it with
   `ctx.register_call(name, run)` and names it under `atlas.calls` (`"api": 17`). It runs where
   Atlas runs, also when the app is on another machine.

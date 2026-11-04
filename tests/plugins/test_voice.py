@@ -10,7 +10,6 @@ same server, so what reaches the model is what a provider would get.
 """
 
 import asyncio
-import base64
 import json
 import shutil
 from pathlib import Path
@@ -32,7 +31,6 @@ from fake_model import (
     SPOKEN,
     SPOKEN_WAV,
     FakeCall,
-    FakeError,
     FakeModelServer,
     FakeReply,
 )
@@ -268,89 +266,6 @@ def _call(plugins: Plugins, name: str, params: Any) -> Any:
     return asyncio.run(run())
 
 
-def test_the_screen_dictates_through_the_plugin(plugins: Plugins, fake: FakeModelServer) -> None:
-    _voice_on(plugins, fake)
-    fake.transcribe("Buy bread.")
-    recorded = base64.b64encode(b"webm recording").decode()
-    said = _call(plugins, "dictate", {"audio": recorded, "media_type": "audio/webm"})
-    assert said["text"] == "Buy bread."
-    (heard,) = fake.heard
-    assert (heard["file_name"], heard["file_type"]) == ("dictation.webm", "audio/webm")
-    assert heard["file_bytes"] == b"webm recording"
-    with pytest.raises(ValueError, match="not base64"):
-        _call(plugins, "dictate", {"audio": "not base64!"})
-
-
-def test_every_dictation_is_kept_with_its_recording(
-    plugins: Plugins, fake: FakeModelServer
-) -> None:
-    _voice_on(plugins, fake)
-    fake.transcribe("Buy bread.", FakeError(500, "The transcription service is down."))
-    first = _call(
-        plugins,
-        "dictate",
-        {"audio": base64.b64encode(b"first").decode(), "media_type": "audio/webm;codecs=opus"},
-    )
-    with pytest.raises(ValueError, match="service is down"):
-        _call(
-            plugins,
-            "dictate",
-            {
-                "audio": base64.b64encode(b"second").decode(),
-                "media_type": "audio/webm",
-                "where": "anywhere",
-            },
-        )
-    listed = _call(plugins, "dictations", None)["dictations"]
-    # Both made within the same second: their order is not told apart.
-    assert sorted((d["text"], d["where"]) for d in listed) == [
-        ("", "anywhere"),
-        ("Buy bread.", "box"),
-    ]
-    failed = next(d for d in listed if d["where"] == "anywhere")
-    assert "service is down" in failed["error"], "kept with why, its speech not lost"
-    assert first["id"] in {d["id"] for d in listed}
-    audio = _call(plugins, "dictation_audio", {"id": first["id"]})
-    assert base64.b64decode(audio["audio"]) == b"first"
-    assert audio["media_type"] == "audio/webm;codecs=opus"
-    fake.transcribe("Call the bank.")
-    again = _call(plugins, "dictation_again", {"id": failed["id"]})
-    assert again == {"id": failed["id"], "text": "Call the bank."}
-    assert fake.heard[-1]["file_bytes"] == b"second", "its own recording, written down again"
-    rewritten = next(
-        d for d in _call(plugins, "dictations", None)["dictations"] if d["id"] == failed["id"]
-    )
-    assert (rewritten["text"], rewritten["error"]) == ("Call the bank.", "")
-    assert _call(plugins, "dictation_delete", {"id": first["id"]}) is True
-    folder = plugins.data_folder("voice") / "dictations"
-    assert sorted(path.suffix for path in folder.iterdir()) == [".json", ".webm"]
-    for wrong in ("", "../../vault", first["id"]):
-        with pytest.raises(ValueError, match="no such dictation"):
-            _call(plugins, "dictation_audio", {"id": wrong})
-
-
-def test_the_dictation_status_names_the_shortcut(
-    plugins: Plugins, vault: Vault, fake: FakeModelServer
-) -> None:
-    _voice_on(plugins, fake)
-    assert _call(plugins, "dictation_status", None) == {
-        "ready": True,
-        "why": "",
-        "shortcut": "Capslock",
-    }
-    plugins.set_setting("voice", "dictation_shortcut", "F9")
-    vault.delete("OPENAI_API_KEY")
-    status = _call(plugins, "dictation_status", None)
-    assert (status["ready"], status["shortcut"]) == (False, "F9")
-    assert "OPENAI_API_KEY" in status["why"]
-
-
-def test_the_voice_screen_gets_its_desktop_powers(plugins: Plugins, fake: FakeModelServer) -> None:
-    _voice_on(plugins, fake)
-    [screen] = [s for s in plugins.screens() if s.plugin == "voice"]
-    assert screen.desktop == ("shortcut", "paste")
-
-
 def test_the_live_session_is_opened_here_with_the_key_and_the_history(
     plugins: Plugins, fake: FakeModelServer
 ) -> None:
@@ -487,10 +402,8 @@ def test_the_voice_lists_the_models_the_provider_has_for_each_setting(
     fake.model_ids = [
         "gpt-6-luna",
         "gpt-transcribe",
-        "gpt-4o-mini-transcribe-2025-03-20",
-        "gpt-4o-mini-transcribe",
         "gpt-live-transcribe",
-        "whisper-1",
+        "gpt-4o-mini-tts-2025-03-20",
         "gpt-4o-mini-tts",
         "gpt-live-1",
     ]
@@ -501,14 +414,7 @@ def test_the_voice_lists_the_models_the_provider_has_for_each_setting(
         return [choice["value"] for choice in found["choices"]]
 
     # The provider's own first, as the empty value; a dated snapshot after the name it pins.
-    assert values("transcription_model") == [
-        "",
-        "gpt-4o-mini-transcribe",
-        "gpt-transcribe",
-        "whisper-1",
-        "gpt-4o-mini-transcribe-2025-03-20",
-    ]
-    assert values("speech_model") == ["", "gpt-4o-mini-tts"]
+    assert values("speech_model") == ["", "gpt-4o-mini-tts", "gpt-4o-mini-tts-2025-03-20"]
     assert values("live_model") == ["", "gpt-live-1"]
     assert values("voice") == [""], "OpenAI lists no voices: its voice is typed"
     models = [{"value": "gemini/gemini-3.8-flash", "label": "Google Gemini · Gemini 3.8 Flash"}]
@@ -517,8 +423,12 @@ def test_the_voice_lists_the_models_the_provider_has_for_each_setting(
         "conversation",
         "gemini/gemini-3.8-flash",
     ]
-    found = _call(plugins, "setting_choices", {"setting": "transcription_model"})
-    assert found["choices"][0]["label"] == "OpenAI's choice: gpt-transcribe"
+    found = _call(plugins, "setting_choices", {"setting": "speech_model"})
+    assert found["choices"][0]["label"] == "OpenAI's choice: gpt-4o-mini-tts"
+    assert _call(plugins, "setting_choices", {"setting": "transcription_model"}) == {
+        "choices": [],
+        "why": "",
+    }, "writing down is Atlas's own now"
     assert _call(plugins, "setting_choices", {"setting": "quiet_close_seconds"}) == {
         "choices": [],
         "why": "",
@@ -560,8 +470,7 @@ def test_gemini_lists_what_each_model_does_and_its_voices_by_language(
         params = {"setting": setting, "language": language}
         return [c["value"] for c in _call(plugins, "setting_choices", params)["choices"]]
 
-    # A transcription model first, then the models that talk; nothing that draws or embeds.
-    assert values("transcription_model") == ["", "gemini-3.5-transcribe", "gemini-3.8-flash"]
+    # Only what speaks, or talks live; nothing that writes down, draws or embeds.
     assert values("speech_model") == ["", "gemini-3.8-flash-tts"]
     assert values("live_model") == ["", "gemini-3.8-live"]
     assert values("voice", "pt-BR") == ["", "pt-br-advisor-1", "kore"]
@@ -587,37 +496,11 @@ def test_a_list_kept_short_says_why(plugins: Plugins, fake: FakeModelServer, vau
 # -- the voice through Gemini --------------------------------------------------------------------
 
 
-def test_gemini_writes_down_audio_with_its_transcription_model(
-    plugins: Plugins, fake: FakeModelServer
-) -> None:
-    _voice_on(plugins, fake, provider="gemini")
-    fake.transcribe("Buy bread.", "Call the bank.")
-    recorded = base64.b64encode(b"webm recording").decode()
-    said = _call(plugins, "dictate", {"audio": recorded, "media_type": "audio/webm;codecs=opus"})
-    assert said["text"] == "Buy bread."
-    (body,) = fake.bodies("/v1beta/interactions")
-    assert body == {
-        "model": "gemini-3.5-transcribe",
-        "input": [{"type": "audio", "mime_type": "audio/webm", "data": recorded}],
-    }
-
-    # Another model is asked for the words only, beside the audio.
-    plugins.set_setting("voice", "transcription_model", "gemini-3.8-flash")
-    _call(plugins, "dictate", {"audio": recorded, "media_type": "audio/ogg"})
-    asked = fake.bodies("/v1beta/interactions")[-1]
-    assert asked["model"] == "gemini-3.8-flash"
-    assert asked["input"][0]["type"] == "text"
-    assert "words only" in asked["input"][0]["text"]
-    assert not any(r.headers.get("authorization") for r in fake.requests), "its key, its header"
-
-
 def test_without_the_gemini_key_the_voice_names_it(plugins: Plugins, fake: FakeModelServer) -> None:
     _voice_on(plugins, fake, provider="gemini", key=None)
-    status = _call(plugins, "dictation_status", None)
+    status = _call(plugins, "live_status", None)
     assert status["ready"] is False
     assert "no GEMINI_API_KEY" in status["why"]
-    with pytest.raises(ValueError, match="no GEMINI_API_KEY"):
-        _call(plugins, "dictate", {"audio": base64.b64encode(b"x").decode()})
 
 
 def _spoken_by_gemini(

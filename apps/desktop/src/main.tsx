@@ -8,6 +8,7 @@ import { locale, t } from './i18n'
 import { startScreens } from './plugins/runtime'
 import { AtlasClient } from './protocol/client'
 import { $session, current, startApp } from './store/app'
+import { startDictationAnywhere } from './store/dictation'
 import { startMachines } from './store/machines'
 import { setTerminals } from './store/terminals'
 import { startTheme } from './store/theme'
@@ -53,6 +54,7 @@ startApp({
 
 // The plugins' screens of the home on screen (step 16m).
 startScreens()
+startDictationAnywhere()
 
 if (window.atlas.e2e) {
   window.atlasE2e = {

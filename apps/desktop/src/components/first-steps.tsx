@@ -7,11 +7,13 @@ import {
   $connection,
   $home,
   $pairings,
+  $plugins,
   $read,
   $routines,
   $workbench,
   newBot,
   newConversationWith,
+  showMarketplace,
   showSidebarTab
 } from '@/store/app'
 import { $firstSteps, doneNow, firstStepsOf, hideFirstSteps, markDone, type Task, TASKS } from '@/store/first-steps'
@@ -31,12 +33,13 @@ export function FirstSteps() {
   const { executors, instances } = useStore($workbench)
   const bots = useStore($bots)
   const pairings = useStore($pairings)
+  const plugins = useStore($plugins)
   const routines = useStore($routines)
   const steps = firstStepsOf(useStore($firstSteps), home)
   const setup = firstRunOf(useStore($firstRun), home)
   // Only once the home's lists are read: before that, every task would look not done.
   const known = state === 'open' && read.workbench && read.bots
-  const now = known ? doneNow({ bots, executors, instances, pairings, routines }) : []
+  const now = known ? doneNow({ bots, instances, pairings, plugins, routines }) : []
   const fresh = now.join(' ')
 
   useEffect(() => {
@@ -54,9 +57,6 @@ export function FirstSteps() {
 
   const executorOn = executors.some(row => row.enabled && row.installed && row.supported)
   const start: Record<Task, () => void> = {
-    account: () => {
-      openStep(home, 'executors')
-    },
     bot: newBot,
     delegate: () => {
       if (executorOn) {
@@ -68,6 +68,7 @@ export function FirstSteps() {
     routine: () => {
       newConversationWith(t.firstSteps.routinePrompt)
     },
+    store: showMarketplace,
     telegram: () => {
       openStep(home, 'telegram')
     }

@@ -312,6 +312,34 @@ def test_a_plugin_atlas_shipped_inside_itself_before_step_26_comes_back_as_it_wa
     assert views["theirs"].folder == home.plugins_folder / "theirs", "the user's own, left alone"
 
 
+def test_a_consent_is_carried_when_a_plugin_of_atlass_only_declares_less(
+    home: Home, vault: Vault, tmp_path: Path
+) -> None:
+    """Step 26: a plugin of Atlas's that lost a part to the core asks nothing new, so the user who
+    turned it on keeps it on; a consent to anything else still waits for the user."""
+    database = Database(home.database_file)
+    migrate(database, (SCHEMA,))
+    official = tmp_path / "official"
+    _plugin(official)
+    _plugin(official, "other", {**_manifest(), "name": "other"})
+    plugins = Plugins(home, database, vault, official_folder=official)
+    manifest = plugins.view("echo").manifest
+    assert manifest is not None
+    now = datetime.now(UTC)
+    plugins.store.decide("echo", enabled=True, consent="what-it-declared-before", now=now)
+    plugins.store.decide("other", enabled=True, consent="something-else", now=now)
+    narrowed = {
+        "echo": ("what-it-declared-before", manifest.fingerprint()),
+        "other": ("what-it-declared-before", manifest.fingerprint()),
+    }
+
+    refresh_official(plugins, folder=official, narrowed=narrowed)
+
+    views = {view.name: view for view in plugins.all()}
+    assert (views["echo"].enabled, views["echo"].consented) == (True, True)
+    assert views["other"].consented is False, "a consent to another declaration is not carried"
+
+
 #: What each plugin Atlas ships declares, as its consent's fingerprint. A user who turned one on
 #: consented to this; a manifest that declares anything else turns the plugin off for them at the
 #: update, until they consent again (`consent again`). Changing a value here is that decision,
@@ -326,7 +354,7 @@ BUNDLED_CONSENTS = {
     "github": "b916894f2baf121ec0fb6d34a6c8f3a8cc3c2bf358d126e086c1859846c1d194",
     "google": "d96a07239fb1feaa056b57aa8911d0937718cd2b7c412a8ab67d685104619fca",
     "telegram": "bc11fc8c276abf0e4bcbdce1282af46458728404923f1de826e4e4f1f723578f",
-    "voice": "82baa2909c9036c844ba79a196d8807aa03c5ddd3902f2151123d190a785dc66",
+    "voice": "ffad1173ac77c4ba88ec32ec52bc408f27e9ae100e94bb747e8bbbfcccb9607c",
 }
 
 
@@ -404,7 +432,7 @@ def test_atlas_ships_its_channel_and_executor_plugins_off(home: Home, vault: Vau
     assert deepseek.secrets == {"DEEPSEEK_API_KEY": False}
     assert (voice.name, voice.bundled, voice.enabled, voice.problem) == ("voice", True, False, None)
     assert voice.manifest is not None
-    assert voice.manifest.readers == ("audio",)
+    assert (voice.manifest.readers, voice.manifest.desktop) == ((), ()), "both Atlas's own now"
     assert voice.secrets == {"OPENAI_API_KEY": False, "GEMINI_API_KEY": False}, (
         "the OpenAI and Gemini providers' own keys"
     )

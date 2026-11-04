@@ -108,7 +108,7 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `file sent` | arquivo mandado | A file a plugin's tool sends the user (`ToolHost.send_file`, `FileSent`, the `message.file` event, SDK version 22): kept in the home's attachments, shown in the turn, sent in a channel's chat |
 | `box button` | botão da caixa | A button a plugin's screen adds beside the words of the conversation's box (the `box` area, screen version 2): the voice plugin's microphone and its live conversation |
 | `dictation` | ditado | Speech recorded by the box's microphone and written down into the box, to be read before it is sent; never sent by itself |
-| `dictation anywhere` | ditado em qualquer lugar | A dictation started by the voice plugin's global shortcut while any program has the focus, pasted into that program, and kept in the home with its audio |
+| `dictation anywhere` | ditado em qualquer lugar | A dictation started by a key the user chose (off until then), heard while any program has the focus, pasted into that program, and kept in the home with its audio; the app's own since step 26 |
 | `global shortcut` | atalho global | A key a plugin's screen registers with the system, heard while another program has the focus (screen version 3) |
 | `live conversation` | conversa por voz | The voice plugin's spoken conversation: OpenAI's full-duplex voice model talks with the user and hands each real request to Atlas |
 | `spoken turn` | turno falado | A turn the live conversation handed over: the user's last words as the message, and a note of Atlas's saying it is speech and will be spoken |

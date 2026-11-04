@@ -229,6 +229,11 @@ from atlas.server.protocol import (
     ConversationRow,
     ConversationsChanged,
     Created,
+    DictationAudio,
+    DictationList,
+    DictationRef,
+    DictationRow,
+    DictationWrite,
     Empty,
     Events,
     EventsParams,
@@ -414,7 +419,7 @@ from atlas.server.updates import command as update_command
 from atlas.server.updates import run as run_update
 from atlas.server.updates import shown as shown_command
 from atlas.skills import SkillLibrary, SkillUsage, changed, read_manifest, retire_bundled
-from atlas.speech import ModelStore, Speech
+from atlas.speech import Dictation, Dictations, ModelStore, Speech, SpeechError
 from atlas.terminals import TerminalError, Terminals
 from atlas.tools import (
     SECRET_REQUEST_SECONDS,
@@ -470,6 +475,10 @@ ACCOUNTS_FROM_ATLAS = "from-atlas.json"
 #: down recordings (step 26).
 VOICE_PLUGIN = "voice"
 VOICE_MOVED = "transcription-moved"
+#: Where the voice plugin kept the dictations before step 26, in its data folder.
+VOICE_DICTATIONS = "dictations"
+#: The longest dictation a client may send, in bytes: a few minutes of speech.
+DICTATION_BYTES = 10 * 1024 * 1024
 
 _logger = logging.getLogger("atlas.server")
 
@@ -587,8 +596,11 @@ class Gateway:
             ModelStore(Home(home_root(home.root)).speech_folder),
             lambda: self.assistant.settings.voice.transcription,
             vault.get,
+            address=self._provider_address,
         )
         self.speech.on_changed = self._speech_changed
+        #: What the user dictated in this home (step 26), each recording with its words.
+        self.dictations = Dictations(home.dictations_folder)
         self.assistant.use_reader(LoadedReader("atlas", "audio", self.speech.transcribe))
         self.plugins = Plugins(home, Database(home.database_file), vault, clock=clock)
         self.plugins.host = AssistantPluginHost(self.assistant, self._told_accounts_changed)
@@ -691,6 +703,11 @@ class Gateway:
             "speech.status": self._speech_status,
             "speech.download": self._speech_download,
             "speech.decline": self._speech_decline,
+            "dictation.write": self._dictation_write,
+            "dictation.list": self._dictation_list,
+            "dictation.audio": self._dictation_audio,
+            "dictation.again": self._dictation_again,
+            "dictation.delete": self._dictation_delete,
             "settings.write": self._settings_write,
             "memory.entries": self._memory_entries,
             "memory.edit": self._memory_edit,
@@ -981,10 +998,15 @@ class Gateway:
             )
 
     def _voice_to_speech(self) -> None:
-        """Once, a home whose voice plugin wrote down recordings before step 26 keeps them written
-        down by the same provider: its `provider` becomes `[voice] transcription`, unless the
-        user set that already. Without it, the update would move them to this computer's model,
-        which asks for a download first."""
+        """Once, a home whose voice plugin wrote down recordings before step 26 keeps its
+        dictations, now the home's, and has recordings written down by the same provider: its
+        `provider` becomes `[voice] transcription`, unless the user set that already. Without it,
+        the update would move them to this computer's model, which asks for a download first."""
+        kept = self.plugins.data_folder(VOICE_PLUGIN) / VOICE_DICTATIONS
+        if kept.is_dir() and not self._home.dictations_folder.exists():
+            # The dictations the voice plugin kept are the home's now, where the page reads them.
+            shutil.move(kept, self._home.dictations_folder)
+            _logger.info("The voice plugin's dictations moved to the home's.")
         marker = self.plugins.data_folder(VOICE_PLUGIN) / VOICE_MOVED
         if marker.exists():
             return
@@ -1897,6 +1919,13 @@ class Gateway:
         await asyncio.to_thread(self.speech.decline)
         return await asyncio.to_thread(self._speech_now)
 
+    def _provider_address(self, provider: str) -> str | None:
+        """Where Atlas's provider of this name is reached, as its model catalog says."""
+        try:
+            return self.assistant.models.catalog.provider(provider).base_url
+        except ModelsError:
+            return None
+
     def _speech_now(self) -> SpeechState:
         return SpeechState(**asdict(self.speech.status()))
 
@@ -1904,6 +1933,71 @@ class Gateway:
         """Tell every client where the speech model is: its download moved, or a recording
         waited for it."""
         frame = self._event_frame("speech.changed", self._speech_now())
+        for connection in self._connections:
+            connection.put(frame)
+
+    async def _dictation_write(
+        self, connection: Connection, params: DictationWrite
+    ) -> DictationRow:
+        """Kept before it is written down: a failed transcription loses no speech."""
+        self._owner(connection)
+        try:
+            data = base64.b64decode(params.audio, validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise ProtocolError(INVALID_PARAMS, "The recording is not base64.") from error
+        if not data:
+            raise ProtocolError(INVALID_PARAMS, "The recording is empty.")
+        if len(data) > DICTATION_BYTES:
+            raise ProtocolError(
+                INVALID_PARAMS, "The recording is too long to dictate; record a shorter one."
+            )
+        kept = await asyncio.to_thread(
+            self.dictations.keep, data, params.media_type or "audio/webm", params.where
+        )
+        return _dictation_row(await self._write_down(kept))
+
+    async def _dictation_list(self, connection: Connection, params: Empty) -> DictationList:
+        listed = await asyncio.to_thread(self.dictations.listed)
+        return DictationList([_dictation_row(dictation) for dictation in listed])
+
+    async def _dictation_audio(
+        self, connection: Connection, params: DictationRef
+    ) -> DictationAudio:
+        dictation = self._dictation(params.id)
+        data = await asyncio.to_thread(self.dictations.audio, dictation)
+        return DictationAudio(base64.b64encode(data).decode("ascii"), dictation.media_type)
+
+    async def _dictation_again(self, connection: Connection, params: DictationRef) -> DictationRow:
+        self._owner(connection)
+        return _dictation_row(await self._write_down(self._dictation(params.id)))
+
+    async def _dictation_delete(self, connection: Connection, params: DictationRef) -> Empty:
+        self._owner(connection)
+        await asyncio.to_thread(self.dictations.delete, self._dictation(params.id).id)
+        self._dictations_changed()
+        return Empty()
+
+    def _dictation(self, dictation_id: str) -> Dictation:
+        try:
+            return self.dictations.get(dictation_id)
+        except SpeechError as error:
+            raise ProtocolError(NOT_FOUND, str(error)) from error
+
+    async def _write_down(self, dictation: Dictation) -> Dictation:
+        """The dictation with what it said, or why it was not written down; every client told."""
+        try:
+            text = await self.speech.transcribe(
+                self.dictations.path(dictation), dictation.media_type
+            )
+        except SpeechError as error:
+            done = await asyncio.to_thread(self.dictations.written, dictation, "", str(error))
+        else:
+            done = await asyncio.to_thread(self.dictations.written, dictation, text)
+        self._dictations_changed()
+        return done
+
+    def _dictations_changed(self) -> None:
+        frame = self._event_frame("dictations.changed", Empty())
         for connection in self._connections:
             connection.put(frame)
 
@@ -3601,4 +3695,15 @@ def _market_page(page: MarketPage) -> MarketplacePage:
         screenshots=page.screenshots,
         homepage=page.homepage,
         entry=page.entry,
+    )
+
+
+def _dictation_row(dictation: Dictation) -> DictationRow:
+    return DictationRow(
+        dictation.id,
+        dictation.at,
+        dictation.text,
+        dictation.media_type,
+        dictation.where,
+        dictation.error,
     )

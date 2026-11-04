@@ -338,10 +338,10 @@ export const en = {
     routinePrompt: 'Every Monday at 9am, remind me to review what I have for the week.',
     start: 'Start',
     tasks: {
-      account: 'Add a second account',
       bot: 'Create a bot',
       delegate: 'Hand a task to an executor',
       routine: 'Schedule a routine',
+      store: 'Install something from the store',
       telegram: 'Talk to Atlas on Telegram'
     },
     title: 'First steps'
@@ -755,6 +755,38 @@ export const en = {
 
       return act ? `${name} wants to ${act}` : `${name} wants to use ${tool}`
     }
+  },
+  dictation: {
+    again: 'Write it down again',
+    anywhere: 'anywhere',
+    cancel: 'Cancel',
+    change: 'Change the key',
+    choose: 'Choose a key',
+    copied: 'This program takes no paste: the text is copied, paste it with Ctrl+V',
+    copy: 'Copy',
+    copyDone: 'Copied',
+    dictate: 'Dictate: click to record, click again to write it in the box',
+    failed: (why: string) => `The dictation failed: ${why}`,
+    inBox: 'in the box',
+    listen: 'Listen',
+    none: 'No dictation yet.',
+    notWritten: (why: string) => `Not written down: ${why}`,
+    nothing: 'Nothing was heard',
+    page: 'Dictations',
+    pageIntro: (key: string) =>
+      key
+        ? `Press ${key} in any program to record, and again for the words to land where you are. The dictations are kept here, with their audio.`
+        : "Dictation anywhere is off: choose a key, and press it in any program to dictate there. The box's dictations are kept here too, with their audio.",
+    pasted: 'Done',
+    pressKey: 'Press the key…',
+    recording: (key: string) => `Recording: ${key} to stop`,
+    recordingBox: 'Recording: click to stop',
+    remove: 'Delete',
+    shortcut: 'Key',
+    shortcutFailed: (why: string) => `The key cannot be used: ${why}`,
+    transcribing: 'Writing down what you said…',
+    turnOff: 'Turn off',
+    writing: 'Writing down what you said…'
   },
   speech: {
     ask: (size: string) =>
