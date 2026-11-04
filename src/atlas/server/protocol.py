@@ -1682,6 +1682,29 @@ class WorkspaceDiff:
 
 
 @dataclass(frozen=True, slots=True)
+class CheckpointRow:
+    """A workspace's folder as it was before a prompt (step 21, A3)."""
+
+    commit: str
+    #: The prompt it was kept before, or why it was kept.
+    label: str
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointList:
+    #: The newest first.
+    checkpoints: list[CheckpointRow]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceRestore:
+    id: str
+    #: One of its checkpoints.
+    commit: str
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectRow:
     """How a project prepares a new workspace."""
 
@@ -2493,6 +2516,19 @@ METHODS: Mapping[str, Method] = {
             WorkspaceDiff,
             "What a workspace changed since it left its branch of origin, committed or not, line "
             "by line with each line's numbers, for the user to comment on.",
+        ),
+        Method(
+            "workspace.checkpoints",
+            WorkspaceRef,
+            CheckpointList,
+            "A workspace's checkpoints, its folder as it was before each prompt, the newest first.",
+        ),
+        Method(
+            "workspace.restore",
+            WorkspaceRestore,
+            WorkspaceRow,
+            "Put a workspace's files back as they were at one of its checkpoints, what they are "
+            "now kept first as another; refused while a session works in it.",
         ),
         Method(
             "workspace.project",

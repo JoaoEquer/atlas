@@ -923,7 +923,7 @@ test("the box's new worktree is a workspace in the home, listed under its projec
   expect(readdirSync(path.join(home, 'worktrees', made[0] ?? ''))).toEqual([])
 })
 
-test("a comment on a line of a workspace's changes reaches its session as a message", async () => {
+test("a comment on a line of a workspace's changes reaches its session, and its checkpoint takes the files back", async () => {
   const scripts = await scriptsFolder()
   const log = path.join(path.dirname(scripts), 'claude.log')
   desktop = await launch(withClaude(scripts, { FAKE_CLAUDE_LOG: log }))
@@ -960,6 +960,7 @@ test("a comment on a line of a workspace's changes reaches its session as a mess
   const [project] = readdirSync(path.join(home, 'worktrees'))
   const [name] = readdirSync(path.join(home, 'worktrees', project ?? ''))
   writeFileSync(path.join(home, 'worktrees', project ?? '', name ?? '', 'README.md'), 'The shop, open late.\n')
+  writeFileSync(path.join(scripts, `${name ?? ''}.json`), JSON.stringify([{ say: 'Noted.' }, { result: 'Noted.' }]))
 
   if (await page.getByTestId('panel-show').isVisible()) {
     await page.getByTestId('panel-show').click()
@@ -984,4 +985,18 @@ test("a comment on a line of a workspace's changes reaches its session as a mess
     .poll(prompts, STARTED)
     .toContain('Review comments on your changes:\n\nREADME.md:1\n> The shop, open late.\nSay until when.')
   expect(readFileSync(path.join(folder, 'README.md'), 'utf8')).toBe('The shop.\n')
+
+  // A checkpoint was kept before that message (step 21, A3): what came after goes, and the
+  // session goes on in a copy.
+  await expect(page.getByTestId('assistant-message').last()).toContainText('Noted.', STARTED)
+  const readme = path.join(home, 'worktrees', project ?? '', name ?? '', 'README.md')
+  writeFileSync(readme, 'Something else.\n')
+  await page.getByTestId('checkpoints-toggle').click()
+  await expect(page.getByTestId('checkpoint')).toHaveCount(1)
+  await page.getByTestId('checkpoint-go-back').click()
+  await page.getByTestId('checkpoint-go-back-yes').click()
+  await expect(page.getByTestId('checkpoint-back')).toBeVisible()
+  // As git checks a file out here: on Windows, with its line endings.
+  expect(readFileSync(readme, 'utf8').replace(/\r\n/g, '\n')).toBe('The shop, open late.\n')
+  await expect(page.getByTestId('session-copy-note')).toBeVisible()
 })

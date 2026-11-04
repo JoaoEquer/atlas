@@ -37,6 +37,7 @@ const DIFF: WorkspaceDiff = {
 
 beforeEach(() => {
   vi.spyOn(workspaces, 'readDiff').mockResolvedValue(DIFF)
+  vi.spyOn(workspaces, 'readCheckpoints').mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -106,5 +107,31 @@ describe("a workspace's changes", () => {
       expect(screen.getByTestId('review-send')).toHaveProperty('disabled', false)
     })
     expect(screen.getAllByTestId('review-comment')).toHaveLength(1)
+  })
+
+  it('goes back to a checkpoint after a yes, and says the session goes on in a copy', async () => {
+    vi.spyOn(workspaces, 'readCheckpoints').mockResolvedValue([
+      { commit: 'c2', created_at: '2026-11-04T10:05:00Z', label: 'Round the total.' },
+      { commit: 'c1', created_at: '2026-11-04T10:00:00Z', label: 'Add the cart.' }
+    ])
+    const back = vi.spyOn(workspaces, 'goBack').mockResolvedValue(undefined)
+    render(<ChangesView workspace={WORKSPACE} />)
+
+    fireEvent.click(await screen.findByTestId('checkpoints-toggle'))
+    expect(screen.getAllByTestId('checkpoint').map(row => row.textContent)).toEqual([
+      expect.stringContaining('Round the total.'),
+      expect.stringContaining('Add the cart.')
+    ])
+    const [, first] = screen.getAllByTestId('checkpoint-go-back')
+    if (first) {
+      fireEvent.click(first)
+    }
+    expect(back).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('checkpoint-go-back-yes'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('checkpoint-back').textContent).toContain('before “Add the cart.”')
+    })
+    expect(back).toHaveBeenCalledWith('w-cart', 'c1')
   })
 })

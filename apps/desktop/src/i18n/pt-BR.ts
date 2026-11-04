@@ -935,6 +935,13 @@ export const ptBR: Override<Messages> = {
   changes: {
     add: 'Adicionar',
     binary: 'Um arquivo binário.',
+    checkpoints: (count: number) => (count === 1 ? '1 ponto de volta' : `${String(count)} pontos de volta`),
+    goBack: 'Voltar aqui',
+    goBackNote:
+      'Os arquivos voltam a como estavam antes desta mensagem; como estão agora fica guardado como um ponto de volta, para voltar a ele. A sessão segue numa cópia.',
+    goBackYes: 'Voltar',
+    wentBack: (label: string) =>
+      `Os arquivos estão como antes de “${label}”. A sua próxima mensagem segue numa cópia da sessão.`,
     comment: 'Comentar esta linha',
     commentPlaceholder: 'O que deve mudar aqui? Ctrl+Enter adiciona.',
     more: 'Mudaram mais arquivos do que os mostrados aqui.',

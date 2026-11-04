@@ -20,8 +20,14 @@ GIT_SECONDS = 120.0
 INCLUDE_FILE = ".worktreeinclude"
 
 
-def run(folder: Path, *arguments: str, timeout: float = GIT_SECONDS) -> str:
-    """What `git -C folder <arguments>` printed; raises `WorkspaceError` with git's last words."""
+def run(
+    folder: Path,
+    *arguments: str,
+    timeout: float = GIT_SECONDS,
+    environment: dict[str, str] | None = None,
+) -> str:
+    """What `git -C folder <arguments>` printed, `environment` added to the process's; raises
+    `WorkspaceError` with git's last words."""
     git = shutil.which("git")
     if git is None:
         raise WorkspaceError("git is not installed here.")
@@ -38,6 +44,7 @@ def run(folder: Path, *arguments: str, timeout: float = GIT_SECONDS) -> str:
                 "GIT_TERMINAL_PROMPT": "0",
                 "GIT_EDITOR": "true",
                 "GIT_OPTIONAL_LOCKS": "0",
+                **(environment or {}),
             },
             stdin=subprocess.DEVNULL,
             check=False,
@@ -186,6 +193,64 @@ def summary(folder: Path, base: str) -> str:
     if new:
         parts.append(f"{len(new)} new file{'s' if len(new) != 1 else ''} not yet committed")
     return "; ".join(parts) or "nothing changed"
+
+
+#: Where a workspace's checkpoints are kept: refs of Atlas's own, which a push leaves out.
+CHECKPOINTS = "refs/atlas/checkpoints"
+_ATLAS = ("-c", "user.name=Atlas", "-c", "user.email=atlas@localhost")
+
+
+def snapshot(folder: Path, message: str) -> tuple[str, str]:
+    """Everything in `folder` now, untracked files too but not the ignored ones, as a commit on top
+    of its HEAD that no branch holds: its id and its tree's. The folder, its index and its branch
+    are left as they were (a throwaway index does the adding)."""
+    marker = run(folder, "rev-parse", "--git-path", "atlas-checkpoint-index").strip()
+    scratch = Path(marker) if Path(marker).is_absolute() else folder / marker
+    environment = {"GIT_INDEX_FILE": str(scratch)}
+    try:
+        run(folder, "read-tree", "HEAD", environment=environment)
+        run(folder, "add", "--all", environment=environment)
+        tree = run(folder, "write-tree", environment=environment).strip()
+    finally:
+        scratch.unlink(missing_ok=True)
+    commit = run(folder, *_ATLAS, "commit-tree", tree, "-p", "HEAD", "-m", message).strip()
+    return commit, tree
+
+
+def keep_checkpoint(folder: Path, name: str, commit: str) -> None:
+    run(folder, "update-ref", f"{CHECKPOINTS}/{name}", commit)
+
+
+def checkpoints(folder: Path, prefix: str) -> list[tuple[str, str, str, str]]:
+    """The checkpoints under `prefix`, the newest first: each its ref, its commit, its tree and
+    its message's first line."""
+    listed = run(
+        folder,
+        "for-each-ref",
+        "--sort=-refname",
+        "--format=%(refname)%00%(objectname)%00%(tree)%00%(contents:subject)",
+        f"{CHECKPOINTS}/{prefix}/",
+    )
+    found: list[tuple[str, str, str, str]] = []
+    for line in listed.splitlines():
+        parts = line.split("\0")
+        if len(parts) == 4:
+            found.append((parts[0], parts[1], parts[2], parts[3]))
+    return found
+
+
+def drop_checkpoints(folder: Path, prefix: str) -> None:
+    for ref, *_ in checkpoints(folder, prefix):
+        run(folder, "update-ref", "-d", ref)
+
+
+def restore(folder: Path, commit: str) -> None:
+    """`folder` as it was at the checkpoint `commit`: its files, its branch back on the commit
+    the checkpoint was made on, its changes since then unstaged. Files made since are removed,
+    the ignored ones kept; whoever calls has kept a checkpoint of now first."""
+    run(folder, "read-tree", "-u", "--reset", f"{commit}^{{tree}}")
+    run(folder, "clean", "-d", "--force", "--quiet")
+    run(folder, "reset", "--quiet", f"{commit}^")
 
 
 def delete_branch(root: Path, branch: str) -> None:

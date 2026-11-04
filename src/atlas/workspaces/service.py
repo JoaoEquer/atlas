@@ -13,7 +13,7 @@ import secrets
 import subprocess
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from atlas.home import Database, format_utc, utc_now
@@ -23,6 +23,7 @@ from atlas.workspaces.model import (
     ARCHIVE_MESSAGE,
     BRANCH_PREFIX,
     PORTS_SIZE,
+    Checkpoint,
     Project,
     Workspace,
     WorkspaceState,
@@ -36,6 +37,10 @@ from atlas.workspaces.store import WorkspaceStore
 SETUP_SECONDS = 600.0
 #: How much of the setup script's output is kept, from its end.
 OUTPUT_CHARACTERS = 4000
+#: How much of a prompt names the checkpoint kept before it.
+LABEL_CHARACTERS = 200
+#: The label of the checkpoint kept before going back to another.
+RESTORED_LABEL = "Before going back to an earlier checkpoint"
 
 _logger = logging.getLogger("atlas.workspaces")
 
@@ -119,6 +124,51 @@ class Workspaces:
                 f"The workspace {workspace.name} is archived: bring it back first."
             )
         return diff.changes(Path(workspace.folder), workspace.base)
+
+    def checkpoint(self, workspace_id: str, label: str) -> Checkpoint | None:
+        """Keep the workspace's folder as it is now, named by `label` (the prompt it comes
+        before); `None` when nothing changed since its last checkpoint."""
+        workspace = self.get(workspace_id)
+        if workspace.state is WorkspaceState.ARCHIVED:
+            return None
+        folder = Path(workspace.folder)
+        commit, tree = git.snapshot(folder, " ".join(label.split())[:LABEL_CHARACTERS] or "-")
+        kept = git.checkpoints(folder, workspace.id)
+        if kept and kept[0][2] == tree:
+            return None
+        at = self._clock()
+        # Named by the time, so they sort as they came, with a few letters for two at once.
+        name = f"{workspace.id}/{at.strftime('%Y%m%dT%H%M%S%f')}-{secrets.token_hex(2)}"
+        git.keep_checkpoint(folder, name, commit)
+        return Checkpoint(commit=commit, label=label, created_at=format_utc(at))
+
+    def checkpoints(self, workspace_id: str) -> list[Checkpoint]:
+        """The workspace's checkpoints, the newest first."""
+        workspace = self.get(workspace_id)
+        root = Path(self._root(workspace))
+        found: list[Checkpoint] = []
+        for ref, commit, _tree, label in git.checkpoints(root, workspace.id):
+            stamp = ref.rsplit("/", 1)[-1].split("-", 1)[0]
+            try:
+                made = datetime.strptime(stamp, "%Y%m%dT%H%M%S%f").replace(tzinfo=UTC)
+            except ValueError:
+                continue
+            found.append(Checkpoint(commit=commit, label=label, created_at=format_utc(made)))
+        return found
+
+    def restore(self, workspace_id: str, commit: str) -> Workspace:
+        """The workspace's folder back as it was at one of its checkpoints, what it holds now
+        kept first as a checkpoint of its own: nothing is lost, and going back can be undone."""
+        workspace = self.get(workspace_id)
+        if workspace.state is WorkspaceState.ARCHIVED:
+            raise WorkspaceError(
+                f"The workspace {workspace.name} is archived: bring it back first."
+            )
+        if commit not in {found.commit for found in self.checkpoints(workspace_id)}:
+            raise WorkspaceError(f"The workspace {workspace.name} has no checkpoint {commit}.")
+        self.checkpoint(workspace_id, RESTORED_LABEL)
+        git.restore(Path(workspace.folder), commit)
+        return workspace
 
     def create(self, folder: Path, name: str, base: str | None = None) -> Workspace:
         """A new workspace of the project of `folder`, named `name`, on a new branch from `base`
@@ -257,6 +307,7 @@ class Workspaces:
             git.remove_worktree(root, Path(workspace.folder))
         if git.branch_exists(root, workspace.branch):
             git.delete_branch(root, workspace.branch)
+        git.drop_checkpoints(root, workspace.id)
         self._store.delete(workspace_id)
 
     # -- helpers ---------------------------------------------------------------------------------

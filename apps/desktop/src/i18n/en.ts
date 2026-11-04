@@ -949,6 +949,13 @@ export const en = {
   changes: {
     add: 'Add',
     binary: 'A binary file.',
+    checkpoints: (count: number) => (count === 1 ? '1 checkpoint' : `${String(count)} checkpoints`),
+    goBack: 'Go back here',
+    goBackNote:
+      'The files go back to how they were before this message; how they are now is kept as a checkpoint, to come back to. The session goes on in a copy.',
+    goBackYes: 'Go back',
+    wentBack: (label: string) =>
+      `The files are as they were before “${label}”. Your next message goes on in a copy of the session.`,
     comment: 'Comment on this line',
     commentPlaceholder: 'What should change here? Ctrl+Enter adds it.',
     more: 'More files changed than are shown here.',

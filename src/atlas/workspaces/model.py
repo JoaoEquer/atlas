@@ -70,6 +70,17 @@ class Workspace:
     archived_commit: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class Checkpoint:
+    """A workspace's folder as it was before a prompt (step 21, A3): a commit no branch holds,
+    under a ref of Atlas's own, which going back puts the files back to."""
+
+    commit: str
+    #: What came after it: the prompt it was kept before.
+    label: str
+    created_at: str
+
+
 def slug(name: str) -> str:
     """A workspace's name as a folder and a branch take it; empty when nothing is left. A dot
     stays inside a word (`v1.2`), not beside a dash (`page.-2` is `page-2`)."""

@@ -221,6 +221,8 @@ from atlas.server.protocol import (
     BotRow,
     BotsChanged,
     CallRow,
+    CheckpointList,
+    CheckpointRow,
     CommandCheck,
     CommandList,
     CommandOutput,
@@ -427,6 +429,7 @@ from atlas.server.protocol import (
     WorkspaceList,
     WorkspaceListParams,
     WorkspaceRef,
+    WorkspaceRestore,
     WorkspaceRow,
     WorktreeParams,
     dump,
@@ -736,6 +739,8 @@ class Gateway:
             "workspace.unarchive": self._workspace_unarchive,
             "workspace.delete": self._workspace_delete,
             "workspace.diff": self._workspace_diff,
+            "workspace.checkpoints": self._workspace_checkpoints,
+            "workspace.restore": self._workspace_restore,
             "workspace.project": self._workspace_project,
             "workspace.set_project": self._workspace_set_project,
             "dictation.write": self._dictation_write,
@@ -2026,6 +2031,32 @@ class Gateway:
             more,
         )
 
+    async def _workspace_checkpoints(
+        self, connection: Connection, params: WorkspaceRef
+    ) -> CheckpointList:
+        self._owner(connection)
+        found = await self._workspaces(self.workspaces.checkpoints, params.id)
+        return CheckpointList([CheckpointRow(k.commit, k.label, k.created_at) for k in found])
+
+    async def _workspace_restore(
+        self, connection: Connection, params: WorkspaceRestore
+    ) -> WorkspaceRow:
+        """Refused while a session works in the workspace: its harness would go on over files
+        that changed under it."""
+        self._owner(connection)
+        workspace = await self._workspaces(self.workspaces.get, params.id)
+        inside = Path(workspace.folder).resolve()
+        for run in self.assistant.workbench.runs():
+            busy = run.state in (InstanceState.STARTING, InstanceState.WORKING)
+            if busy and run.spec.folder.resolve().is_relative_to(inside):
+                raise ProtocolError(
+                    INVALID_PARAMS,
+                    f"A session works in {workspace.name} now: stop it, then go back.",
+                )
+        done = await self._workspaces(self.workspaces.restore, params.id, params.commit)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
     async def _workspace_project(self, connection: Connection, params: FolderRef) -> ProjectRow:
         found = await self._workspaces(self.workspaces.project_of, Path(params.folder))
         if found is None:
@@ -3029,10 +3060,29 @@ class Gateway:
             attached = tuple(self.assistant.attachments.get(item) for item in params.attachments)
         except AttachmentError as error:
             raise ProtocolError(INVALID_PARAMS, str(error)) from error
+        await self._checkpoint(params.instance_id, params.text)
         steered = await self._on_workbench(
             self.assistant.workbench.prompt(params.instance_id, params.text, attached)
         )
         return WorkbenchPrompted(steered)
+
+    async def _checkpoint(self, instance_id: str, prompt: str) -> None:
+        """A checkpoint of the workspace an instance works in, before its prompt (step 21, A3);
+        none outside a workspace, and a git that fails costs the prompt nothing, logged."""
+        try:
+            folder = self.assistant.workbench.get(instance_id).spec.folder
+        except ExecutorError:
+            return
+        try:
+            found = await asyncio.to_thread(self.workspaces.found_at, folder)
+            if found is None:
+                return
+            kept = await asyncio.to_thread(self.workspaces.checkpoint, found.id, prompt)
+        except WorkspaceError:
+            _logger.warning("A workspace's checkpoint could not be kept.", exc_info=True)
+            return
+        if kept is not None:
+            self._workspaces_changed()
 
     async def _workbench_auto(
         self, connection: Connection, params: WorkbenchSwitchParams

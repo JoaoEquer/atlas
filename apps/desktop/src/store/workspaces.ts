@@ -10,9 +10,9 @@
  */
 import { atom, map } from 'nanostores'
 
-import type { ProjectRow, WorkspaceDiff, WorkspaceRow } from '@/protocol/protocol.generated'
+import type { CheckpointRow, ProjectRow, WorkspaceDiff, WorkspaceRow } from '@/protocol/protocol.generated'
 
-import { $home, current, sendToSession } from './app'
+import { $home, current, goOnInCopy, sendToSession } from './app'
 
 /** The home's workspaces, as last read. */
 export const $workspaceRows = atom<WorkspaceRow[]>([])
@@ -84,6 +84,18 @@ export function workspaceAt(rows: WorkspaceRow[], folder: string): undefined | W
   const wanted = samePath(folder)
 
   return rows.find(row => row.state !== 'archived' && samePath(row.folder) === wanted)
+}
+
+export async function readCheckpoints(id: string): Promise<CheckpointRow[]> {
+  return (await current().client.call('workspace.checkpoints', { id })).checkpoints
+}
+
+/** The workspace's files back as they were at a checkpoint, what they are now kept first as
+ *  another (step 21, A3); then the session on screen goes on in a copy, so what it said after the
+ *  checkpoint stays in the original. */
+export async function goBack(id: string, commit: string): Promise<void> {
+  await current().client.call('workspace.restore', { commit, id })
+  await goOnInCopy()
 }
 
 export function readDiff(id: string): Promise<WorkspaceDiff> {

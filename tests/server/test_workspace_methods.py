@@ -2,6 +2,7 @@
 run after with every client told, archived, brought back and deleted; the session environment's
 new worktree (step 18g) is a workspace in the home now, never beside the project."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from atlas.home import Home
+from claude_code_support import claude_code
 from server_support import Client, Serve
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
@@ -122,3 +124,40 @@ def test_a_workspaces_changes_are_read_line_by_line_through_the_server(
         ("plus", 1, "Hello, world."),
     ]
     assert "archived" in archived["error"]["message"]
+
+
+def test_a_prompt_in_a_workspace_keeps_a_checkpoint_to_go_back_to(
+    serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = tmp_path / "claude-script.json"
+    script.write_text(json.dumps([{"result": "Done."}]), encoding="utf-8")
+    monkeypatch.setenv("FAKE_CLAUDE_SCRIPT", str(script))
+    monkeypatch.setenv("FAKE_CLAUDE_AUTH", str(tmp_path / "auth.json"))
+    monkeypatch.setenv(
+        "FAKE_CLAUDE_PROJECTS", str(Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects")
+    )
+    site = _repository(tmp_path / "site")
+    with serve(executors={"claude-code": claude_code()}).client() as client:
+        made = client.result("workspace.create", {"folder": str(site), "name": "cart"})
+        readme = Path(made["folder"]) / "README.md"
+        readme.write_text("Hello, cart.\n", encoding="utf-8")
+        card = client.result(
+            "workbench.start", {"executor": "claude-code", "folder": made["folder"]}
+        )
+        prompt = {"instance_id": card["instance_id"], "text": "Add the cart.", "attachments": []}
+        client.result("workbench.prompt", prompt)
+        done = client.event("workbench.update", timeout=20)
+        while done["payload"]["state"] != "idle":
+            done = client.event("workbench.update", timeout=20)
+        [kept] = client.result("workspace.checkpoints", {"id": made["id"]})["checkpoints"]
+        readme.write_text("Hello, something else.\n", encoding="utf-8")
+        back = client.result("workspace.restore", {"id": made["id"], "commit": kept["commit"]})
+        after = client.result("workspace.checkpoints", {"id": made["id"]})["checkpoints"]
+
+    assert kept["label"] == "Add the cart."
+    assert back["state"] == "ready"
+    assert readme.read_text(encoding="utf-8") == "Hello, cart.\n"
+    assert [k["label"] for k in after] == [
+        "Before going back to an earlier checkpoint",
+        "Add the cart.",
+    ]

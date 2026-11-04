@@ -1685,6 +1685,24 @@ export class HomeSession {
     }
   }
 
+  /** After its workspace's files went back to a checkpoint (step 21, A3): the session on screen
+   * goes on in a copy from its next message, its instance stopped, the original left as it was;
+   * a session its harness has not named yet just goes on. */
+  async goOnInCopy(): Promise<void> {
+    const open = this.$openSession.get()
+
+    if (!open) {
+      return
+    }
+
+    if (open.instanceId) {
+      await this.onSession(client => client.call('workbench.stop', { instance_id: open.instanceId }))
+    }
+
+    const now = this.$openSession.get() ?? open
+    this.followOpen({ ...now, choice: now.sessionId ? 'copy' : now.choice, instanceId: '' })
+  }
+
   /** Stop the instance on the session on screen, for good; the session stays, to go on later. */
   async stopSession(): Promise<void> {
     const open = this.$openSession.get()
@@ -3786,6 +3804,10 @@ export function sendToSession(text: string, attachments: AttachmentRow[] = []): 
 
 export function stopSession(): Promise<void> {
   return current().stopSession()
+}
+
+export function goOnInCopy(): Promise<void> {
+  return current().goOnInCopy()
 }
 
 export function setSessionSwitch(which: SessionSwitch, enabled: boolean): Promise<void> {

@@ -2,12 +2,20 @@ import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { t } from '@/i18n'
-import type { DiffFileRow, DiffLineRow, WorkspaceDiff, WorkspaceRow } from '@/protocol/protocol.generated'
+import type {
+  CheckpointRow,
+  DiffFileRow,
+  DiffLineRow,
+  WorkspaceDiff,
+  WorkspaceRow
+} from '@/protocol/protocol.generated'
 import { $workspacesSeen } from '@/store/app'
 import {
   $reviewComments,
   addComment,
   commentsOf,
+  goBack,
+  readCheckpoints,
   readDiff,
   removeComment,
   type ReviewComment,
@@ -16,6 +24,7 @@ import {
 
 import { ChevronDown, ChevronRight, Close, Refresh } from './ui/icons'
 import { IconButton } from './ui/tip'
+import { when } from './when'
 
 /**
  * What a workspace changed, in the side panel's Changes tab (step 21, A2, "the heart"): each file
@@ -64,6 +73,7 @@ export function ChangesView({ workspace }: { workspace: WorkspaceRow }) {
           <FileChanges file={file} key={file.path} workspaceId={workspace.id} />
         ))}
         {diff?.more && <p className="p-2 text-muted-foreground">{t.changes.more}</p>}
+        <Checkpoints seen={seen} workspace={workspace} />
       </div>
       {comments.length > 0 && (
         <div className="space-y-1.5 border-t border-border p-2" data-testid="review-comments">
@@ -108,6 +118,126 @@ export function ChangesView({ workspace }: { workspace: WorkspaceRow }) {
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * The workspace's checkpoints (step 21, A3), the newest first: its files as they were before each
+ * prompt. Going back to one asks first, keeps what is there now as a checkpoint of its own (so it
+ * can be undone), and the session goes on in a copy, its original left with what it said since.
+ */
+function Checkpoints({ seen, workspace }: { seen: number; workspace: WorkspaceRow }) {
+  const [rows, setRows] = useState<CheckpointRow[]>([])
+  const [open, setOpen] = useState(false)
+  const [asking, setAsking] = useState('')
+  const [back, setBack] = useState<CheckpointRow | null>(null)
+  const [error, setError] = useState('')
+  const Chevron = open ? ChevronDown : ChevronRight
+
+  useEffect(() => {
+    let live = true
+    readCheckpoints(workspace.id).then(
+      found => {
+        if (live) {
+          setRows(found)
+        }
+      },
+      () => undefined
+    )
+
+    return () => {
+      live = false
+    }
+  }, [seen, workspace.id])
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="p-2" data-testid="checkpoints">
+      <button
+        aria-expanded={open}
+        className="flex items-center gap-1 font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground"
+        data-testid="checkpoints-toggle"
+        onClick={() => {
+          setOpen(!open)
+        }}
+        type="button"
+      >
+        <Chevron aria-hidden size={12} stroke={2} />
+        {t.changes.checkpoints(rows.length)}
+      </button>
+      {back && (
+        <p className="pt-1 text-soft" data-testid="checkpoint-back" role="status">
+          {t.changes.wentBack(back.label)}
+        </p>
+      )}
+      {error && (
+        <p className="pt-1 text-failed-text" role="alert">
+          {error}
+        </p>
+      )}
+      {open && (
+        <ul className="space-y-1 pt-1">
+          {rows.map(row => (
+            <li className="group" data-testid="checkpoint" key={row.commit}>
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate" title={row.label}>
+                  {row.label}
+                </span>
+                <span className="shrink-0 text-muted-foreground">{when(row.created_at)}</span>
+                <button
+                  className="link shrink-0"
+                  data-testid="checkpoint-go-back"
+                  onClick={() => {
+                    setAsking(asking === row.commit ? '' : row.commit)
+                  }}
+                  type="button"
+                >
+                  {t.changes.goBack}
+                </button>
+              </div>
+              {asking === row.commit && (
+                <div className="space-y-1 py-1" data-testid="checkpoint-confirm">
+                  <p className="text-soft">{t.changes.goBackNote}</p>
+                  <div className="flex gap-2">
+                    <button
+                      className="rounded bg-primary px-2 py-0.5 font-medium text-primary-foreground"
+                      data-testid="checkpoint-go-back-yes"
+                      onClick={() => {
+                        setError('')
+                        goBack(workspace.id, row.commit).then(
+                          () => {
+                            setAsking('')
+                            setBack(row)
+                          },
+                          (failed: unknown) => {
+                            setError(failed instanceof Error ? failed.message : String(failed))
+                          }
+                        )
+                      }}
+                      type="button"
+                    >
+                      {t.changes.goBackYes}
+                    </button>
+                    <button
+                      className="rounded px-2 py-0.5 text-muted-foreground"
+                      onClick={() => {
+                        setAsking('')
+                      }}
+                      type="button"
+                    >
+                      {t.workspaces.cancel}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

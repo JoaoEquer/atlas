@@ -3868,6 +3868,16 @@ in any folder. `atlas.workspaces` (A1), decided with the user; how, our choice, 
   a click on a line takes a `review comment`, kept in the app per workspace until sent, and the
   comments go to the session as one message of the user's (`sendToSession`): each its file and
   line, the line quoted, then the comment. Nothing new for a harness: it reads a message.
+- **Checkpoints** (A3): before each prompt the server sends a session in a workspace
+  (`workbench.prompt`), its folder is kept as a commit on top of its HEAD that no branch holds,
+  under `refs/atlas/checkpoints/<workspace>/<time>` (a ref of Atlas's own, which a push leaves
+  out), made through a throwaway index so the folder, its index and its branch never change; the
+  same tree twice is one checkpoint, and a git that fails costs the prompt nothing. Going back
+  (`workspace.restore`), refused while a session works there, first keeps a checkpoint of now,
+  then puts the files back (`read-tree -u --reset`, `clean` without the ignored files, the branch
+  reset to the commit the checkpoint was made on, its changes unstaged): nothing is lost, and
+  going back can be undone. The app's session then goes on in a copy (`fork`), so what was said
+  after the checkpoint stays in the original. Deleting the workspace drops its refs.
 - **Named `workspace`;** the file tools' folder of before is the `starting folder` (GLOSSARY), its
   `[workspace] folder` setting kept as it was.
 

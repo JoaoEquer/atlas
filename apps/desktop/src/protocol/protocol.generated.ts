@@ -480,6 +480,22 @@ export interface DiffLineRow {
   old: number
   new: number
 }
+export interface CheckpointList {
+  /** The newest first. */
+  checkpoints: CheckpointRow[]
+}
+/** A workspace's folder as it was before a prompt (step 21, A3). */
+export interface CheckpointRow {
+  commit: string
+  /** The prompt it was kept before, or why it was kept. */
+  label: string
+  created_at: string
+}
+export interface WorkspaceRestore {
+  id: string
+  /** One of its checkpoints. */
+  commit: string
+}
 export interface FolderRef {
   /** A project folder; a relative one is the workspace's. */
   folder: string
@@ -2030,6 +2046,8 @@ export interface RpcMethods {
   'workbench.worktree': { params: WorktreeParams; result: FolderGit }
   /** Keep a workspace's work in a commit on its branch and remove its folder. */
   'workspace.archive': { params: WorkspaceRef; result: WorkspaceRow }
+  /** A workspace's checkpoints, its folder as it was before each prompt, the newest first. */
+  'workspace.checkpoints': { params: WorkspaceRef; result: CheckpointList }
   /** Make a workspace of a folder's project: a worktree in the home on a branch of its own, the listed files copied; its setup script runs after, told by workspaces.changed. */
   'workspace.create': { params: WorkspaceCreate; result: WorkspaceRow }
   /** Delete a workspace, its folder and its branch; one with work not delivered only with force. */
@@ -2040,6 +2058,8 @@ export interface RpcMethods {
   'workspace.list': { params: WorkspaceListParams; result: WorkspaceList }
   /** How a folder's project prepares a new workspace. */
   'workspace.project': { params: FolderRef; result: ProjectRow }
+  /** Put a workspace's files back as they were at one of its checkpoints, what they are now kept first as another; refused while a session works in it. */
+  'workspace.restore': { params: WorkspaceRestore; result: WorkspaceRow }
   /** Set how a folder's project prepares a new workspace: its setup script and ports. */
   'workspace.set_project': { params: ProjectSettings; result: ProjectRow }
   /** Bring an archived workspace's folder back, its work as it was. */
@@ -2176,11 +2196,13 @@ export const RPC_METHODS = [
   'workbench.use_account',
   'workbench.worktree',
   'workspace.archive',
+  'workspace.checkpoints',
   'workspace.create',
   'workspace.delete',
   'workspace.diff',
   'workspace.list',
   'workspace.project',
+  'workspace.restore',
   'workspace.set_project',
   'workspace.unarchive'
 ] as const satisfies readonly RpcMethod[]
