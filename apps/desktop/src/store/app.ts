@@ -2091,7 +2091,7 @@ export class HomeSession {
     this.market({ error: null, reading: true })
 
     try {
-      const list = await this.client.call('marketplace.list', { refresh })
+      const list = await this.client.call('marketplace.list', { query: this.$market.get().query, refresh })
       this.market({ list, page: withRow(this.$market.get().page, list), reading: false })
     } catch (error) {
       this.market({ error: error instanceof Error ? error.message : String(error), reading: false })
@@ -3430,8 +3430,18 @@ export function setMarketKind(kind: MarketKind): void {
   current().market({ kind })
 }
 
+/** How long the search waits for the typing to stop before the outside catalogs are asked. */
+const MARKET_SEARCH_PAUSE_MS = 400
+let searching: ReturnType<typeof setTimeout> | undefined
+
+/** Search: the marketplace's own items at once, the outside catalogs (step 24) once typing stops. */
 export function setMarketQuery(query: string): void {
-  current().market({ query })
+  const session = current()
+  session.market({ query })
+  clearTimeout(searching)
+  searching = setTimeout(() => {
+    void session.refreshMarketplace()
+  }, MARKET_SEARCH_PAUSE_MS)
 }
 
 export function openMarketItem(name: string): void {

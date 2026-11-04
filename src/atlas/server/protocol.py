@@ -862,6 +862,7 @@ type MarketplaceKind = Literal["skill", "mcp", "plugin", "executor"]
 #: `installed` for a skill or an MCP server in the home; `off` and `on` for a plugin or an
 #: executor; `retired` for an item the marketplace pulled after it was installed, now stopped.
 type MarketplaceState = Literal["available", "installed", "off", "on", "retired"]
+type MarketplaceSource = Literal["atlas", "mcp-registry", "claude-plugins", "skills.sh"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -889,6 +890,13 @@ class MarketplaceRow:
     source_url: str
     #: What keeps it from installing or running, or why it was retired.
     problem: str | None
+    #: Where it comes from (step 24): `atlas`, the marketplace's own repository, or an outside
+    #: catalog read directly, `mcp-registry`, `claude-plugins` or `skills.sh`.
+    source: MarketplaceSource = "atlas"
+    #: When its source last published it, `YYYY-MM-DD`; empty when the source does not say.
+    updated: str = ""
+    #: The installs its source counts; `null` when it counts none.
+    installs: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -900,12 +908,17 @@ class MarketplaceList:
     read_at: str | None
     #: Why it could not be read now: the last read stands in, or nothing does.
     problem: str | None
+    #: The outside catalogs that could not be read for this list, a line each (step 24).
+    source_problems: list[str] = field(default_factory=lambda: list[str]())
 
 
 @dataclass(frozen=True, slots=True)
 class MarketplaceListParams:
     #: Read the marketplace again now, not only once the last read is an hour old.
     refresh: bool = False
+    #: What the user searches for: the outside catalogs are searched for it (step 24); empty,
+    #: they list what they list first.
+    query: str = ""
 
 
 @dataclass(frozen=True, slots=True)

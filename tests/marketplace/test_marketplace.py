@@ -698,6 +698,7 @@ def test_the_terminal_lists_shows_installs_updates_and_removes(
         "ATLAS_MARKETPLACE_REPOSITORY": MARKETPLACE,
         "ATLAS_MARKETPLACE_ARCHIVE_URL": github.archive_url,
         "ATLAS_MARKETPLACE_RAW_URL": github.raw_url,
+        "ATLAS_MARKETPLACE_OUTSIDE": "false",
     }
     assert main(["marketplace", "list", "--kind", "skill"], dict(environ)) == 0
     said = capsys.readouterr().out

@@ -43,6 +43,7 @@ from atlas.marketplace.model import (
     Kind,
     Retired,
     Secret,
+    Source,
     Tier,
     parse_item,
     parse_meta,
@@ -111,6 +112,13 @@ class Record:
     needed_by: tuple[str, ...] = ()
     #: Why it was retired, once it was.
     retired: str = ""
+    #: Where it came from (step 24), and the name it took in the home when not its own.
+    source: Source = Source.ATLAS
+    target: str = ""
+
+    @property
+    def home_name(self) -> str:
+        return self.target or self.name
 
 
 class MarketplaceStore:
@@ -221,6 +229,7 @@ class MarketplaceStore:
                     fields["kind"] = Kind(fields["kind"])
                     fields["tier"] = Tier(fields.get("tier", Tier.COMMUNITY))
                     fields["needed_by"] = tuple(fields.get("needed_by", ()))
+                    fields["source"] = Source(fields.get("source", Source.ATLAS))
                     records[name] = Record(**fields)
                 except (KeyError, TypeError, ValueError):
                     _logger.warning("An entry of %s is damaged: %s", INSTALLED_FILE, name)
@@ -356,4 +365,5 @@ def _item(entry: Mapping[str, Any]) -> Item:
     fields["tier"] = Tier(fields["tier"])
     fields["screenshots"] = tuple(fields.get("screenshots", ()))
     fields["secrets"] = tuple(Secret(**secret) for secret in fields.get("secrets", ()))
+    fields["source"] = Source(fields.get("source", Source.ATLAS))
     return Item(**fields)

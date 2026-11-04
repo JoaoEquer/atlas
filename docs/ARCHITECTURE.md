@@ -3060,6 +3060,30 @@ people made for Atlas, a tab per kind, the Atlas team's items marked, a page per
   file against real servers, the server's methods with two clients, the app's screens, and end to
   end in the real app, as far as the model receiving the marketplace's skill and a plugin's. The
   end-to-end MCP item asks for two secrets and gets one, so `npx` never fetches a package there.
+- **The outside sources** (step 24, decided by the user on 03/11/2026, `atlas.marketplace.sources`):
+  one public catalog per kind, read directly by Atlas, with no review and no copy, listed after
+  the marketplace's own, each on a shelf of its own. An outside item is named
+  `<source>:<its id>`, which no item of the repository can be (its names have no colon), and takes a
+  short name in the home; what was installed records its source and that name. Atlas's own
+  repository keeps what is Atlas's (the executors, the voice, Telegram, gh and gws), and its
+  `removed.yaml` retires an outside item by that name, so the retired list holds for them too.
+  - **The MCP Registry** (`registry.modelcontextprotocol.io`, `[marketplace] registry_url`), made
+    to be read by other catalogs: with no search, the servers updated in the last 30 days; with
+    one, what the registry finds for it (`search`), 100 at most. A server becomes the `mcp.json`
+    entry an item would be and passes the same rules (`server_problems`): a remote `https` address,
+    preferred since nothing runs on the computer, or an npm or PyPI package at its exact version.
+    One that fails them, a Docker image by a tag say, is listed with why and does not install. What
+    it asks for (an environment variable, a header, a part of its address) becomes a `${NAME}` the
+    vault fills, so its page asks for it; a remote one that signs in with OAuth gets Sign in. The
+    registry counts no installs: the vendor's own (a name verified by a domain, `com.stripe/mcp`)
+    come first, then the newest. The short name is the server's own (`notes-mcp`), or its
+    namespace's when that says nothing (`com.stripe/mcp`: `stripe`); one the home's `mcp.json`
+    has already refuses it, as for the marketplace's own. Installing reads its entry again from
+    the registry, so what installs is its latest version, and works while Atlas's own repository
+    cannot be read.
+  - **The search** goes to the server once the typing stops (`marketplace.list`'s `query`); a
+    source that cannot be read is said beside the list (`source_problems`), and the marketplace's
+    own items are still listed. `[marketplace] outside = false` turns the outside sources off.
 
 ### Voice — decided 2026-10-24
 

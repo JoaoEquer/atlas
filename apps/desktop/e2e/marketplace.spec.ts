@@ -63,7 +63,8 @@ class FakeGitHub {
       '[marketplace]',
       `repository = ${JSON.stringify(repository)}`,
       `archive_url = ${JSON.stringify(`${this.url}/archive/{repo}/{ref}`)}`,
-      `raw_url = ${JSON.stringify(`${this.url}/raw/{repo}/{ref}/{path}`)}`
+      `raw_url = ${JSON.stringify(`${this.url}/raw/{repo}/{ref}/{path}`)}`,
+      `registry_url = ${JSON.stringify(`${this.url}/registry/v0/servers`)}`
     ].join('\n')
   }
 

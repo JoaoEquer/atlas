@@ -582,8 +582,9 @@ export const ptBR: Override<Messages> = {
     install: 'Instalar',
     installed: 'Instalado',
     installing: 'Instalando…',
+    installs: (count: number) => `${count.toLocaleString('pt-BR')} instalações`,
     intro:
-      'Skills, servidores MCP, plugins e executores feitos para o Atlas. Cada um foi revisado, e instala exatamente como foi revisado.',
+      'Skills, servidores MCP, plugins e executores para o Atlas: os da loja, cada um revisado e instalado exatamente como foi revisado, e depois o que os catálogos públicos listam, lido direto deles.',
     kinds: { executor: 'Executor', mcp: 'Servidor MCP', plugin: 'Plugin', skill: 'Skill' },
     license: (license: string) => `Licença ${license}`,
     localChanges: (name: string) =>
@@ -623,6 +624,11 @@ export const ptBR: Override<Messages> = {
     secrets: 'Segredos que ele lê',
     shipped: 'Vem com o Atlas',
     source: 'Código-fonte',
+    sources: {
+      'claude-plugins': 'Do diretório de plugins do Claude Code',
+      'mcp-registry': 'Do MCP Registry',
+      'skills.sh': 'Do skills.sh'
+    },
     stale: (problem: string, when: string) =>
       `Não deu para ler a loja agora (${problem}). Ela estava assim em ${when}.`,
     tabs: { executor: 'Executores', mcp: 'MCPs', plugin: 'Plugins', skill: 'Skills' },
@@ -633,6 +639,7 @@ export const ptBR: Override<Messages> = {
     unread: (problem: string) => `Não deu para ler a loja: ${problem}`,
     update: 'Atualizar',
     updateAnyway: 'Atualizar mesmo assim',
+    updated: (date: string) => `atualizado em ${date}`,
     updating: 'Atualizando…',
     version: (version: string) => `Versão ${version}`
   },

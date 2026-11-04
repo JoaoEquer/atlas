@@ -48,6 +48,7 @@ from atlas.marketplace.model import (
     Index,
     Item,
     Kind,
+    Source,
     State,
     Tier,
     compiled,
@@ -55,6 +56,7 @@ from atlas.marketplace.model import (
     parse_meta,
     parse_removed,
 )
+from atlas.marketplace.sources import Sources
 from atlas.marketplace.store import (
     MarketplaceStore,
     McpFile,
@@ -130,6 +132,11 @@ class Row:
     source_url: str = ""
     #: What keeps it from installing or running, or why it was retired.
     problem: str | None = None
+    #: Where it comes from (step 24), when its source last published it, and the installs its
+    #: source counts.
+    source: Source = Source.ATLAS
+    updated: str = ""
+    installs: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +148,8 @@ class Listing:
     read_at: datetime | None
     #: Why it could not be read now: the last read stands in, or nothing does.
     problem: str | None
+    #: The outside sources that could not be read for this listing, a line each (step 24).
+    source_problems: list[str] = field(default_factory=lambda: list[str]())
 
 
 type NeedKind = Literal["program", "server", "system"]
@@ -208,9 +217,12 @@ class Marketplace:
         clock: Callable[[], datetime] = utc_now,
         which: Callable[[str], str | None] = shutil.which,
         system: str = sys.platform,
+        sources: Sources | None = None,
     ) -> None:
-        """`stored` gives the vault's names, to say which secrets are there."""
+        """`stored` gives the vault's names, to say which secrets are there; `sources`, the
+        outside catalogs (step 24), none in a test of Atlas's own repository alone."""
         self.store = store
+        self.sources = sources
         self.plugins = plugins
         self.library = library
         self.mcp = McpFile(home.mcp_file)
@@ -240,7 +252,9 @@ class Marketplace:
         self.retire(index)
         return index, now, None
 
-    def listing(self, *, refresh: bool = False) -> Listing:
+    def listing(self, *, refresh: bool = False, query: str = "") -> Listing:
+        """What the marketplace lists, and with `query` what the outside sources find for it;
+        with none, what they list first (the registry's servers updated lately)."""
         index, read_at, problem = self.index(refresh=refresh)
         records = self.store.records()
         views = {view.name: view for view in self.plugins.all()}
@@ -258,6 +272,17 @@ class Marketplace:
                 continue
             listed.add(item.name)
             rows.append(self._row(item, record, views, servers))
+        outside: list[Row] = []
+        source_problems: list[str] = []
+        if self.sources is not None:
+            found = self.sources.search(query, self._clock())
+            source_problems = found.problems
+            for item in found.items:
+                retired = index.retired.get(item.name) if index is not None else None
+                if item.name in listed or (retired is not None and item.name not in records):
+                    continue
+                listed.add(item.name)
+                outside.append(self._row(item, records.get(item.name), views, servers))
         for record in records.values():
             if record.name not in listed and record.name not in shipped:
                 rows.append(self._unlisted(record, views, servers))
@@ -265,9 +290,11 @@ class Marketplace:
             key=lambda row: (row.kind.value, row.tier is not Tier.OFFICIAL, row.title.lower())
         )
         name, description = (index.name, index.description) if index is not None else ("", "")
-        return Listing(name, description, rows, read_at, problem)
+        return Listing(name, description, rows + outside, read_at, problem, source_problems)
 
     def row(self, name: str) -> Row:
+        if _outside(name):
+            return self._outside_row(name)
         found = next((row for row in self.listing().rows if row.name == name), None)
         if found is None:
             raise MarketplaceError(f"The marketplace has no item {name}.")
@@ -279,7 +306,7 @@ class Marketplace:
         if row.shipped:
             return self._shipped_page(row)
         index = self.index()[0]
-        item = index.items.get(name) if index is not None else None
+        item = self._item(index, name)
         if item is None:
             return Page(row, row.summary, "", "")
         pictures = self.store.settings.raw_url.format(
@@ -337,11 +364,13 @@ class Marketplace:
                 except PluginError as error:
                     raise MarketplaceError(str(error)) from error
                 return Done(self.row(name), [name])
-            index = self._current()
+            index = self._index_for(name)
             item = self._offered(index, name)
             record = self.store.records().get(name)
             if record is not None and not record.retired and self._present(record):
                 raise MarketplaceError(f"{name} is installed already; update it instead.")
+            if item.problem is not None:
+                raise MarketplaceError(f"{name} cannot install here: {item.problem}")
             changed = self._put(index, item, needed_by=None, replacing=False)
         return Done(self.row(name), changed)
 
@@ -354,8 +383,8 @@ class Marketplace:
                 raise MarketplaceError(f"{name} was not installed from the marketplace.")
             if record.retired:
                 raise MarketplaceError(f"{name} was retired: {record.retired}")
-            index = self._current()
-            item = index.items.get(name)
+            index = self._index_for(name)
+            item = self._item(index, name)
             if item is None:
                 raise MarketplaceError(f"The marketplace no longer lists {name}.")
             if item.revision == record.revision:
@@ -418,17 +447,43 @@ class Marketplace:
             raise MarketplaceError(f"The marketplace could not be read: {problem}")
         return index
 
-    def _offered(self, index: Index, name: str) -> Item:
-        item = index.items.get(name)
+    def _item(self, index: Index | None, name: str) -> Item | None:
+        """An item by name: of Atlas's own repository, or of an outside source read again now."""
+        if _outside(name):
+            return self.sources.item(name) if self.sources is not None else None
+        return index.items.get(name) if index is not None else None
+
+    def _outside_row(self, name: str) -> Row:
+        records = self.store.records()
+        views = {view.name: view for view in self.plugins.all()}
+        servers = self.mcp.servers()
+        try:
+            item = self._item(None, name)
+        except MarketplaceError:
+            item = None
+        if item is not None:
+            return self._row(item, records.get(name), views, servers)
+        record = records.get(name)
+        if record is None:
+            raise MarketplaceError(f"The marketplace has no item {name}.")
+        return self._unlisted(record, views, servers)
+
+    def _index_for(self, name: str) -> Index | None:
+        """The marketplace's index, which an outside item needs only for what was retired: it
+        installs while Atlas's own repository cannot be read."""
+        return self.index()[0] if _outside(name) else self._current()
+
+    def _offered(self, index: Index | None, name: str) -> Item:
+        item = self._item(index, name)
         if item is None:
             raise MarketplaceError(f"The marketplace has no item {name}.")
-        retired = index.retired_for(item)
+        retired = index.retired_for(item) if index is not None else None
         if retired is not None:
             raise MarketplaceError(f"{name} was retired from the marketplace: {retired.reason}")
         return item
 
     def _put(
-        self, index: Index, item: Item, *, needed_by: str | None, replacing: bool
+        self, index: Index | None, item: Item, *, needed_by: str | None, replacing: bool
     ) -> list[str]:
         if item.kind is Kind.MCP:
             return self._put_server(item, needed_by=needed_by, replacing=replacing)
@@ -436,7 +491,7 @@ class Marketplace:
             return self._put_skill(index, item, replacing=replacing)
         return self._put_plugin(item, replacing=replacing)
 
-    def _put_skill(self, index: Index, item: Item, *, replacing: bool) -> list[str]:
+    def _put_skill(self, index: Index | None, item: Item, *, replacing: bool) -> list[str]:
         with self.store.archive(item.repo, item.sha) as root:
             folder = subfolder(root, item.path)
             needs = read_skill(folder, item.name).needs
@@ -452,7 +507,7 @@ class Marketplace:
         for server in needs.servers:
             if server in servers:
                 continue
-            dependency = index.items.get(server)
+            dependency = index.items.get(server) if index is not None else None
             if dependency is None or dependency.kind is not Kind.MCP:
                 raise MarketplaceError(
                     f"{item.name} needs the MCP server {server}, which the marketplace does not "
@@ -479,9 +534,9 @@ class Marketplace:
     def _put_server(self, item: Item, *, needed_by: str | None, replacing: bool) -> list[str]:
         servers = self.mcp.servers()
         record = self.store.records().get(item.name)
-        if item.name in servers and not replacing and record is None:
-            raise MarketplaceError(f"Your mcp.json has a server named {item.name} already.")
-        self.mcp.put(item.name, item.server)
+        if item.home_name in servers and not replacing and record is None:
+            raise MarketplaceError(f"Your mcp.json has a server named {item.home_name} already.")
+        self.mcp.put(item.home_name, item.server)
         needing: set[str] = set(record.needed_by) if record is not None else set()
         if needed_by:
             needing.add(needed_by)
@@ -527,6 +582,8 @@ class Marketplace:
                 tier=item.tier,
                 repo=item.repo,
                 needed_by=needed_by,
+                source=item.source,
+                target=item.target,
             )
         )
 
@@ -549,7 +606,7 @@ class Marketplace:
                 except SkillChangeError as error:
                     raise MarketplaceError(str(error)) from error
         elif record.kind is Kind.MCP:
-            self.mcp.drop(record.name)
+            self.mcp.drop(record.home_name)
         elif (self.plugins.folder / record.name).is_dir():
             try:
                 remove_plugin(self.plugins, record.name)
@@ -560,14 +617,14 @@ class Marketplace:
         if record.kind is Kind.SKILL:
             return (self.library.folder / record.name).is_dir()
         if record.kind is Kind.MCP:
-            return record.name in self.mcp.servers()
+            return record.home_name in self.mcp.servers()
         return (self.plugins.folder / record.name).is_dir()
 
     def _changed_here(self, record: Record) -> bool:
         if record.kind is Kind.SKILL:
             return files_digest(skill_files(self.library.folder / record.name)) != record.digest
         if record.kind is Kind.MCP:
-            entry = self.mcp.servers().get(record.name)
+            entry = self.mcp.servers().get(record.home_name)
             return entry is not None and entry_digest(entry) != record.digest
         return False
 
@@ -585,7 +642,7 @@ class Marketplace:
     ) -> Row:
         state, problem = self._state(item.name, item.kind, record, views, servers)
         if state is State.AVAILABLE and problem is None:
-            problem = self._taken(item, views, servers)
+            problem = self._taken(item, views, servers) or item.problem
         if state in (State.INSTALLED, State.ON) and item.kind is Kind.MCP:
             missing = [s.name for s in item.secrets if s.name not in set(self._stored())]
             if missing:
@@ -606,6 +663,9 @@ class Marketplace:
             image=item.image,
             source_url=item.source_url,
             problem=problem,
+            source=item.source,
+            updated=item.updated,
+            installs=item.installs,
         )
 
     def _unlisted(
@@ -623,7 +683,12 @@ class Marketplace:
             version="",
             state=state,
             problem=problem
-            or (None if state is State.AVAILABLE else "The marketplace no longer lists it."),
+            or (
+                None
+                if state is State.AVAILABLE or record.source is not Source.ATLAS
+                else "The marketplace no longer lists it."
+            ),
+            source=record.source,
         )
 
     def _state(
@@ -650,8 +715,8 @@ class Marketplace:
     ) -> str | None:
         if item.kind is Kind.SKILL and (self.library.folder / item.name).exists():
             return f"You have a skill named {item.name} already."
-        if item.kind is Kind.MCP and item.name in servers:
-            return f"Your mcp.json has a server named {item.name} already."
+        if item.kind is Kind.MCP and item.home_name in servers:
+            return f"Your mcp.json has a server named {item.home_name} already."
         if item.kind.has_code and item.kind is not Kind.SKILL and item.name in views:
             return f"You have a plugin named {item.name} already."
         return None
@@ -738,6 +803,11 @@ class Marketplace:
             met = self.system in needs.systems
             found.append(Need("system", ", ".join(needs.systems), "met" if met else "missing"))
         return found
+
+
+def _outside(name: str) -> bool:
+    """Whether a name is an outside source's item, `<source>:<its id>`."""
+    return ":" in name
 
 
 def read_skill(folder: Path, name: str) -> Skill:

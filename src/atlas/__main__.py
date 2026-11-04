@@ -125,7 +125,10 @@ from atlas.marketplace import (
     MarketplaceError,
     MarketplaceStore,
     Row,
+    Source,
     State,
+    fetch,
+    outside_sources,
     shipped_names,
 )
 from atlas.marketplace import check as check_marketplace
@@ -589,6 +592,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     market_list.add_argument("--kind", choices=[kind.value for kind in Kind])
     market_list.add_argument("--refresh", action="store_true", help="Read the marketplace now.")
+    market_list.add_argument(
+        "--search",
+        metavar="TEXT",
+        default="",
+        help="Search the outside catalogs (the MCP Registry) for TEXT too.",
+    )
     market_show = market_actions.add_parser(
         "show", help="An item's page: its README, and what it needs here."
     )
@@ -1905,11 +1914,14 @@ def _marketplace(args: argparse.Namespace, home: Home, settings: Settings, vault
         Plugins(home, database, vault),
         SkillLibrary(home.skills_folder, SkillUsage(database)),
         stored=vault.names,
+        sources=outside_sources(settings.marketplace, fetch),
     )
     if action == "list":
-        listing = market.listing(refresh=args.refresh)
+        listing = market.listing(refresh=args.refresh, query=args.search)
         if listing.problem:
             sys.stdout.write(f"The marketplace could not be read now: {listing.problem}\n")
+        for problem in listing.source_problems:
+            sys.stdout.write(f"{problem}\n")
         for kind in Kind:
             if args.kind and kind.value != args.kind:
                 continue
@@ -1963,6 +1975,8 @@ def _market_line(row: Row) -> str:
         marks.append("official")
     if row.update:
         marks.append("update")
+    if row.source is not Source.ATLAS:
+        marks.append(f"from {row.source.value}")
     version = f" {row.version}" if row.version else ""
     line = f"  {row.name}{version}  {row.title} by {row.author}  ({', '.join(marks)})\n"
     if row.summary:

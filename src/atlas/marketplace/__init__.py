@@ -9,6 +9,7 @@ from atlas.marketplace.model import (
     Kind,
     Retired,
     Secret,
+    Source,
     State,
     Tier,
     parse_item,
@@ -26,7 +27,8 @@ from atlas.marketplace.service import (
     check,
     shipped_names,
 )
-from atlas.marketplace.store import MarketplaceStore, McpFile, Record, read_index
+from atlas.marketplace.sources import Sources, outside_sources
+from atlas.marketplace.store import MarketplaceStore, McpFile, Record, fetch, read_index
 
 __all__ = [
     "FORMAT",
@@ -46,9 +48,13 @@ __all__ = [
     "Row",
     "Secret",
     "SecretState",
+    "Source",
+    "Sources",
     "State",
     "Tier",
     "check",
+    "fetch",
+    "outside_sources",
     "parse_item",
     "parse_meta",
     "parse_removed",

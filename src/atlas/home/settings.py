@@ -43,6 +43,7 @@ from atlas.home.model import (
     LOG_LEVELS,
     MARKETPLACE_REPOSITORY,
     RAW_URL,
+    REGISTRY_URL,
     TRANSCRIPTIONS,
     BrowserSettings,
     Home,
@@ -159,6 +160,8 @@ def _settings(home: Path, source: "_Source") -> LoadedSettings:
             branch=source.text("marketplace", "branch", "main"),
             archive_url=source.text("marketplace", "archive_url", ARCHIVE_URL),
             raw_url=source.text("marketplace", "raw_url", RAW_URL),
+            outside=source.boolean("marketplace", "outside", default=True),
+            registry_url=source.text("marketplace", "registry_url", REGISTRY_URL),
         ),
         voice=VoiceSettings(
             transcription=source.one_of(

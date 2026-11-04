@@ -729,13 +729,14 @@ The marketplace: skills, MCP servers, plugins and executors made for Atlas, each
 What the marketplace offers, what Atlas ships, and what came from it.
 
 ```
-atlas marketplace list [--kind KIND] [--refresh]
+atlas marketplace list [--kind KIND] [--refresh] [--search TEXT]
 ```
 
 | Argument | What it does |
 |---|---|
 | `--kind KIND` |  |
 | `--refresh` | Read the marketplace now. |
+| `--search TEXT` | Search the outside catalogs (the MCP Registry) for TEXT too. |
 
 ### `atlas marketplace show`
 

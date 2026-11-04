@@ -89,6 +89,16 @@ class Tier(StrEnum):
     COMMUNITY = "community"
 
 
+class Source(StrEnum):
+    """Where an item comes from (step 24): Atlas's own repository, or a public catalog Atlas reads
+    directly, with no review and no copy."""
+
+    ATLAS = "atlas"
+    MCP_REGISTRY = "mcp-registry"
+    CLAUDE_PLUGINS = "claude-plugins"
+    SKILLS_SH = "skills.sh"
+
+
 class State(StrEnum):
     """Where an item stands in this home."""
 
@@ -134,6 +144,23 @@ class Item:
     #: An MCP server's `mcp.json` entry.
     server: Mapping[str, Any] = field(default_factory=dict[str, Any])
     secrets: tuple[Secret, ...] = ()
+    #: Where it comes from (step 24); an outside item's name is `<source>:<its id>`.
+    source: Source = Source.ATLAS
+    #: The name it takes in the home, when not its own (an outside item's short name).
+    target: str = ""
+    #: When its source last published it, `YYYY-MM-DD`; empty when the source does not say.
+    updated: str = ""
+    #: The source counts its installs (skills.sh); `None` when it does not.
+    installs: int | None = None
+    #: An MCP Registry server whose name a domain verifies: the vendor's own.
+    vendor: bool = False
+    #: Why its source's entry cannot install here, said on its card.
+    problem: str | None = None
+
+    @property
+    def home_name(self) -> str:
+        """The name it takes in the home: a skill's folder, a server's `mcp.json` entry."""
+        return self.target or self.name
 
     @property
     def source_url(self) -> str:

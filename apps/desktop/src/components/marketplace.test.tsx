@@ -12,17 +12,20 @@ function row(name: string, change: Partial<MarketplaceRow> = {}): MarketplaceRow
   return {
     author: 'someone',
     image: '',
+    installs: null,
     kind: 'skill',
     license: 'MIT',
     name,
     problem: null,
     shipped: false,
+    source: 'atlas',
     source_url: `https://github.com/someone/tools/tree/abc/${name}`,
     state: 'available',
     summary: `The ${name} item.`,
     tier: 'community',
     title: name.toUpperCase(),
     update: false,
+    updated: '',
     version: '1.0.0',
     ...change
   }
@@ -102,6 +105,7 @@ const listing = (items: MarketplaceRow[], change: Partial<MarketplaceList> = {})
   name: 'Test',
   problem: null,
   read_at: '2026-10-25T12:00:00Z',
+  source_problems: [],
   ...change
 })
 
@@ -118,7 +122,7 @@ describe('the marketplace lists each kind in its tab, the Atlas team first', () 
     ]
     const calls = await open(method => (method === 'marketplace.list' ? listing(items) : {}))
 
-    expect(calls[0]).toEqual(['marketplace.list', { refresh: false }])
+    expect(calls[0]).toEqual(['marketplace.list', { query: '', refresh: false }])
     expect(cards()).toEqual(['telegram', 'video'])
     expect(screen.getByTestId('marketplace-tab-skill').textContent).toContain('2')
     fireEvent.click(screen.getByTestId('marketplace-tab-skill'))
@@ -132,6 +136,37 @@ describe('the marketplace lists each kind in its tab, the Atlas team first', () 
     await open(() => listing([row('pdf')], { problem: 'GitHub answered HTTP 503.' }))
 
     expect(screen.getByTestId('marketplace-notice').textContent).toContain('GitHub answered HTTP 503.')
+  })
+})
+
+describe('the outside catalogs (step 24) follow, each on its shelf, searched by the server', () => {
+  it('shows what the registry found, newest data on the card, and asks again once typing stops', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const registry = row('mcp-registry:com.example/mcp', {
+      author: 'example.com',
+      kind: 'mcp',
+      source: 'mcp-registry',
+      title: 'Example',
+      updated: '2026-11-01'
+    })
+    const calls = await open((_, params) =>
+      listing(params.query === 'none' ? [row('docs', { kind: 'mcp' })] : [row('docs', { kind: 'mcp' }), registry], {
+        source_problems: params.query === 'none' ? ['The MCP Registry could not be read: down'] : []
+      })
+    )
+    fireEvent.click(screen.getByTestId('marketplace-tab-mcp'))
+
+    expect(cards()).toEqual(['docs', 'mcp-registry:com.example/mcp'])
+    expect(screen.getByText('From the MCP Registry')).toBeTruthy()
+    const metas = screen.getAllByTestId('marketplace-card-meta').map(meta => meta.textContent)
+    expect(metas[1]).toBe('1.0.0 · updated 2026-11-01')
+    fireEvent.change(screen.getByTestId('marketplace-search'), { target: { value: 'none' } })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    expect(calls.at(-1)).toEqual(['marketplace.list', { query: 'none', refresh: false }])
+    expect(screen.getByTestId('marketplace-notice').textContent).toContain('The MCP Registry could not be read')
+    vi.useRealTimers()
   })
 })
 

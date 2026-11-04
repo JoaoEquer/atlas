@@ -509,6 +509,8 @@ class VoiceSettings:
 MARKETPLACE_REPOSITORY = "marqueskaio/atlas-marketplace"
 ARCHIVE_URL = "https://codeload.github.com/{repo}/tar.gz/{ref}"
 RAW_URL = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
+#: The official MCP Registry's list of servers (step 24), one of the marketplace's outside sources.
+REGISTRY_URL = "https://registry.modelcontextprotocol.io/v0/servers"
 
 
 @dataclass(frozen=True, slots=True)
@@ -522,6 +524,10 @@ class MarketplaceSettings:
     archive_url: str = ARCHIVE_URL
     #: Where one file of a repository is read, with `{repo}`, `{ref}` and `{path}`.
     raw_url: str = RAW_URL
+    #: List what the outside catalogs offer beside the marketplace (step 24): the MCP Registry.
+    outside: bool = True
+    #: Where the MCP Registry's list of servers is read.
+    registry_url: str = REGISTRY_URL
 
 
 @dataclass(frozen=True, slots=True)

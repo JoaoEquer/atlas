@@ -597,8 +597,9 @@ export const en = {
     install: 'Install',
     installed: 'Installed',
     installing: 'Installing…',
+    installs: (count: number) => `${count.toLocaleString('en')} installs`,
     intro:
-      'Skills, MCP servers, plugins and executors made for Atlas. Each was reviewed, and installs exactly as it was reviewed.',
+      "Skills, MCP servers, plugins and executors for Atlas: the marketplace's own, each reviewed and installed exactly as reviewed, then what the public catalogs list, read straight from them.",
     kinds: { executor: 'Executor', mcp: 'MCP server', plugin: 'Plugin', skill: 'Skill' },
     license: (license: string) => `License ${license}`,
     localChanges: (name: string) =>
@@ -637,6 +638,11 @@ export const en = {
     secrets: 'Secrets it reads',
     shipped: 'Comes with Atlas',
     source: 'Source code',
+    sources: {
+      'claude-plugins': "From Claude Code's plugin directory",
+      'mcp-registry': 'From the MCP Registry',
+      'skills.sh': 'From skills.sh'
+    },
     stale: (problem: string, when: string) =>
       `The marketplace could not be read now (${problem}). This is how it was on ${when}.`,
     tabs: { executor: 'Executors', mcp: 'MCPs', plugin: 'Plugins', skill: 'Skills' },
@@ -647,6 +653,7 @@ export const en = {
     unread: (problem: string) => `The marketplace could not be read: ${problem}`,
     update: 'Update',
     updateAnyway: 'Update anyway',
+    updated: (date: string) => `updated ${date}`,
     updating: 'Updating…',
     version: (version: string) => `Version ${version}`
   },

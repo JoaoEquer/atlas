@@ -48,6 +48,25 @@ From a terminal, `atlas marketplace list`, `show NAME` and `install NAME` do the
 
 When GitHub cannot be reached, the marketplace shows the last list it read, and says so.
 
+## The public catalogs
+
+After the marketplace's own items, each tab lists what a public catalog offers, read straight from
+it: nothing there was reviewed for Atlas, and each card says where it comes from.
+
+- **MCP servers, from the MCP Registry**, the official catalog of MCP servers. With no search, it
+  lists the servers updated in the last month: the ones the vendor itself published first (a name
+  verified by the vendor's domain, such as `com.stripe/mcp`), then the newest. Type in the search to
+  ask the registry for more.
+- Atlas runs a server from the registry only as it runs the marketplace's own: at an address over
+  `https`, or a package at one exact version. One it cannot run that way says why, and does not
+  install.
+- What a server asks for (a token, a key) is a secret: its page asks for it, and your vault keeps
+  it. A server that signs you in with your account shows **Sign in** once installed.
+- It takes a short name in your `mcp.json` (`stripe`, `notes-mcp`); when you have a server by that
+  name already, it does not install.
+
+`[marketplace] outside = false` in your `config.toml` lists only the marketplace's own items.
+
 ## Updates and removal
 
 **Update** takes the newly reviewed version. When you changed the item since it came (or the
@@ -78,7 +97,7 @@ you. [Writing a plugin](/docs/extending/plugins/) explains every part of one, an
 
 | Command | What it does |
 |---|---|
-| `atlas marketplace list` | The items, by kind |
+| `atlas marketplace list` | The items, by kind (`--search TEXT` asks the public catalogs too) |
 | `atlas marketplace show NAME` | One item's page |
 | `atlas marketplace install NAME` | Install it |
 | `atlas marketplace update NAME` | Take its newly reviewed version |

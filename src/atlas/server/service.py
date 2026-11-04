@@ -140,9 +140,10 @@ from atlas.jobs import (
     Scheduler,
 )
 from atlas.marketplace import Kind as MarketKind
-from atlas.marketplace import Marketplace, MarketplaceError, MarketplaceStore
+from atlas.marketplace import Marketplace, MarketplaceError, MarketplaceStore, outside_sources
 from atlas.marketplace import Page as MarketPage
 from atlas.marketplace import Row as MarketRow
+from atlas.marketplace import fetch as market_fetch
 from atlas.memory import FILES as MEMORY_FILES
 from atlas.memory import Action, OpenProposal, Operation, Target, apply, size
 from atlas.models import (
@@ -644,6 +645,7 @@ class Gateway:
             SkillLibrary(home.skills_folder, SkillUsage(Database(home.database_file))),
             stored=self._stored_names,
             clock=clock,
+            sources=outside_sources(settings.marketplace, market_fetch),
         )
         #: `mcp.json` as last seen (step 16s): read again once it changes, by the marketplace or
         #: by hand.
@@ -2554,13 +2556,16 @@ class Gateway:
     async def _marketplace_list(
         self, connection: Connection, params: MarketplaceListParams
     ) -> MarketplaceList:
-        listing = await self._market_call(self.marketplace.listing, refresh=params.refresh)
+        listing = await self._market_call(
+            self.marketplace.listing, refresh=params.refresh, query=params.query
+        )
         return MarketplaceList(
             name=listing.name,
             description=listing.description,
             items=[_market_row(row) for row in listing.rows],
             read_at=format_utc(listing.read_at) if listing.read_at is not None else None,
             problem=listing.problem,
+            source_problems=listing.source_problems,
         )
 
     async def _marketplace_page(
@@ -3965,6 +3970,9 @@ def _market_row(row: MarketRow) -> MarketplaceRow:
         image=row.image,
         source_url=row.source_url,
         problem=row.problem,
+        source=row.source.value,
+        updated=row.updated,
+        installs=row.installs,
     )
 
 

@@ -741,6 +741,8 @@ export interface PluginCallResult {
 export interface MarketplaceListParams {
   /** Read the marketplace again now, not only once the last read is an hour old. */
   refresh?: boolean
+  /** What the user searches for: the outside catalogs are searched for it (step 24); empty, they list what they list first. */
+  query?: string
 }
 export interface MarketplaceList {
   name: string
@@ -750,6 +752,8 @@ export interface MarketplaceList {
   read_at: string | null
   /** Why it could not be read now: the last read stands in, or nothing does. */
   problem: string | null
+  /** The outside catalogs that could not be read for this list, a line each (step 24). */
+  source_problems: string[]
 }
 /** An item as the marketplace's screen lists it (step 16s). */
 export interface MarketplaceRow {
@@ -774,6 +778,12 @@ export interface MarketplaceRow {
   source_url: string
   /** What keeps it from installing or running, or why it was retired. */
   problem: string | null
+  /** Where it comes from (step 24): `atlas`, the marketplace's own repository, or an outside catalog read directly, `mcp-registry`, `claude-plugins` or `skills.sh`. */
+  source: 'atlas' | 'mcp-registry' | 'claude-plugins' | 'skills.sh'
+  /** When its source last published it, `YYYY-MM-DD`; empty when the source does not say. */
+  updated: string
+  /** The installs its source counts; `null` when it counts none. */
+  installs: number | null
 }
 export interface MarketplaceRef {
   name: string
