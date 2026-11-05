@@ -6,7 +6,7 @@ never what the machine has (docs/ARCHITECTURE.md, The installer):
 - `scripts/install_pins.toml` is the record: each tool's version and the SHA-256 of its file for
   each target. What each file is called and where its programs sit inside it is here, in `TOOLS`.
 - `--refresh` reads the SHA-256s from where each project publishes them, after a version changes:
-  GitHub's release assets for uv, gh and Git for Windows, Node's `SHASUMS256.txt`. Nothing is
+  GitHub's release assets for uv and Git for Windows, Node's `SHASUMS256.txt`. Nothing is
   hashed from a download, so a refresh fixes what the project said, not what a network served.
 - With no option, the blocks between the BEGIN and END markers are written again;
   `tests/installation/test_install_pins.py` fails when a committed script differs from them.
@@ -92,24 +92,6 @@ def _node_programs(version: str, target: str) -> dict[str, str]:
     return {"node": f"{folder}/bin/node", "npm": f"{folder}/bin/npm", "npx": f"{folder}/bin/npx"}
 
 
-def _gh_file(version: str, target: str) -> str:
-    system, arch = target.split("-")
-    arch = {"x64": "amd64", "arm64": "arm64"}[arch]
-    if system == "win32":
-        return f"gh_{version}_windows_{arch}.zip"
-    if system == "darwin":
-        return f"gh_{version}_macOS_{arch}.zip"
-    return f"gh_{version}_linux_{arch}.tar.gz"
-
-
-def _gh_programs(version: str, target: str) -> dict[str, str]:
-    if target.startswith("win32"):
-        return {"gh": "bin/gh.exe"}
-    return {
-        "gh": f"{_gh_file(version, target).removesuffix('.zip').removesuffix('.tar.gz')}/bin/gh"
-    }
-
-
 def _git_file(version: str, target: str) -> str:
     # 2.55.0.5 is the fifth Windows build of Git 2.55.0, tagged v2.55.0.windows.5.
     arch = {"win32-x64": "64-bit", "win32-arm64": "arm64"}[target]
@@ -123,7 +105,7 @@ def _git_tag(version: str) -> str:
 
 def tools(versions: dict[str, str]) -> dict[str, Tool]:
     """Each tool's files and programs at the versions the record pins."""
-    uv, node, gh, git = versions["uv"], versions["node"], versions["gh"], versions["git"]
+    uv, node, git = versions["uv"], versions["node"], versions["git"]
     windows = tuple(t for t in TARGETS if t.startswith("win32"))
     return {
         "uv": Tool(
@@ -137,12 +119,6 @@ def tools(versions: dict[str, str]) -> dict[str, Tool]:
             {t: _node_file(node, t) for t in TARGETS},
             f"https://nodejs.org/dist/v{node}/{{file}}",
             {t: _node_programs(node, t) for t in TARGETS},
-        ),
-        "gh": Tool(
-            TARGETS,
-            {t: _gh_file(gh, t) for t in TARGETS},
-            f"https://github.com/cli/cli/releases/download/v{gh}/{{file}}",
-            {t: _gh_programs(gh, t) for t in TARGETS},
         ),
         "git": Tool(
             windows,

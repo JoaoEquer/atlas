@@ -25,16 +25,6 @@ sha256.linux-arm64 = "724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095ea
 sha256.darwin-x64 = "1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"
 sha256.darwin-arm64 = "bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057"
 
-[gh]
-# Released 15/09/2026; 2.102.0 was 13 days old when this was pinned.
-version = "2.101.0"
-sha256.win32-x64 = "bc6c814367b193cd8e713611d61e36013c0ef843b8f516458fe3eda039192794"
-sha256.win32-arm64 = "e6cbb2d4afdad3e70f3d38b8d1ebaa3a0870a897cfc0e4cf569826710b96b4fd"
-sha256.linux-x64 = "9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8"
-sha256.linux-arm64 = "b57e8063f18862647c9d22727c32e9da1b963f8bf9db648fe123a6975695640f"
-sha256.darwin-x64 = "a6fd66c88e2f07d6e4e058173db341d07dd74d58cf8f19ae668293d2bb614ca3"
-sha256.darwin-arm64 = "e4303e39d8f07141c4bad4b99b01079f05029c59b27076e8fbc825c985ecdd8b"
-
 [git]
 # Git for Windows' PortableGit, released 20/08/2026 (v2.55.0.windows.5); 2.56.0 was 8 days old.
 # Linux and macOS use the system's Git.

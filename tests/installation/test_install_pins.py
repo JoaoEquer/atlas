@@ -28,7 +28,7 @@ def test_every_tool_is_pinned_by_its_sha256_for_every_target_it_needs() -> None:
     pins = generator.read_pins(generator.PINS.read_text(encoding="utf-8"))
     found = {(pin.tool, pin.target) for pin in pins}
 
-    for tool in ("uv", "node", "gh"):
+    for tool in ("uv", "node"):
         assert {target for name, target in found if name == tool} == set(generator.TARGETS)
     # Git only on Windows: Linux and macOS use the system's.
     assert {target for name, target in found if name == "git"} == {"win32-x64", "win32-arm64"}

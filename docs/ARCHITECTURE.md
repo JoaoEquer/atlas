@@ -1871,8 +1871,8 @@ Setup, a file that runs it, is step 18b (The Setup, below); signing is 18c.
   user's private repositories. With no login saved, Git Credential Manager still opens its own
   sign-in window.
 - **No GitHub sign-in**: the repository is public, so the clone and every later `atlas update`
-  fetch with no login. The pinned `gh` is still installed, for the agent's `github` skill.
-  An installation made while the repository was private keeps `gh` as its checkout's credential
+  fetch with no login. The installer no longer brings `gh` (05/11/2026): the GitHub plugin
+  fetches it at Connect (SDK 31). An installation made while the repository was private keeps `gh` as its checkout's credential
   helper; for a public repository it answers nothing and changes nothing.
 - **The order**: refuse an occupied folder that is not a checkout, a file or a
   link, **before** anything is downloaded; the tools; the clone into a sibling staging
@@ -3846,9 +3846,10 @@ included). Decided with the user; how, our choice, marked:
   program (the sequence's review): the outward actions the gate asks about
   (`atlas.trust.outward`), their output marked as outside text, and their logins out of the
   backup. A home that had the skills gets both plugins installed and on by its first start, its
-  untouched copies archived and a changed one left as the user's. Our choice, marked: the
-  installer still brings `gh` until its next release, which needs the published installer
-  republished (the user's).
+  untouched copies archived and a changed one left as the user's. Since 05/11/2026 the
+  installer brings no `gh` (asked by the user: a program installed out of sight helps nobody who
+  never opened a terminal); the GitHub plugin fetches it at Connect. Its published copy changes when
+  the installer is republished (the user's).
 - **The marketplace lists them as official**, available until installed; installing one installs
   it off. Removing one takes its record away and leaves its data; the installation keeps its
   files.

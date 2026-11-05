@@ -5,7 +5,8 @@
 #
 # One line gives a machine the installation the user runs every day, its app built and opened. Run
 # again, it repairs and updates it. Its tools come pinned and checked by their SHA-256 (uv, Python
-# through uv, Node, gh); Git is the system's.
+# through uv, Node); Git is the system's. GitHub's gh is not among them: the GitHub plugin
+# fetches it when the user connects GitHub.
 #
 # The same steps as scripts/install.ps1. It runs on macOS's bash 3.2: no associative arrays, no ${x,,}.
 #
@@ -71,30 +72,6 @@ pin() {
             PIN_SHA256="bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057"
             PIN_ARCHIVE="tar.gz"
             PIN_PROGRAMS="node=node-v24.21.0-darwin-arm64/bin/node npm=node-v24.21.0-darwin-arm64/bin/npm npx=node-v24.21.0-darwin-arm64/bin/npx" ;;
-        gh/linux-x64)
-            PIN_VERSION="2.101.0"
-            PIN_URL="https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz"
-            PIN_SHA256="9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8"
-            PIN_ARCHIVE="tar.gz"
-            PIN_PROGRAMS="gh=gh_2.101.0_linux_amd64/bin/gh" ;;
-        gh/linux-arm64)
-            PIN_VERSION="2.101.0"
-            PIN_URL="https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_arm64.tar.gz"
-            PIN_SHA256="b57e8063f18862647c9d22727c32e9da1b963f8bf9db648fe123a6975695640f"
-            PIN_ARCHIVE="tar.gz"
-            PIN_PROGRAMS="gh=gh_2.101.0_linux_arm64/bin/gh" ;;
-        gh/darwin-x64)
-            PIN_VERSION="2.101.0"
-            PIN_URL="https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_macOS_amd64.zip"
-            PIN_SHA256="a6fd66c88e2f07d6e4e058173db341d07dd74d58cf8f19ae668293d2bb614ca3"
-            PIN_ARCHIVE="zip"
-            PIN_PROGRAMS="gh=gh_2.101.0_macOS_amd64/bin/gh" ;;
-        gh/darwin-arm64)
-            PIN_VERSION="2.101.0"
-            PIN_URL="https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_macOS_arm64.zip"
-            PIN_SHA256="e4303e39d8f07141c4bad4b99b01079f05029c59b27076e8fbc825c985ecdd8b"
-            PIN_ARCHIVE="zip"
-            PIN_PROGRAMS="gh=gh_2.101.0_macOS_arm64/bin/gh" ;;
         *) return 1 ;;
     esac
 }
@@ -478,8 +455,8 @@ install_atlas() {
     fi
 
     local uv tool
-    for tool in uv node gh; do install_tool "$tool"; done
-    write_toolchain uv node gh
+    for tool in uv node; do install_tool "$tool"; done
+    write_toolchain uv node
     uv="$(program_path uv uv)"
 
     sync_repository

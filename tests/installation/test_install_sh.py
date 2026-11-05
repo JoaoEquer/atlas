@@ -152,17 +152,17 @@ def test_the_toolchain_the_installer_writes_is_the_one_atlas_reads(tmp_path: Pat
     root = tmp_path / "install"
     done = run(
         f"ATLAS_INSTALL_DIR={_quoted(root)}; init_paths; TARGET=linux-x64\n"
-        "for tool in uv node gh; do pin $tool $TARGET\n"
+        "for tool in uv node; do pin $tool $TARGET\n"
         "  for pair in $PIN_PROGRAMS; do\n"
         '    f="$TOOLS/$tool-$PIN_VERSION-$TARGET/${pair#*=}"\n'
         '    mkdir -p "$(dirname "$f")"; : > "$f"; done; done\n'
-        "write_toolchain uv node gh"
+        "write_toolchain uv node"
     )
     assert done.returncode == 0, done.stderr
 
     toolchain = Toolchain.of(Checkout(root / "atlas"))
 
-    assert sorted(toolchain.programs) == ["gh", "node", "npm", "npx", "uv"]
+    assert sorted(toolchain.programs) == ["node", "npm", "npx", "uv"]
     assert toolchain.programs["uv"] == (
         root / "tools" / "uv-0.12.5-linux-x64" / "uv-x86_64-unknown-linux-gnu" / "uv"
     )
