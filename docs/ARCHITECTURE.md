@@ -350,7 +350,11 @@ Decided 2026-10-09, in step 5 (`atlas.tools`):
 - **A remote MCP server signs in with OAuth 2.1** (`atlas.mcp.oauth`), decided 2026-10-28, as
   the MCP authorization spec asks: the server's resource metadata (RFC 9728, from its 401's
   `WWW-Authenticate` or the well-known address), its authorization server's (RFC 8414), Atlas
-  registered as a public client for each sign-in (RFC 7591), the code grant with PKCE S256, a
+  named by its client metadata document where the authorization server takes one
+  (`client_id_metadata_document_supported`, step 24: `https://atlasv4.com/oauth/client.json`,
+  `site/public/oauth/client.json`, a public client coming back to a loopback address on any port,
+  the form the 2026 spec prefers) and elsewhere registered as a public client for each sign-in
+  (RFC 7591), the code grant with PKCE S256, a
   `state`, the `iss` when sent (RFC 9207) and `resource` (RFC 8707). The SDK has a client of its
   own, but it signs in from inside a request, where a connection has 30 seconds; the sign-in
   is the user's, at a page only a person may approve, so it is a command, `atlas mcp login
