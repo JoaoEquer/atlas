@@ -564,7 +564,11 @@ def test_a_directory_plugin_with_no_manifest_arrives_off_from_the_directory_s_co
     market = _market(home, vault, github)
     name = "claude-plugins:notes"
 
+    market.page(name)
     done = market.install(name)
+
+    heads = [asked for asked in github.asked if asked.endswith("/commits/HEAD")]
+    assert len(heads) == 1, "the directory's newest commit is read once within the hour"
 
     assert done.row.state is State.OFF
     assert (home.plugins_folder / "notes" / "skills" / "take-notes" / "SKILL.md").is_file()

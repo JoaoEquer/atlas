@@ -31,7 +31,7 @@ import logging
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote, urlencode
@@ -585,7 +585,9 @@ class Sources:
             listed = next((i for i in self._plugins_read(None) if i.name == name), None)
             if listed is None or listed.sha or listed.problem is not None:
                 return listed
-            return replace(listed, sha=self._head(listed.repo, None))
+            # Many plugins share a repository (the directory's own folders): its newest commit is
+            # read once an hour, within GitHub's 60 questions an hour to a computer not signed in.
+            return replace(listed, sha=self._head(listed.repo, datetime.now(UTC)))
         return None
 
     def _plugins_read(self, now: datetime | None) -> list[Item]:
