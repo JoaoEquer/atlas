@@ -95,6 +95,14 @@ An unknown key in `config.toml` stops Atlas with an error, so a typo never passe
 |---|---|---|---|---|
 | `url` | text | unset | `ATLAS_RELAY_URL` | The relay the home waits at, so the app reaches it from anywhere with no open port (step 20): a `wss://` address. Unset, none: the tailnet and SSH reach it. |
 
+## [backup]
+
+| Key | Value | Default | Variable | What it does |
+|---|---|---|---|---|
+| `folder` | path | unset | `ATLAS_BACKUP_FOLDER` | Where the server writes the home's backup on its own (step 20): a home in a machine that may be lost (a cloud computer, a VPS) keeps its last few there. Unset, none is written but by hand (`atlas backup`, the app). |
+| `every_hours` | whole number | `24` | `ATLAS_BACKUP_EVERY_HOURS` | Hours between two backups. |
+| `keep` | whole number | `3` | `ATLAS_BACKUP_KEEP` | The backups of this home kept in the folder, the newest; 0 keeps all. |
+
 ## [voice]
 
 | Key | Value | Default | Variable | What it does |

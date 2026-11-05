@@ -1,5 +1,6 @@
-"""Reaching a home through a relay (step 20): the tunnel's cipher, the connection code that carries
-it, and a real server reached from an app through a relay over real WebSockets, the relay never
+"""Reaching a home through a relay, and what the home says of itself to the host that sleeps it
+(step 20): the tunnel's cipher, the connection code that carries it, and a real server reached
+from an app through a relay over real WebSockets, the relay never
 reading what crosses it.
 
 The relay is tests/fake_relay.py, which does what Atlas Cloud's does; the server is a real one
@@ -7,13 +8,18 @@ The relay is tests/fake_relay.py, which does what Atlas Cloud's does; the server
 """
 
 import asyncio
+import dataclasses
 import json
+import os
 import secrets
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
+import httpx2
 import pytest
 
+from atlas.home import BackupSettings, format_utc
 from atlas.instances import (
     CodeError,
     ConnectionCode,
@@ -29,7 +35,7 @@ from atlas.instances import (
 from atlas.instances.tunnel import Tunnel, read_key
 from fake_model import FakeModelServer
 from fake_relay import FakeRelay
-from server_support import Serve
+from server_support import TOKEN, Serve
 
 # -- the tunnel ------------------------------------------------------------------------------------
 
@@ -147,3 +153,49 @@ def test_an_app_with_another_key_is_refused_and_learns_nothing(
 
     with pytest.raises(TunnelError, match="did not open"):
         asyncio.run(scenario())
+
+
+# -- the home's activity, for a host that sleeps it (step 20) --------------------------------------
+
+
+def test_the_home_says_whether_it_works_since_when_it_is_idle_and_when_to_wake_it(
+    serve: Serve, fake: FakeModelServer
+) -> None:
+    server = serve()
+    made = server.gateway.assistant.routines.create("news", "every day at 9am", prompt="News.")
+    url = f"http://127.0.0.1:{server.port}/activity"
+
+    refused = httpx2.get(url)
+    wrong = httpx2.get(url, headers={"Authorization": "Bearer nope"})
+    idle = httpx2.get(url, headers={"Authorization": f"Bearer {TOKEN}"}).json()
+    with server.client() as client:
+        connected = client.result("server.activity")
+
+    assert (refused.status_code, wrong.status_code) == (401, 401)
+    assert (idle["working"], idle["clients"]) == (False, 0)
+    assert idle["idle_since"] is not None
+    assert made.next_run_at is not None
+    assert idle["next_wake"] == format_utc(made.next_run_at)
+    assert (connected["clients"], connected["idle_since"]) == (1, None)
+    assert server.gateway.back_up_when_due() is None, "no backup folder set, no backup (step 20)"
+
+
+def test_the_home_backs_itself_up_when_due_into_the_folder_set(
+    serve: Serve, fake: FakeModelServer, tmp_path: Path
+) -> None:
+    """Step 20: a home on a machine that may be lost keeps its last backups on its own."""
+    folder = tmp_path / "backups"
+    old = folder / "atlas-backup-default-20260101T000000Z.zip"
+    folder.mkdir()
+    old.write_bytes(b"an old backup")
+    os.utime(old, (0, 0))
+    chosen = BackupSettings(folder=folder, every_hours=24, keep=1)
+    gateway = serve(adjust=lambda settings: dataclasses.replace(settings, backup=chosen)).gateway
+
+    written = gateway.back_up_when_due()
+    again = gateway.back_up_when_due()
+
+    assert written is not None
+    assert written.parent == folder
+    assert again is None, "the next is due in a day"
+    assert [found.name for found in folder.iterdir()] == [written.name], "only the newest kept"

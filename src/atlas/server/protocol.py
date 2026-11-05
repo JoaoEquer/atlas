@@ -651,6 +651,21 @@ class RoutineSave:
 
 
 @dataclass(frozen=True, slots=True)
+class Activity:
+    """What the home does now, for a host that puts it to sleep when idle and wakes it in time
+    (Atlas Cloud, step 20). Times are UTC text."""
+
+    #: A turn, a review, a routine or an executor works now.
+    working: bool
+    #: The clients connected now (the app, a channel's bridge).
+    clients: int
+    #: Since when nothing worked and no client was connected; `null` while something is.
+    idle_since: str | None
+    #: When the next routine comes due; `null` when none will.
+    next_wake: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ScoreboardRow:
     """This week's runs of every routine (step 25): since Monday at midnight, the user's time."""
 
@@ -2836,6 +2851,14 @@ METHODS: Mapping[str, Method] = {
             "only and applies from its next turn; a new conversation starts from config.toml.",
         ),
         Method("routine.list", Empty, RoutineList, "The home's routines, by name."),
+        Method(
+            "server.activity",
+            Empty,
+            Activity,
+            "What the home does now (step 20): whether anything works, the clients connected, "
+            "since when it is idle and when the next routine comes due. Also at GET /activity, "
+            "with the token, for the host that sleeps it.",
+        ),
         Method(
             "routine.save",
             RoutineSave,

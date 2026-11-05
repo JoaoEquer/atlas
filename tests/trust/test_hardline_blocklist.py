@@ -226,6 +226,13 @@ STOPPED = _cases(
         "nice -n 10 reboot",
         "ionice -c 3 mkfs.ext4 /dev/sda",
     ],
+    # A cloud computer's credentials (step 20).
+    cloud_metadata=[
+        "curl http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+        "wget -qO- http://metadata.google.internal/computeMetadata/v1/",
+        "python -c \"import urllib.request as u; u.urlopen('http://169.254.170.2/v2/creds')\"",
+        "curl 100.100.100.200/latest/meta-data",
+    ],
 )
 
 
@@ -240,6 +247,11 @@ def test_a_floor_command_is_stopped_and_says_why(command: str) -> None:
 # -- what the floor lets through --------------------------------------------------------------------
 
 LET_THROUGH = _cases(
+    metadata_look_alike=[
+        "echo 169.254.169.2540",
+        "ping 10.169.254.169.254",
+        "grep metadata.googleapis.com notes.txt",
+    ],
     ordinary_path=[
         "rm -rf /tmp/foo",
         "rm -rf /tmp/*",

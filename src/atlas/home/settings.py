@@ -48,6 +48,7 @@ from atlas.home.model import (
     REGISTRY_URL,
     SKILLS_URL,
     TRANSCRIPTIONS,
+    BackupSettings,
     BrowserSettings,
     Home,
     LogLevel,
@@ -160,6 +161,11 @@ def _settings(home: Path, source: "_Source") -> LoadedSettings:
         time=TimeSettings(zone=source.zone("time", "zone")),
         browser=BrowserSettings(chrome=source.text_list("browser", "chrome")),
         relay=RelaySettings(url=source.optional_text("relay", "url")),
+        backup=BackupSettings(
+            folder=source.path("backup", "folder"),
+            every_hours=source.integer("backup", "every_hours", 24, minimum=1, maximum=24 * 30),
+            keep=source.integer("backup", "keep", 3, minimum=0, maximum=1000),
+        ),
         marketplace=MarketplaceSettings(
             repository=source.text("marketplace", "repository", MARKETPLACE_REPOSITORY),
             branch=source.text("marketplace", "branch", "main"),

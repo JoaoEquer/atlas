@@ -1,6 +1,7 @@
 """The ASGI application and its routes: `/health`, and the clients' WebSocket at `/ws`."""
 
 import asyncio
+import hmac
 import logging
 from collections.abc import AsyncGenerator, Set
 from contextlib import asynccontextmanager, suppress
@@ -16,7 +17,7 @@ from atlas.home import DEFAULT_HOST
 from atlas.instances import RelayGoneError, RelayLink, RelayRoom, RelaySession
 from atlas.server.access import refusal
 from atlas.server.connection import PeerGoneError
-from atlas.server.protocol import PROTOCOL
+from atlas.server.protocol import PROTOCOL, dump
 from atlas.server.service import Gateway
 
 _logger = logging.getLogger("atlas.server")
@@ -147,5 +148,14 @@ def create_app(
                 await asyncio.gather(waiting, return_exceptions=True)
             await served.close()
 
+    async def activity(request: Request) -> JSONResponse:
+        """The home's activity (step 20), for the host that sleeps it: with the server token as a
+        bearer, since it says when the user works."""
+        given = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+        if not token or not hmac.compare_digest(given.encode(), token.encode()):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        return JSONResponse(dump(await served.activity()))
+
+    routes.append(Route("/activity", activity, methods=["GET"]))
     routes.append(WebSocketRoute("/ws", clients))
     return Starlette(routes=routes, lifespan=lifespan)

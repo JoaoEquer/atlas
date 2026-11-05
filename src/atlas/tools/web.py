@@ -32,6 +32,7 @@ from bs4 import BeautifulSoup
 from markdownify import markdownify
 
 from atlas.agent import SpillFolder, Tool
+from atlas.browser import METADATA_REFUSED, metadata_address, metadata_host
 from atlas.tools.documents import DocumentError, bytes_format, bytes_markdown
 from atlas.trust import untrusted
 
@@ -284,6 +285,11 @@ class WebFetch:
         if not isinstance(url, str) or urlsplit(url.strip()).scheme not in ("http", "https"):
             return "[Atlas: web_fetch reads http and https addresses only.]"
         url = url.strip()
+        # A cloud computer's credentials sit at its metadata address (step 20): never read there,
+        # by its name, its address, or a name that resolves to it.
+        host = (urlsplit(url).hostname or "").rstrip(".").lower()
+        if metadata_host(host) or any(metadata_address(a) for a in await _addresses(host)):
+            return f"[Atlas: {METADATA_REFUSED}.]"
         limit = _char_limit(arguments.get("char_limit"))
         cached = self._cache.get(url)
         if cached is not None and time.monotonic() - cached[0] < self._cache_seconds:
@@ -326,6 +332,15 @@ def _char_limit(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return PAGE_CHARS
     return max(MIN_PAGE_CHARS, min(MAX_PAGE_CHARS, int(value)))
+
+
+async def _addresses(host: str) -> list[str]:
+    """The addresses `host` resolves to; none when it does not resolve, which the fetch says."""
+    try:
+        found = await asyncio.get_running_loop().getaddrinfo(host, None)
+    except (OSError, UnicodeError):
+        return []
+    return [str(entry[4][0]) for entry in found]
 
 
 async def _fetch(url: str) -> str:

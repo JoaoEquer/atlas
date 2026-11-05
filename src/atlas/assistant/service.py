@@ -97,6 +97,7 @@ from atlas.assistant.model import (
     IDENTITY,
     ConversationRole,
     FileSent,
+    InstanceState,
     PreviewAsked,
     Reviewed,
     Sent,
@@ -1064,6 +1065,13 @@ class Assistant:
     def forget(self, conversation_id: str) -> None:
         """Let go of an open conversation that is done, such as a routine's run."""
         self._open.pop(conversation_id, None)
+
+    def working(self) -> bool:
+        """Whether anything works now (step 20): a turn or a review of an open conversation, or an
+        executor's instance on the workbench."""
+        if any(conversation.busy for conversation in self._open.values()):
+            return True
+        return any(run.state is not InstanceState.ENDED for run in self.workbench.runs())
 
     def running(self, conversation_id: str) -> bool:
         found = self._open.get(conversation_id)

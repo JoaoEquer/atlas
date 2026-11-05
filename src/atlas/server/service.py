@@ -93,6 +93,7 @@ from atlas.conversations import (
     StoredMessage,
 )
 from atlas.home import (
+    BACKUP_PREFIX,
     TRANSCRIPTIONS,
     Database,
     Home,
@@ -103,6 +104,7 @@ from atlas.home import (
     Settings,
     SettingsError,
     TrustSettings,
+    backup_name,
     check_backup,
     create_home,
     edit_settings,
@@ -113,6 +115,7 @@ from atlas.home import (
     home_root,
     import_backup,
     list_homes,
+    prune_backups,
     read_picture,
     suggest_home_name,
     utc_now,
@@ -199,6 +202,7 @@ from atlas.server.protocol import (
     AccountRow,
     AccountsChanged,
     AccountSwitchRow,
+    Activity,
     ApprovalParams,
     ApprovalResult,
     Archived,
@@ -594,6 +598,8 @@ class Gateway:
         self._plugin_watch: asyncio.Task[None] | None = None
         self._ask_seconds = ask_seconds
         self._connections: set[Connection] = set()
+        #: The last moment the home was seen working or with a client (step 20).
+        self._idle_since: datetime | None = None
         #: The MCP servers as the clients were last told, so `mcp.changed` says only a change.
         self._mcp_shown = McpList([], None)
         self._requests: dict[str, _Pending] = {}
@@ -783,6 +789,7 @@ class Gateway:
             "bot.delete": self._bot_delete,
             "bot.options": self._bot_options,
             "routine.list": self._routines,
+            "server.activity": self._activity,
             "routine.save": self._routine_save,
             "routine.runs": self._routine_runs,
             "routine.run": self._routine_run,
@@ -3495,10 +3502,15 @@ class Gateway:
     # -- housekeeping -----------------------------------------------------------------------------
 
     async def _keep_house(self) -> None:
-        """Every minute: the routines due fire, then the curator is asked."""
+        """Every minute: the routines due fire, a backup due is written, then the curator is
+        asked."""
         while True:
             await asyncio.sleep(self._housekeeping_seconds)
             self._fire_routines()
+            try:
+                await asyncio.to_thread(self.back_up_when_due)
+            except Exception:  # the server's edge: housekeeping must not stop, logged
+                _logger.exception("The scheduled backup failed.")
             try:
                 await self.channels.check()
                 if self._executors_seen != await asyncio.to_thread(_executor_states, self.plugins):
@@ -3511,6 +3523,28 @@ class Gateway:
                 await self.assistant.curate()
             except Exception:  # the server's edge: housekeeping must not stop, logged
                 _logger.exception("The curator failed.")
+
+    def back_up_when_due(self) -> Path | None:
+        """The home's backup in `[backup] folder` once the newest there is `every_hours` old
+        (step 20), the oldest past `keep` removed; what was written, or `None`."""
+        chosen = self.assistant.settings.backup
+        if chosen.folder is None:
+            return None
+        folder = chosen.folder.expanduser()
+        name = home_name(self._home.root)
+        prefix = f"{BACKUP_PREFIX}{name}-"
+        now = self._clock()
+        newest = max(
+            (found.stat().st_mtime for found in folder.glob(f"{prefix}*.zip")), default=None
+        )
+        if newest is not None and now.timestamp() - newest < chosen.every_hours * 3600:
+            return None
+        written = write_backup(
+            self._home, folder / backup_name(name, now), version=__version__, now=now
+        )
+        _logger.info("The scheduled backup was written.", extra={"files": written.manifest.files})
+        prune_backups(folder, prefix, chosen.keep)
+        return written.path
 
     def _fire_routines(self) -> None:
         try:
@@ -3567,6 +3601,22 @@ class Gateway:
         routine = await self._act(save, params.routine_id)
         self._routines_changed()
         return _routine_row(routine, routine.id in self.scheduler.running)
+
+    async def _activity(self, connection: Connection, params: Empty) -> Activity:
+        return await self.activity()
+
+    async def activity(self) -> Activity:
+        """What the home does now (step 20), for the client and for `GET /activity`: idle since the
+        last moment something worked or a client was connected, and when the next routine is
+        due."""
+        now = self._clock()
+        working = self.assistant.working() or bool(self.scheduler.running)
+        clients = len(self._connections)
+        if working or clients or self._idle_since is None:
+            self._idle_since = now
+        idle = None if working or clients else format_utc(self._idle_since)
+        due = await asyncio.to_thread(self.assistant.routines.next_wake)
+        return Activity(working, clients, idle, None if due is None else format_utc(due))
 
     async def _routine_runs(self, connection: Connection, params: RoutineRef) -> RunList:
         routine = await self._routine(params.routine_id)

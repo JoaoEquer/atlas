@@ -4214,6 +4214,20 @@ never the server itself.
     proves the far end is the home. A preview of that machine's local site is not reached through
     a relay. Fixed vectors printed by the Python tunnel prove both ends seal the same bytes. Atlas
     Cloud's relay, a Worker, waits for the stop of step 20.
+- **What a cloud computer needs of the home** (step 20, the Atlas part, proved without the cloud):
+  - **its activity** (`server.activity`, and `GET /activity` with the server token as a bearer, for
+    the host that sleeps the home's machine): whether a turn, a review, a routine or an executor
+    works now, the clients connected, since when nothing worked and no client was connected, and
+    when the next routine comes due, so the host wakes it in time;
+  - **a backup on its own** (`[backup] folder`, `every_hours`, `keep`): the housekeeping writes the
+    home's backup there once the newest is that old, checked as `atlas backup` writes one, and
+    keeps the newest few, for a home on a machine that may be lost;
+  - **its credentials out of reach:** a cloud machine's metadata address (by its names and
+    numbers, and the link-local range) is refused to `web_fetch` (by name, number, or a name
+    resolving there, the browser's rule) and is on the command floor, refused even in Auto. The
+    bandwidth limit is the host's.
+  - Left to the stop: Telegram by webhook, which needs the relay's public address, and the
+    executor on Atlas's credit.
   - **`tailscale`**: an open home's server listens on the machine's tailnet address too. The
     address and the machine's MagicDNS name come from
     the `tailscale` command (`tailscale ip`, `tailscale status --json`); WireGuard encrypts, so no

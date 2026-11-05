@@ -171,6 +171,12 @@ _HARDLINE_TABLE = (
     ("init 0/6 (shutdown/reboot)", _AT_COMMAND + r"init\s+[06]\b"),
     ("systemctl poweroff/reboot", _AT_COMMAND + r"systemctl\s+(?:poweroff|reboot|halt|kexec)\b"),
     ("telinit 0/6 (shutdown/reboot)", _AT_COMMAND + r"telinit\s+[06]\b"),
+    # A cloud computer's credentials (step 20): its metadata address, by name or number.
+    (
+        "cloud metadata endpoint",
+        r"(?<![\w.])(?:169\.254\.169\.25[34]|169\.254\.170\.2|100\.100\.100\.200|"
+        r"metadata\.google\.internal|metadata\.goog)(?![\w-])",
+    ),
 )
 _HARDLINE_ON_BLANKED_QUOTES = frozenset({"redirect to raw block device", "fork bomb"})
 

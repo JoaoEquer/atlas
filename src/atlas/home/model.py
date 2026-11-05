@@ -487,6 +487,18 @@ class TimeSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class BackupSettings:
+    #: Where the server writes the home's backup on its own (step 20): a home in a machine that may
+    #: be lost (a cloud computer, a VPS) keeps its last few there. Unset, none is written but by
+    #: hand (`atlas backup`, the app).
+    folder: Path | None = None
+    #: Hours between two backups.
+    every_hours: int = 24
+    #: The backups of this home kept in the folder, the newest; 0 keeps all.
+    keep: int = 3
+
+
+@dataclass(frozen=True, slots=True)
 class RelaySettings:
     #: The relay the home waits at, so the app reaches it from anywhere with no open port (step
     #: 20): a `wss://` address. Unset, none: the tailnet and SSH reach it.
@@ -565,6 +577,7 @@ class Settings:
     browser: BrowserSettings = field(default_factory=BrowserSettings)
     marketplace: MarketplaceSettings = field(default_factory=MarketplaceSettings)
     relay: RelaySettings = field(default_factory=RelaySettings)
+    backup: BackupSettings = field(default_factory=BackupSettings)
     voice: VoiceSettings = field(default_factory=VoiceSettings)
 
 

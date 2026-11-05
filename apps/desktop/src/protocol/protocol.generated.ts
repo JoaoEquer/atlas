@@ -931,6 +931,17 @@ export interface ScoreboardRow {
   needed: number
   failed: number
 }
+/** What the home does now, for a host that puts it to sleep when idle and wakes it in time (Atlas Cloud, step 20). Times are UTC text. */
+export interface Activity {
+  /** A turn, a review, a routine or an executor works now. */
+  working: boolean
+  /** The clients connected now (the app, a channel's bridge). */
+  clients: number
+  /** Since when nothing worked and no client was connected; `null` while something is. */
+  idle_since: string | null
+  /** When the next routine comes due; `null` when none will. */
+  next_wake: string | null
+}
 /** A prompt routine as the app's form writes it (step 25): made when `routine_id` is empty, changed otherwise. */
 export interface RoutineSave {
   name: string
@@ -2039,6 +2050,8 @@ export interface RpcMethods {
   'routine.runs': { params: RoutineRef; result: RunList }
   /** Make a prompt routine, or change one (step 25): its name, its schedule or its probe, who runs it (Atlas, a bot or an executor in a folder), and its model. */
   'routine.save': { params: RoutineSave; result: RoutineRow }
+  /** What the home does now (step 20): whether anything works, the clients connected, since when it is idle and when the next routine comes due. Also at GET /activity, with the token, for the host that sleeps it. */
+  'server.activity': { params: Empty; result: Activity }
   /** The editable settings of config.toml, for the settings screen (step 15b), each with the variable that wins over it. */
   'settings.read': { params: Empty; result: SettingsList }
   /** Write editable settings to config.toml, changing only their lines, and apply them without a restart; a refused value writes nothing. */
@@ -2236,6 +2249,7 @@ export const RPC_METHODS = [
   'routine.run',
   'routine.runs',
   'routine.save',
+  'server.activity',
   'settings.read',
   'settings.write',
   'skill.list',

@@ -195,6 +195,16 @@ class Routines:
         self.store.save(changed)
         return changed
 
+    def next_wake(self) -> datetime | None:
+        """When the next routine comes due, of those on (step 20): when a home that sleeps must be
+        woken; `None` when none will."""
+        upcoming = [
+            routine.next_run_at
+            for routine in self.store.all()
+            if routine.enabled and routine.next_run_at is not None
+        ]
+        return min(upcoming, default=None)
+
     def scoreboard(self) -> Scoreboard:
         """This week's runs (step 25), since Monday at midnight in the user's time: those that
         ran alone, those that needed the user, those that failed."""
