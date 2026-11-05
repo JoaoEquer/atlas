@@ -2116,6 +2116,13 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   the ones that ran alone (answered or silent), the ones that needed the user (`needed`), the ones
   that failed (`error`; one whose end Atlas never saw is in none). Counted from the runs Atlas keeps
   already; it is not the diary of base B, which is a plugin's.
+- **A program a plugin fetches** (SDK version 31, `PluginContext.add_programs`, 05/11/2026): a
+  folder of the plugin's own data put first on the `PATH` of the model's commands while the plugin
+  is on, any other folder refused; no new declaration, since a plugin with Python already runs
+  with the user's permissions. The GitHub plugin fetches `gh` there at Connect when the computer
+  has none (`plugins/github/fetch.py`: the version and each build's SHA-256 pinned, as the
+  installer pinned them, only the program taken out of the archive), so the installer need not
+  bring it.
 - **A plugin's probe** (SDK version 30, `PluginContext.register_probe`, `atlas.probes` in the
   manifest, shown at consent and counted in its fingerprint): the source of events of a service
   the plugin speaks to (GitHub, a calendar), in its Python. A routine names it as its probe,

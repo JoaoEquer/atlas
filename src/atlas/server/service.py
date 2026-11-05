@@ -898,7 +898,7 @@ class Gateway:
                 servers,
                 hooks,
                 commands=commands_folders,
-                programs=programs,
+                programs=[*parts.programs, *programs],
                 agents=agents,
                 monitors=monitors,
                 slash=parts.commands,

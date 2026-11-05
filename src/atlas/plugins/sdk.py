@@ -66,7 +66,10 @@ account as an executor of its own and carrying a session to the stop the plugin 
 Atlas's (`WorkbenchHost`). Version 30 lets a plugin bring a source of events for routines
 (`PluginContext.register_probe`, step 23): what is new on GitHub, in a calendar, in a mailbox,
 read with no model; a routine whose probe is `plugin:<plugin>:<name>` wakes its prompt only when
-it hears something new.
+it hears something new. Version 31 lets it put a folder of its own data on the `PATH` of the
+commands the model runs (`PluginContext.add_programs`): a program it fetched when the computer
+had none (the GitHub plugin's `gh`), which it may already run itself, its Python having the
+user's permissions.
 
 **What costs credit is declared and shown:** `llm` and `notify` call the user's model on the
 plugin's own initiative, so the manifest says `"llm": true` or `"notify": true` and the consent
@@ -114,8 +117,8 @@ from typing import Any, Literal, Protocol
 #: the app (fixed, Atlas's models, or the plugin's call `setting_choices`); 26, the memory's
 #: limits, read only; 27, where a harness's newest version is published and how its install
 #: updates; 28, a harness's permission modes; 29, the harnesses' other accounts, in one plugin;
-#: 30, probes, a routine's source of events.
-API_VERSION = 30
+#: 30, probes, a routine's source of events; 31, a folder of its data on the model's `PATH`.
+API_VERSION = 31
 
 
 @dataclass(frozen=True, slots=True)
@@ -1170,6 +1173,12 @@ class PluginContext(Protocol):
         """A probe the manifest names under `probes` (version 30): a routine whose probe is
         `plugin:<plugin>:<name>` runs `run` each time it comes due, and its prompt only when `run`
         returned something new."""
+        ...
+
+    def add_programs(self, folder: Path) -> None:
+        """Put `folder`, inside `data_folder`, first on the `PATH` of the commands the model runs
+        while the plugin is on (version 31): the programs the plugin fetched there. It may not
+        exist yet; what lands in it later is found. A folder outside `data_folder` raises."""
         ...
 
     def register_accounts(self, accounts: "Accounts") -> None:

@@ -291,6 +291,22 @@ def register(ctx: PluginContext) -> None:
   was, and the turn goes on.
 - `audio` is the only kind for now.
 
+## Programs it fetches
+
+A plugin whose service is reached through a program (GitHub through `gh`) can fetch that program
+when the computer has none, so nobody opens a terminal, and put it where the model's commands find
+it (`"api": 31`):
+
+```python
+def register(ctx: PluginContext) -> None:
+    ctx.add_programs(ctx.data_folder / "bin")  # what lands there later is found too
+```
+
+- **Only a folder of its own data**, `ctx.data_folder` or inside it; any other raises.
+- **First on the `PATH`** of the commands the model runs, while the plugin is on.
+- **Pin what you fetch:** a version and its SHA-256, and refuse a download whose digest differs.
+  The GitHub plugin Atlas ships does so for `gh`.
+
 ## Probes
 
 A probe is a source of events for routines: it looks at what your plugin watches (new issues on
@@ -804,7 +820,7 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 ## What the SDK offers
 
-Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 30), and the ACP
+Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 31), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
 (`SCREEN_API` 6). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
@@ -827,6 +843,7 @@ SDK adds and the guide does not name fails it.
 | `ctx.register_call(name, run)` | what the screen's `ctx.call` reaches | 17 |
 | `ctx.register_reader(kind, run)` | an attachment read into text (Readers) | 21 |
 | `ctx.register_probe(name, run)` | a routine's source of events, a `ProbeRun` (Probes) | 30 |
+| `ctx.add_programs(folder)` | a folder of its data first on the model's `PATH` (Programs it fetches) | 31 |
 | `ctx.memory_limits()` | the memory's limits as the user set them, a `MemoryLimits` (`user`, `memory`), read only; `None` in a terminal command | 26 |
 | `ctx.register_accounts(accounts)`, `ctx.workbench` | the harnesses' other accounts (Other accounts) | 29 |
 

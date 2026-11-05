@@ -100,6 +100,8 @@ THEMES_API = 24
 ACCOUNTS_API = 29
 #: The version of probes (`atlas.probes`, step 23): a routine's source of events.
 PROBES_API = 30
+#: The version that lets a plugin's Python put a folder of its data on the model's `PATH`.
+PROGRAMS_API = 31
 #: How a routine names a plugin's probe: `plugin:<plugin>:<name>`, never a command's start.
 PLUGIN_PROBE = "plugin:"
 THEMES_FOLDER = "themes"

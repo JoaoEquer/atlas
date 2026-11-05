@@ -43,6 +43,7 @@ from atlas.plugins.model import (
     COMMANDS_FOLDER,
     ON_SKILL,
     PLUGIN_PROBE,
+    PROGRAMS_API,
     SCREEN_FILE,
     SKILLS_FOLDER,
     THEMES_FOLDER,
@@ -259,6 +260,8 @@ class PluginParts:
     calls: list[LoadedCall] = field(default_factory=list[LoadedCall])
     readers: list[LoadedReader] = field(default_factory=list[LoadedReader])
     probes: list[LoadedProbe] = field(default_factory=list[LoadedProbe])
+    #: Folders of the plugins' data on the model's `PATH` (version 31).
+    programs: list[Path] = field(default_factory=list[Path])
 
 
 class PluginHost(Protocol):
@@ -552,6 +555,7 @@ class Plugins:
             parts.commands.extend(context.commands)
             parts.calls.extend(context.calls)
             parts.probes.extend(context.probes)
+            parts.programs.extend(context.programs)
             for reader in context.readers:
                 taken = next((r for r in parts.readers if r.kind == reader.kind), None)
                 if taken is None:
@@ -883,6 +887,7 @@ class _Context:
         self.calls: list[LoadedCall] = []
         self.readers: list[LoadedReader] = []
         self.probes: list[LoadedProbe] = []
+        self.programs: list[Path] = []
         self.accounts: Accounts | None = None
         self.stops: list[Stop] = []
         #: Set once the load gave up: what the plugin registers after is ignored.
@@ -1051,6 +1056,20 @@ class _Context:
             return
         self.probes = [probe for probe in self.probes if probe.name != name]
         self.probes.append(LoadedProbe(self.name, name, run))
+
+    def add_programs(self, folder: Path) -> None:
+        if self._manifest.api < PROGRAMS_API:
+            raise PluginError(
+                f"{self.name} put a folder on the PATH, which needs atlas.api {PROGRAMS_API}."
+            )
+        resolved = Path(folder).resolve()
+        if not resolved.is_relative_to(self.data_folder.resolve()):
+            raise PluginError(
+                f"{self.name} put {folder} on the PATH: only a folder of its own data may go there."
+            )
+        if self.abandoned.is_set() or resolved in self.programs:
+            return
+        self.programs.append(resolved)
 
     def register_accounts(self, accounts: Accounts) -> None:
         if not self._manifest.accounts:

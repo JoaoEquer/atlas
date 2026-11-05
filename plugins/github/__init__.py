@@ -4,7 +4,9 @@
   its own login on the machine: the plugin never sees a token.
 - **The connection**: its screen says whether `gh` is on the machine and who it is logged in as
   (`status`), and starts `gh`'s own login in the browser, giving the one-time code to type there
-  (`log_in`); one login at a time, stopped when the plugin is turned off.
+  (`log_in`); one login at a time, stopped when the plugin is turned off. A computer with no `gh`
+  gets it at that click: the plugin fetches it, pinned and checked (`fetch`), into its own data,
+  and puts it on the `PATH` of the model's commands too (SDK 31), so nobody opens a terminal.
 - **A workspace's pull request** (step 21, A4): beside a workspace's changes, its screen says the
   pull request of its branch and how its checks stand (`pull_request`), or opens one at the user's
   click once Atlas sent the branch (`open_pull_request`).
@@ -20,10 +22,12 @@ It imports from Atlas only `atlas.plugins.sdk`, as every plugin must; the rest i
 import asyncio
 import json
 import os
+from pathlib import Path
 from typing import Any, cast
 
 from atlas.plugins.sdk import PluginContext
 
+from .fetch import VERSION, FetchError, fetch, fetched
 from .programs import (
     CALL_SECONDS,
     LOGIN,
@@ -53,12 +57,14 @@ ISSUES = 30
 class Github:
     """`gh`'s login, read, and one login in the browser at a time."""
 
-    def __init__(self) -> None:
+    def __init__(self, folder: Path) -> None:
+        #: Where gh is fetched to, when the computer has none.
+        self._folder = folder
         self._login: tuple[DeviceCode, asyncio.subprocess.Process, asyncio.Task[bool]] | None = None
 
     async def status(self, _params: Any) -> dict[str, Any]:
         """Whether `gh` is on this machine, and who it is logged in as."""
-        argv = program("gh", os.environ)
+        argv = self._program()
         if argv is None:
             return {"installed": False, "logged_in": False, "account": "", "waiting": False}
         account = parse_status(await read([*argv, *STATUS], os.environ, STATUS_SECONDS))
@@ -76,21 +82,36 @@ class Github:
         if self._login is not None and not self._login[2].done():
             code = self._login[0]
             return {"code": code.code, "url": code.url}
-        argv = program("gh", os.environ)
+        argv = self._program()
         if argv is None:
-            raise LoginError(
-                "GitHub's program, gh, is not on this machine: install it from cli.github.com."
-            )
+            try:
+                argv = [str(await asyncio.to_thread(fetch, self._folder))]
+            except FetchError as error:
+                raise LoginError(str(error)) from error
         process, code = await start_login([*argv, *LOGIN], os.environ)
         self._login = (code, process, asyncio.create_task(finish(process, LOGIN_SECONDS)))
         return {"code": code.code, "url": code.url}
+
+    def _program(self) -> list[str] | None:
+        """How to run gh: the one this plugin fetched, else the computer's; `None` when none."""
+        found = fetched(self._folder)
+        return [str(found)] if found is not None else program("gh", os.environ)
+
+    def _gh(self) -> list[str]:
+        argv = self._program()
+        if argv is None:
+            raise GhError("GitHub's program, gh, is not on this machine: Connect fetches it.")
+        return argv
 
     async def pull_request(self, params: Any) -> dict[str, Any]:
         """The pull request of a workspace's branch, with its checks; `exists` false when the
         branch has none."""
         folder, branch = _text(params, "folder"), _text(params, "branch")
         done, output, errors = await call(
-            [*_gh(), "pr", "view", branch, "--json", PR_FIELDS], os.environ, folder, CALL_SECONDS
+            [*self._gh(), "pr", "view", branch, "--json", PR_FIELDS],
+            os.environ,
+            folder,
+            CALL_SECONDS,
         )
         if not done:
             if "no pull requests found" in errors.lower():
@@ -103,7 +124,7 @@ class Github:
         first; its title the user's."""
         folder, branch = _text(params, "folder"), _text(params, "branch")
         argv = [
-            *_gh(), "pr", "create", "--head", branch, "--base", _text(params, "base"),
+            *self._gh(), "pr", "create", "--head", branch, "--base", _text(params, "base"),
             "--title", _text(params, "title"), "--body", "",
         ]  # fmt: skip
         if params.get("draft") is True:
@@ -117,7 +138,7 @@ class Github:
         """The project's open issues, the newest first."""
         done, output, errors = await call(
             [
-                *_gh(), "issue", "list", "--state", "open", "--limit", str(ISSUES),
+                *self._gh(), "issue", "list", "--state", "open", "--limit", str(ISSUES),
                 "--json", "number,title,body,url",
             ],
             os.environ,
@@ -155,15 +176,6 @@ class Github:
             await asyncio.gather(task, return_exceptions=True)
 
 
-def _gh() -> list[str]:
-    argv = program("gh", os.environ)
-    if argv is None:
-        raise GhError(
-            "GitHub's program, gh, is not on this machine: install it from cli.github.com."
-        )
-    return argv
-
-
 def _text(params: Any, name: str) -> str:
     """A screen's parameter that must be text: a screen's JSON is not trusted to be well formed."""
     fields = cast("dict[str, object]", params) if isinstance(params, dict) else {}
@@ -174,7 +186,9 @@ def _text(params: Any, name: str) -> str:
 
 
 def register(ctx: PluginContext) -> None:
-    github = Github()
+    github = Github(ctx.data_folder)
+    # The gh it fetches lands here; the model's commands find it too.
+    ctx.add_programs(ctx.data_folder / f"gh-{VERSION}")
     ctx.register_call("status", github.status)
     ctx.register_call("log_in", github.log_in)
     ctx.register_call("pull_request", github.pull_request)

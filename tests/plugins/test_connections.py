@@ -4,7 +4,11 @@ browser started, its code given and its end seen, on stand-ins for both programs
 (`tests/fake_logins.py`) found on the PATH as the real ones are."""
 
 import asyncio
+import hashlib
 import json
+import os
+import tarfile
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -15,6 +19,10 @@ from official_support import official_module
 github = official_module("github")
 github_programs = official_module("github", "programs")
 google = official_module("google")
+github_fetch = official_module("github", "fetch")
+
+#: A data folder where the plugin never fetched gh: the PATH's is used.
+NO_FETCHED = Path("no-such-folder")
 
 
 @pytest.fixture
@@ -66,7 +74,7 @@ def test_each_status_is_read_from_its_program(state: Path) -> None:
     (state / "gh-login").write_text("example-user", "utf-8")
     (state / "gws-login").write_text("ana@example.com", "utf-8")
 
-    said = asyncio.run(github.Github().status({}))
+    said = asyncio.run(github.Github(NO_FETCHED).status({}))
 
     assert (said["installed"], said["logged_in"], said["account"]) == (True, True, "example-user")
     assert asyncio.run(google.status({}))["account"] == "ana@example.com"
@@ -78,17 +86,22 @@ def test_a_program_not_on_the_path_is_not_installed(
     (tmp_path / "empty").mkdir()
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
 
-    assert asyncio.run(github.Github().status({}))["installed"] is False
+    assert asyncio.run(github.Github(NO_FETCHED).status({}))["installed"] is False
     assert asyncio.run(google.status({}))["installed"] is False
-    with pytest.raises(github_programs.LoginError, match="gh, is not on this machine"):
-        asyncio.run(github.Github().log_in({}))
+
+    def offline(folder: Path) -> Path:
+        raise github_fetch.FetchError("gh could not be downloaded from github.com: offline")
+
+    monkeypatch.setattr(github, "fetch", offline)
+    with pytest.raises(github_programs.LoginError, match="could not be downloaded"):
+        asyncio.run(github.Github(NO_FETCHED).log_in({}))
 
 
 def test_githubs_login_gives_its_code_and_its_end_is_read_once_the_browser_said_yes(
     state: Path,
 ) -> None:
     async def scenario() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
-        plugin = github.Github()
+        plugin = github.Github(NO_FETCHED)
         code = await plugin.log_in({})
         again = await plugin.log_in({})
         waiting = await plugin.status({})
@@ -114,7 +127,7 @@ def test_githubs_login_gives_its_code_and_its_end_is_read_once_the_browser_said_
 
 def test_a_login_refused_in_the_browser_ends_and_a_new_one_starts(state: Path) -> None:
     async def scenario() -> dict[str, str]:
-        plugin = github.Github()
+        plugin = github.Github(NO_FETCHED)
         await plugin.log_in({})
         (state / "gh-refuse").write_text("", "utf-8")
         for _ in range(200):
@@ -141,7 +154,7 @@ def test_a_workspaces_pull_request_is_opened_and_read_with_its_checks(
         {"name": "lint", "conclusion": "", "status": "IN_PROGRESS"},
     ]
     (state / "checks.json").write_text(json.dumps(checks), "utf-8")
-    plugin = github.Github()
+    plugin = github.Github(NO_FETCHED)
     where = {"folder": str(tmp_path), "branch": "atlas/cart"}
 
     none = asyncio.run(plugin.pull_request(where))
@@ -174,8 +187,85 @@ def test_a_projects_open_issues_are_listed(state: Path, tmp_path: Path) -> None:
     ]
     (state / "issues.json").write_text(json.dumps(issues), "utf-8")
 
-    listed = asyncio.run(github.Github().issues({"folder": str(tmp_path)}))
+    listed = asyncio.run(github.Github(NO_FETCHED).issues({"folder": str(tmp_path)}))
 
     assert listed == [
         {"number": 12, "title": "The cart rounds wrong", "body": "1.005 shows 1.00.", "url": "u"}
     ]
+
+
+# -- gh fetched when the computer has none (05/11/2026) --------------------------------------------
+
+
+def _build(tmp_path: Path, archive: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """This computer's build of gh, a local archive of a stand-in, pinned by its digest."""
+    inside = "gh_test/bin/gh"
+    source = tmp_path / "gh-source"
+    source.write_text("#!/bin/sh\necho gh\n", "utf-8")
+    packed = tmp_path / f"gh.{archive}"
+    if archive == "zip":
+        with zipfile.ZipFile(packed, "w") as opened:
+            opened.write(source, inside)
+            opened.writestr("../escape", "outside")
+    else:
+        with tarfile.open(packed, "w:gz") as opened:
+            opened.add(source, inside)
+    digest = hashlib.sha256(packed.read_bytes()).hexdigest()
+    build = github_fetch.Build(packed.as_uri(), digest, inside)
+    monkeypatch.setattr(github_fetch, "build", lambda: build)
+
+
+@pytest.mark.parametrize("archive", ["zip", "tar.gz"])
+def test_gh_is_fetched_checked_and_only_its_program_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, archive: str
+) -> None:
+    _build(tmp_path, archive, monkeypatch)
+    data = tmp_path / "data"
+
+    program = github_fetch.fetch(data)
+
+    assert program == data / f"gh-{github_fetch.VERSION}" / "gh"
+    assert program.read_text("utf-8").startswith("#!/bin/sh")
+    assert github_fetch.fetched(data) == program
+    assert sorted(p.name for p in data.rglob("*")) == ["gh", f"gh-{github_fetch.VERSION}"]
+    assert github_fetch.fetch(data) == program, "fetched once"
+
+
+def test_a_download_whose_digest_differs_is_refused_and_nothing_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _build(tmp_path, "zip", monkeypatch)
+    pinned = github_fetch.build()
+    assert pinned is not None
+    wrong = github_fetch.Build(pinned.url, "0" * 64, pinned.inside)
+    monkeypatch.setattr(github_fetch, "build", lambda: wrong)
+
+    with pytest.raises(github_fetch.FetchError, match="digest differs"):
+        github_fetch.fetch(tmp_path / "data")
+    assert not (tmp_path / "data").exists()
+
+
+def test_connect_fetches_gh_and_the_plugin_uses_it_after(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: Path
+) -> None:
+    """With no gh on the computer, Connect fetches it, and then runs the one it fetched."""
+    data = tmp_path / "data"
+    found_on_path = github_programs.program("gh", {"PATH": os.environ["PATH"]})
+    assert found_on_path is not None
+    fetched_to: list[Path] = []
+
+    def fake_fetch(folder: Path) -> Path:
+        fetched_to.append(folder)
+        return Path(found_on_path[-1])
+
+    monkeypatch.setattr(github, "fetch", fake_fetch)
+    monkeypatch.setattr(github.Github, "_program", lambda self: None)
+
+    async def scenario() -> dict[str, str]:
+        plugin = github.Github(data)
+        started = await plugin.log_in({})
+        await plugin.close()
+        return started
+
+    assert asyncio.run(scenario())["code"] == CODE
+    assert fetched_to == [data]

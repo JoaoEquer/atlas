@@ -26,7 +26,7 @@ const WORDS = PORTUGUESE
       connect: "Conectar",
       connected: (account) => `Conectado como ${account}`,
       missing:
-        "O programa do GitHub, gh, não está neste computador: instale-o em cli.github.com e volte aqui.",
+        "Conectar baixa antes o programa do GitHub, o gh (cerca de 15 MB), e abre o login no navegador.",
       code: "Digite este código na página que abriu no navegador:",
       page: "Abrir a página de novo",
       openPr: "Abrir um pull request",
@@ -51,7 +51,7 @@ const WORDS = PORTUGUESE
       connect: "Connect",
       connected: (account) => `Connected as ${account}`,
       missing:
-        "GitHub's program, gh, is not on this computer: install it from cli.github.com and come back.",
+        "Connect first downloads GitHub's program, gh (about 15 MB), then opens the login in your browser.",
       code: "Type this code on the page that opened in your browser:",
       page: "Open the page again",
       openPr: "Open a pull request",
@@ -139,7 +139,7 @@ function Connection({ ctx }) {
             },
             `✓ ${WORDS.connected(status.account)}`,
           )
-        : status?.installed &&
+        : status &&
             h(
               "button",
               {
