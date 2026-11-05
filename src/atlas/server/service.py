@@ -466,6 +466,7 @@ from atlas.tools import (
     SecretOutcome,
     SecretRequest,
 )
+from atlas.tools import Connection as OfferedConnection
 from atlas.trust import (
     ApprovalAnswer,
     ApprovalRequest,
@@ -645,6 +646,11 @@ class Gateway:
         self.dictations = Dictations(home.dictations_folder)
         self.assistant.use_reader(LoadedReader("atlas", "audio", self.speech.transcribe))
         self.assistant.use_workspaces(_TaskWorkspaces(self))
+        #: Housekeeping's rounds, so the connections are read every few.
+        self._houses = 0
+        #: Whether each offered connection was logged in when its plugin's status was last read.
+        self._logged_in: dict[str, bool] = {}
+        self.assistant.use_connections(self.connections)
         self.plugins = Plugins(home, Database(home.database_file), vault, clock=clock)
         self.plugins.host = AssistantPluginHost(self.assistant, self._told_accounts_changed)
         #: The marketplace (step 16s), installing into this home.
@@ -907,6 +913,7 @@ class Gateway:
             )
             self._calls = {(call.plugin, call.name): call for call in parts.calls}
             self._plugin_providers(await asyncio.to_thread(self.plugins.providers))
+        await self.read_connections()
 
     async def reload_plugins(self, names: Iterable[str] | None = None) -> None:
         """Load the plugins again from their files (step 16n): those named, whose files changed,
@@ -3507,6 +3514,9 @@ class Gateway:
         while True:
             await asyncio.sleep(self._housekeeping_seconds)
             self._fire_routines()
+            self._houses += 1
+            if self._houses % CONNECTION_EVERY == 0:
+                await self.read_connections()
             try:
                 await asyncio.to_thread(self.back_up_when_due)
             except Exception:  # the server's edge: housekeeping must not stop, logged
@@ -3545,6 +3555,34 @@ class Gateway:
         _logger.info("The scheduled backup was written.", extra={"files": written.manifest.files})
         prune_backups(folder, prefix, chosen.keep)
         return written.path
+
+    def connections(self) -> list[OfferedConnection]:
+        """The connections Atlas offers in the user's conversations, and whether each is ready:
+        its plugin there, on, consented to, and logged in when its status was last read."""
+        found: list[OfferedConnection] = []
+        views = {view.name: view for view in self.plugins.all()}
+        for name, label, use in OFFERED_CONNECTIONS:
+            view = views.get(name)
+            if view is None:
+                continue
+            on = view.running
+            ready = on and self._logged_in.get(name, False)
+            found.append(OfferedConnection(name, label, use, ready))
+        return found
+
+    async def read_connections(self) -> None:
+        """Ask each offered connection's plugin whether it is logged in (its `status` call), at
+        start, when the plugins load and every few minutes; one that does not answer is not."""
+        for name, _, _ in OFFERED_CONNECTIONS:
+            call = self._calls.get((name, "status"))
+            said: object = None
+            if call is not None:
+                try:
+                    said = await asyncio.wait_for(call.run({}), CONNECTION_SECONDS)
+                except Exception:  # noqa: BLE001 - a plugin's own failure: it is not logged in
+                    said = None
+            fields = cast("dict[str, object]", said) if isinstance(said, dict) else {}
+            self._logged_in[name] = fields.get("logged_in") is True
 
     def _fire_routines(self) -> None:
         try:
@@ -3845,6 +3883,17 @@ def _proposal_row(item: OpenProposal) -> ProposalRow:
         item.problem,
         proposal.bot,
     )
+
+
+#: The connections Atlas offers in the user's conversations (05/11/2026): the plugin, what the
+#: user calls it, and what it lets Atlas do.
+OFFERED_CONNECTIONS = (
+    ("google", "Gmail and Calendar", "their email and their calendar"),
+    ("github", "GitHub", "their repositories, issues and pull requests"),
+)
+#: How long a plugin's status may take, and every how many housekeeping rounds it is read again.
+CONNECTION_SECONDS = 30.0
+CONNECTION_EVERY = 5
 
 
 def _routine_row(routine: Routine, running: bool) -> RoutineRow:

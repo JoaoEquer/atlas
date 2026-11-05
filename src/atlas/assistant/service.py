@@ -193,6 +193,7 @@ from atlas.tools import (
     BackgroundCommand,
     BotMaker,
     Commands,
+    Connection,
     Delegator,
     DocumentTexts,
     Messenger,
@@ -218,6 +219,7 @@ from atlas.tools import (
     install_tool_search,
     make_secrets_tool,
     message_agent,
+    offer_connection,
     search_backend,
     web_search,
 )
@@ -320,6 +322,9 @@ class _Shared:
     readers: dict[str, LoadedReader] = field(default_factory=dict[str, LoadedReader])
     #: Atlas's own readers, which the plugins' join.
     own_readers: dict[str, LoadedReader] = field(default_factory=dict[str, LoadedReader])
+    #: The connections Atlas offers in the user's conversations (GitHub, Gmail and Calendar),
+    #: as the server sees them now.
+    connections: Callable[[], Sequence[Connection]] = lambda: ()
     #: The plugins' probes (step 23), by what a routine names (`plugin:github:issues`).
     probes: dict[str, LoadedProbe] = field(default_factory=dict[str, LoadedProbe])
     last_active: datetime | None = None
@@ -435,6 +440,20 @@ class _Shared:
                 )
                 is None
                 else [made]
+            ),
+            # Offered only to the user, by the main agent, while one is not ready.
+            *(
+                []
+                if asker is None
+                or bot is not None
+                or role is not ConversationRole.CONVERSATION
+                or (
+                    offer := offer_connection(
+                        self.connections, len(self.conversations.recent(4, exclude=conversation_id))
+                    )
+                )
+                is None
+                else [offer]
             ),
             atlas.tools.skill_manage(skills),
             conversation_search(
@@ -735,6 +754,11 @@ class Assistant:
         """The workspaces a delegated task may ask for (step 21); `None` until the server gives
         them."""
         return self._shared.task_workspaces
+
+    def use_connections(self, connections: Callable[[], Sequence[Connection]]) -> None:
+        """Where the connections Atlas offers stand (05/11/2026): read each time a conversation of
+        the user's opens its tools."""
+        self._shared.connections = connections
 
     def use_workspaces(self, workspaces: TaskWorkspaces) -> None:
         self._shared.task_workspaces = workspaces

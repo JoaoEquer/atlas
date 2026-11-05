@@ -18,6 +18,8 @@ from atlas.tools.ask import (
     ask_user,
 )
 from atlas.tools.commands import BackgroundCommand, Commands, Shell, system_shell
+from atlas.tools.connections import NAME as OFFER_CONNECTION
+from atlas.tools.connections import Connection, offer_connection
 from atlas.tools.conversations import conversation_search
 from atlas.tools.delegate import Delegator, delegate, executor_accounts
 from atlas.tools.delegations import SessionReader, delegation_search
@@ -75,6 +77,7 @@ __all__ = [
     "MAX_QUESTIONS",
     "MAX_REASON_CHARS",
     "NAME_PATTERN",
+    "OFFER_CONNECTION",
     "RECOMMENDED",
     "SECRETS_TOOL",
     "SECRET_REQUEST_SECONDS",
@@ -86,6 +89,7 @@ __all__ = [
     "BotMaker",
     "BraveSearch",
     "Commands",
+    "Connection",
     "Delegator",
     "DocumentTexts",
     "Messenger",
@@ -128,6 +132,7 @@ __all__ = [
     "memory",
     "message_agent",
     "normalize_target",
+    "offer_connection",
     "rank",
     "search_backend",
     "skill_manage",

@@ -73,12 +73,12 @@ describe('the GitHub plugin', () => {
     expect(calls.filter(name => name === 'status').length).toBeGreaterThan(1)
   })
 
-  it('says gh is missing, and offers no Connect without it', async () => {
+  it('with no gh on the computer, Connect says it fetches gh first (05/11/2026)', async () => {
     const { part: github_ } = part(github, () => ({ account: '', installed: false, logged_in: false }))
     render(<>{github_.render({ away: () => undefined })}</>)
 
-    expect(await screen.findByTestId('first-run-github-missing')).toBeTruthy()
-    expect(screen.queryByTestId('first-run-github-connect')).toBeNull()
+    expect((await screen.findByTestId('first-run-github-missing')).textContent).toContain('gh')
+    expect(screen.getByTestId('first-run-github-connect')).toBeTruthy()
   })
 })
 

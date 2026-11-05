@@ -55,12 +55,15 @@ function Rendered({ item, place }: { item: Registered; place?: Place }) {
  *  box (`session`), or under an executor in the sidebar (`executor`), each given the place. */
 export function PlaceContributions({
   area,
-  place
+  place,
+  plugin
 }: {
   area: Extract<Area, 'connection' | 'executor' | 'project' | 'session' | 'workspace'>
   place: Place
+  /** Only this plugin's parts (a connection offered in the conversation). */
+  plugin?: string
 }) {
-  const items = inArea(useStore($contributions), area)
+  const items = inArea(useStore($contributions), area).filter(item => plugin === undefined || item.plugin === plugin)
 
   return (
     <>

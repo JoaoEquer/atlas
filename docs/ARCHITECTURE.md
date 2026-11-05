@@ -2116,6 +2116,15 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   the ones that ran alone (answered or silent), the ones that needed the user (`needed`), the ones
   that failed (`error`; one whose end Atlas never saw is in none). Counted from the runs Atlas keeps
   already; it is not the diary of base B, which is a plugin's.
+- **A connection offered in the conversation** (`offer_connection`, asked by the user on
+  05/11/2026, after an assistant that offers what it can reach): GitHub, and Gmail with Calendar,
+  are offered by the main agent in the user's own conversations while one is not ready (its plugin
+  off, not consented to, or not logged in, read from the plugin's `status` call at load and every
+  few housekeeping rounds). The model offers when what the user asks needs it, and once early on
+  in their first few conversations; the tool's answer tells it to wait for the user. The app draws
+  the call as a card: the plugin's declaration and Turn on (the consent), then the plugin's own
+  connection part (GitHub's Connect, Google's set-up). Bots, subagents and routines are not given
+  it, and nothing is turned on but by the user's click.
 - **A program a plugin fetches** (SDK version 31, `PluginContext.add_programs`, 05/11/2026): a
   folder of the plugin's own data put first on the `PATH` of the model's commands while the plugin
   is on, any other folder refused; no new declaration, since a plugin with Python already runs

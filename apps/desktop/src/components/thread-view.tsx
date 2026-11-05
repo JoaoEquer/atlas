@@ -13,6 +13,7 @@ import type { Waiting } from '@/store/waiting'
 
 import { ARTIFACT_LANGUAGES, ArtifactBlock } from './artifact-block'
 import { AttachmentChip, useThumbnail } from './attachment-chip'
+import { ConnectionOffer } from './connection-offer'
 import { $modelMenu } from './model-picker'
 import { ReviewRow } from './review-row'
 import { AnswerStreaming, SHELL_RENDERERS } from './shell-block'
@@ -337,7 +338,12 @@ function PartView({ part, waiting }: { part: Part; waiting: ReadonlyMap<string, 
       )
 
     case 'tool':
-      return <ToolRow tool={part} waiting={waiting.get(part.toolId)} />
+      // A connection Atlas offered (05/11/2026) is a card the user acts on, not a tool's row.
+      return part.name === 'offer_connection' ? (
+        <ConnectionOffer tool={part} />
+      ) : (
+        <ToolRow tool={part} waiting={waiting.get(part.toolId)} />
+      )
 
     case 'other':
       // ACP v2: what the app does not know is kept raw and shown generically.

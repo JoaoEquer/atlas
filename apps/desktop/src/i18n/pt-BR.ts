@@ -326,6 +326,10 @@ export const ptBR: Override<Messages> = {
     },
     title: 'Primeiros passos'
   },
+  connectionOffer: {
+    missing: 'Esta conexão não está instalada aqui: a loja tem.',
+    title: (label: string) => `Conectar ${label}`
+  },
   firstRun: {
     accounts: 'Tem mais de uma conta?',
     accountsIntro:

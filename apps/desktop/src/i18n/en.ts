@@ -347,6 +347,10 @@ export const en = {
     },
     title: 'First steps'
   },
+  connectionOffer: {
+    missing: 'This connection is not installed here: the marketplace has it.',
+    title: (label: string) => `Connect ${label}`
+  },
   firstRun: {
     accounts: 'More than one account?',
     accountsIntro:
