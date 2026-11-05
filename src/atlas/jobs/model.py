@@ -286,6 +286,19 @@ class Routine:
 
 
 @dataclass(frozen=True, slots=True)
+class Scoreboard:
+    """This week's runs of every routine, at the top of the Routines screen (step 25)."""
+
+    #: Since when: this week's Monday at midnight, the user's time.
+    since: datetime
+    #: Ended with nothing asked: answered, or silent.
+    alone: int
+    #: Stopped at a question or an approval nobody gave.
+    needed: int
+    failed: int
+
+
+@dataclass(frozen=True, slots=True)
 class ProbeState:
     """What a routine's probe heard last (step 23)."""
 

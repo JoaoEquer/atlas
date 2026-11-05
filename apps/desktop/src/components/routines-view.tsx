@@ -3,7 +3,7 @@ import { useState } from 'react'
 
 import { t } from '@/i18n'
 import type { RoutineRow, RunRow } from '@/protocol/protocol.generated'
-import { $readError, $routines, $runs, actOnRoutine, readRuns, selectConversation } from '@/store/app'
+import { $readError, $routines, $runs, $scoreboard, actOnRoutine, readRuns, selectConversation } from '@/store/app'
 
 import { PageHeader } from './page-header'
 import { ReadFailed } from './read-failed'
@@ -15,12 +15,18 @@ import { ReadFailed } from './read-failed'
  */
 export function RoutinesView() {
   const routines = useStore($routines)
+  const score = useStore($scoreboard)
   const failed = useStore($readError).routines
 
   return (
     <div className="flex-1 overflow-y-auto" data-testid="routines-view">
       <div className="mx-auto max-w-3xl space-y-4 px-6 py-6">
         <PageHeader intro={t.routines.intro} title={t.routines.title} />
+        {score && (score.alone > 0 || score.needed > 0 || score.failed > 0) ? (
+          <p className="text-sm text-soft" data-testid="routines-scoreboard">
+            {t.routines.scoreboard(score.alone, score.needed, score.failed)}
+          </p>
+        ) : null}
         {failed && <ReadFailed error={failed} what="routines" />}
         {!failed && routines.length === 0 && <p className="text-sm text-muted-foreground">{t.routines.empty}</p>}
         {routines.map(routine => (

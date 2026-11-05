@@ -87,7 +87,8 @@ Times are in your system's time zone, or the one under **Settings**, then **Fold
 ## The Routines screen
 
 **Routines**, in the sidebar, lists each routine with its schedule, its next run, how its last
-one went and its probe, if it has one; a run its probe woke says so. From there you can **Run now**, **Pause**, **Resume** and **Remove** a routine, and open
+one went and its probe, if it has one; a run its probe woke says so. At the top, this week's
+count: how many runs went alone, how many needed you, how many failed. From there you can **Run now**, **Pause**, **Resume** and **Remove** a routine, and open
 its **Runs**: each run of a prompt opens as the conversation it was. Creating and changing a
 routine stays with the conversation and the terminal.
 

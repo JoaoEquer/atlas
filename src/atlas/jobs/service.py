@@ -19,7 +19,7 @@ import asyncio
 import dataclasses
 import logging
 from collections.abc import Callable
-from datetime import datetime, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Protocol
 
@@ -33,6 +33,7 @@ from atlas.jobs.model import (
     RunStatus,
     Schedule,
     ScheduleKind,
+    Scoreboard,
     grace_seconds,
     heard,
     lateness,
@@ -193,6 +194,22 @@ class Routines:
         changed = dataclasses.replace(routine, **changes)  # type: ignore[arg-type]
         self.store.save(changed)
         return changed
+
+    def scoreboard(self) -> Scoreboard:
+        """This week's runs (step 25), since Monday at midnight in the user's time: those that
+        ran alone, those that needed the user, those that failed."""
+        today = self._clock().astimezone(self._zone)
+        monday = (today - timedelta(days=today.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        since = monday.astimezone(UTC)
+        counted = self.store.statuses_since(since)
+        return Scoreboard(
+            since=since,
+            alone=counted.get(RunStatus.OK, 0) + counted.get(RunStatus.SILENT, 0),
+            needed=counted.get(RunStatus.NEEDED, 0),
+            failed=counted.get(RunStatus.ERROR, 0),
+        )
 
     def pause(self, key: str) -> Routine:
         routine = dataclasses.replace(self.store.get(key), enabled=False)

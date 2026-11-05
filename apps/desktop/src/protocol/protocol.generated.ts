@@ -880,6 +880,8 @@ export interface ConversationModelParams {
 }
 export interface RoutineList {
   routines: RoutineRow[]
+  /** This week's runs, at the top of the screen (step 25). */
+  scoreboard: ScoreboardRow | null
 }
 /** A routine, as the screen lists it. Times are UTC text. */
 export interface RoutineRow {
@@ -916,6 +918,15 @@ export interface RoutineExecutorRow {
   workspace: boolean
   /** A run that changed something opens a draft pull request (the GitHub plugin's). */
   draft: boolean
+}
+/** This week's runs of every routine (step 25): since Monday at midnight, the user's time. */
+export interface ScoreboardRow {
+  since: string
+  /** Ended with nothing asked: answered, or silent. */
+  alone: number
+  /** Stopped at a question or an approval nobody gave. */
+  needed: number
+  failed: number
 }
 export interface RoutineRef {
   routine_id: string

@@ -359,6 +359,7 @@ from atlas.server.protocol import (
     RunList,
     RunRow,
     Said,
+    ScoreboardRow,
     SearchHit,
     SearchParams,
     SearchResults,
@@ -3518,9 +3519,14 @@ class Gateway:
     # -- routines ---------------------------------------------------------------------------------
 
     async def _routines(self, connection: Connection, params: Empty) -> RoutineList:
-        found = await asyncio.to_thread(self.assistant.routines.store.all)
+        routines = self.assistant.routines
+        found = await asyncio.to_thread(routines.store.all)
+        score = await asyncio.to_thread(routines.scoreboard)
         running = self.scheduler.running
-        return RoutineList([_routine_row(routine, routine.id in running) for routine in found])
+        return RoutineList(
+            [_routine_row(routine, routine.id in running) for routine in found],
+            ScoreboardRow(format_utc(score.since), score.alone, score.needed, score.failed),
+        )
 
     async def _routine_runs(self, connection: Connection, params: RoutineRef) -> RunList:
         routine = await self._routine(params.routine_id)

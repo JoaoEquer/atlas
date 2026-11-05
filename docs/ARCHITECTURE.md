@@ -2096,6 +2096,11 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   from the terminal (`--executor`) or the app, is theirs already. A bot's routine stays a prompt on
   Atlas's model, never an executor's. A prompt routine whose run met a refusal for want of someone
   to approve (`NOBODY_TO_APPROVE`) ends `needed` too, so the scoreboard counts both.
+- **The scoreboard** (step 25): the top of the Routines screen counts this week's runs of every
+  routine, since Monday at midnight in the user's time (`Routines.scoreboard`, in `routine.list`):
+  the ones that ran alone (answered or silent), the ones that needed the user (`needed`), the ones
+  that failed (`error`; one whose end Atlas never saw is in none). Counted from the runs Atlas keeps
+  already; it is not the diary of base B, which is a plugin's.
 - **A plugin's probe** (SDK version 30, `PluginContext.register_probe`, `atlas.probes` in the
   manifest, shown at consent and counted in its fingerprint): the source of events of a service
   the plugin speaks to (GitHub, a calendar), in its Python. A routine names it as its probe,

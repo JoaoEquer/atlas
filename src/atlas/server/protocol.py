@@ -627,8 +627,22 @@ class RoutineRow:
 
 
 @dataclass(frozen=True, slots=True)
+class ScoreboardRow:
+    """This week's runs of every routine (step 25): since Monday at midnight, the user's time."""
+
+    since: str
+    #: Ended with nothing asked: answered, or silent.
+    alone: int
+    #: Stopped at a question or an approval nobody gave.
+    needed: int
+    failed: int
+
+
+@dataclass(frozen=True, slots=True)
 class RoutineList:
     routines: list[RoutineRow]
+    #: This week's runs, at the top of the screen (step 25).
+    scoreboard: ScoreboardRow | None = None
 
 
 @dataclass(frozen=True, slots=True)

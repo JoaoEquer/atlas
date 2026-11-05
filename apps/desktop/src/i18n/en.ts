@@ -578,6 +578,8 @@ export const en = {
     paused: 'paused',
     executor: (name: string, folder: string, workspace: boolean) =>
       `Run by ${name} in ${folder}${workspace ? ', a new workspace each run' : ''}`,
+    scoreboard: (alone: number, needed: number, failed: number) =>
+      `This week: ${String(alone)} ran alone · ${String(needed)} needed you · ${String(failed)} failed`,
     probe: (command: string) => `Woken by its probe: $ ${command}`,
     probed: 'its probe heard something',
     remove: 'Remove',

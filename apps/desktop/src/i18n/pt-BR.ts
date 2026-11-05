@@ -563,6 +563,8 @@ export const ptBR: Override<Messages> = {
     paused: 'pausada',
     executor: (name: string, folder: string, workspace: boolean) =>
       `Rodada pelo ${name} em ${folder}${workspace ? ', numa workspace nova a cada vez' : ''}`,
+    scoreboard: (alone: number, needed: number, failed: number) =>
+      `Esta semana: ${String(alone)} rodaram sozinhas · ${String(needed)} precisaram de você · ${String(failed)} falharam`,
     probe: (command: string) => `Acordada pela sonda: $ ${command}`,
     probed: 'a sonda ouviu algo',
     remove: 'Apagar',

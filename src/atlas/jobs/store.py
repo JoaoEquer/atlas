@@ -513,6 +513,18 @@ class RoutineStore:
         finally:
             connection.close()
 
+    def statuses_since(self, moment: datetime) -> dict[RunStatus, int]:
+        """How many runs of every routine started since `moment` ended each way."""
+        connection = self._database.connect()
+        try:
+            rows = connection.execute(
+                "SELECT status, COUNT(*) FROM jobs_runs WHERE started_at >= ? GROUP BY status",
+                (format_utc(moment),),
+            ).fetchall()
+        finally:
+            connection.close()
+        return {RunStatus(str(status)): int(count) for status, count in rows}
+
     def runs(self, routine_id: str, limit: int = RUNS_KEPT) -> list[Run]:
         """A routine's runs, newest first."""
         connection = self._database.connect()

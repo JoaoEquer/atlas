@@ -1056,6 +1056,7 @@ def test_a_routine_runs_now_and_every_client_hears_how_it_ended(
         conversations = client.result("conversation.list")["conversations"]
         paused = client.result("routine.pause", {"routine_id": made.id})
         resumed = client.result("routine.resume", {"routine_id": made.id})
+        scored = client.result("routine.list")["scoreboard"]
         removed = client.result("routine.remove", {"routine_id": made.id})
         missing = client.call("routine.run", {"routine_id": "nope"})["error"]
         after = client.result("routine.list")["routines"]
@@ -1064,6 +1065,9 @@ def test_a_routine_runs_now_and_every_client_hears_how_it_ended(
         ("news", "every day at 9am", True, "user")
     ]
     assert ran["name"] == "news"
+    assert (scored["alone"], scored["needed"], scored["failed"]) == (1, 0, 0), (
+        "this week's (step 25)"
+    )
     assert finished == {
         "routine_id": made.id,
         "name": "news",

@@ -315,3 +315,27 @@ def test_an_executor_runs_a_prompt_in_a_whole_folder_and_is_kept(
     pinned = routines.update(made.id, model=("openrouter", "gemini", "high"), bot="finance")
     assert (pinned.model_name, pinned.bot) == ("gemini", "finance")
     assert routines.update(made.id, model=("", "", None), bot="").model_name is None
+
+
+def test_the_scoreboard_counts_this_weeks_runs_by_how_they_ended(
+    routines: Routines, clock: _Clock
+) -> None:
+    """Step 25: since Monday at midnight, the ones that ran alone, needed the user, or failed."""
+    made = routines.create("sweep", "every 1h", prompt="Sweep.")
+    store = routines.store
+    ended = [
+        (datetime(2026, 10, 11, 23, 0, tzinfo=UTC), RunStatus.ERROR),  # Sunday: last week
+        (datetime(2026, 10, 12, 0, 0, tzinfo=UTC), RunStatus.OK),
+        (datetime(2026, 10, 12, 1, 0, tzinfo=UTC), RunStatus.SILENT),
+        (datetime(2026, 10, 12, 2, 0, tzinfo=UTC), RunStatus.NEEDED),
+        (datetime(2026, 10, 12, 3, 0, tzinfo=UTC), RunStatus.ERROR),
+        (datetime(2026, 10, 12, 4, 0, tzinfo=UTC), RunStatus.UNKNOWN),
+    ]
+    for started, status in ended:
+        run = store.start_run(store.get(made.id), started, Lateness.ON_TIME)
+        store.finish_run(dataclasses.replace(run, status=status, ended_at=started))
+
+    score = routines.scoreboard()
+
+    assert score.since == datetime(2026, 10, 12, 0, 0, tzinfo=UTC)
+    assert (score.alone, score.needed, score.failed) == (2, 1, 1)

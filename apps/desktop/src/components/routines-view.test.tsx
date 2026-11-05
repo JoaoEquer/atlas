@@ -97,3 +97,13 @@ describe('a routine an executor runs (step 25)', () => {
     expect(screen.getByText(t.routines.last(t.routines.status('needed')), { exact: false })).toBeTruthy()
   })
 })
+
+describe("this week's scoreboard (step 25)", () => {
+  it('counts the runs that ran alone, needed the user, and failed', () => {
+    app.$scoreboard.set({ alone: 12, failed: 1, needed: 2, since: '2026-11-02T03:00:00Z' })
+    render(<RoutinesView />)
+
+    expect(screen.getByTestId('routines-scoreboard').textContent).toBe(t.routines.scoreboard(12, 2, 1))
+    app.$scoreboard.set(null)
+  })
+})

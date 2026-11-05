@@ -62,6 +62,7 @@ import type {
   RoutineFinished,
   RoutineRow,
   RunRow,
+  ScoreboardRow,
   SearchHit,
   SecretParams,
   SecretResult,
@@ -383,6 +384,8 @@ export class HomeSession {
   readonly $view = atom<View>('conversation')
   /** The home's routines, read when the home connects and when they change. */
   readonly $routines = atom<RoutineRow[]>([])
+  /** This week's runs, at the top of the Routines screen (step 25). */
+  readonly $scoreboard = atom<null | ScoreboardRow>(null)
   /** The marketplace's screen (step 16s): read when it opens and when an item changes. */
   readonly $market = atom<Market>(EMPTY_MARKET)
   /** The home's plugins and the people their channels let in or who wait with a code. */
@@ -2075,8 +2078,9 @@ export class HomeSession {
 
   async refreshRoutines(): Promise<void> {
     await this.reading('routines', async () => {
-      const { routines } = await this.client.call('routine.list', {})
+      const { routines, scoreboard } = await this.client.call('routine.list', {})
       this.$routines.set(routines)
+      this.$scoreboard.set(scoreboard ?? null)
     })
   }
 
@@ -2884,6 +2888,7 @@ export const $proposals = atom<ProposalRow[]>([])
 export const $approved = map<Record<string, Approved | undefined>>({})
 export const $view = atom<View>('conversation')
 export const $routines = atom<RoutineRow[]>([])
+export const $scoreboard = atom<null | ScoreboardRow>(null)
 export const $market = atom<Market>(EMPTY_MARKET)
 export const $plugins = atom<PluginRow[]>([])
 /** The screens of the home on screen's plugins that are on (step 16m). */
@@ -2984,6 +2989,7 @@ const MIRRORS: Mirror[] = [
   mirror($approved, s => s.$approved),
   mirror($view, s => s.$view),
   mirror($routines, s => s.$routines),
+  mirror($scoreboard, s => s.$scoreboard),
   mirror($market, s => s.$market),
   mirror($plugins, s => s.$plugins),
   mirror($screens, s => s.$screens),
