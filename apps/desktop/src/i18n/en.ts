@@ -588,6 +588,55 @@ export const en = {
     unwatched: 'It runs with nobody watching: its first question stops the run, which then waits for you in Executors.',
     workspace: 'Each run in a new workspace (for a routine that changes code)'
   },
+  templates: {
+    add: 'Add',
+    agentRuns: 'Runs in your coding agent',
+    atlasRuns: "Runs on Atlas's model",
+    effort: (level: string) => `effort ${level}`,
+    groups: { personal: 'Personal', project: 'For a project' },
+    install: (plugin: string) => `Install ${plugin} first`,
+    intro: 'Routines written by Atlas, ready to adjust: Add opens one in the form.',
+    needs: (plugin: string) => `Needs the ${plugin} plugin`,
+    tab: 'Templates',
+    tiers: { essential: 'Essential', recommended: 'Recommended', useful: 'Useful' },
+    words: {
+      agenda: {
+        name: 'tomorrow',
+        prompt:
+          'Read my calendar for tomorrow and tell me, in a few lines, what I have and when, what to prepare tonight, and any clash. If tomorrow is empty, answer [SILENT].',
+        title: "Tomorrow's agenda"
+      },
+      backup: {
+        name: 'backup',
+        prompt: 'Run `atlas backup`. If it worked, answer [SILENT]; if it failed, say why and what to do.',
+        title: 'Daily backup'
+      },
+      mailSummary: {
+        name: 'mail',
+        prompt:
+          'Read my unread email since yesterday and give me the ones that need an answer from me, each in a line with who and what, then the rest in one line. Answer nothing else.',
+        title: 'Morning email summary'
+      },
+      missingTests: {
+        name: 'tests',
+        prompt:
+          'Find the code changed this week that no test covers. Write the tests it lacks, following how this project tests, and run them. Do not change the code under test; list what you could not cover and why.',
+        title: 'Missing tests'
+      },
+      securitySweep: {
+        name: 'security',
+        prompt:
+          "Look for security problems in this project: its dependencies' known vulnerabilities, secrets committed by mistake, and unsafe code (injection, unchecked input). Change nothing: list what you found, the worst first, each with where and how to fix it.",
+        title: 'Security sweep'
+      },
+      stalePullRequests: {
+        name: 'stale-prs',
+        prompt:
+          "With gh, list this project's open pull requests with no activity for 3 days or more: each with its title, its author, how long it waits and what it waits for. If there are none, answer [SILENT].",
+        title: 'Pull requests waiting for 3 days'
+      }
+    }
+  },
   routines: {
     confirmRemove: 'Remove it?',
     empty: 'No routines yet. Ask Atlas to schedule one, or use atlas routines create in the terminal.',

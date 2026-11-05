@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { t } from '@/i18n'
@@ -184,5 +184,44 @@ describe('a routine made and changed in the form (step 25)', () => {
     expect(screen.getByDisplayValue('Triage the new mail.').dataset.testid).toBe('routine-form-prompt')
     expect(screen.getByDisplayValue('python unread.py').dataset.testid).toBe('routine-form-probe')
     app.closeRoutineForm()
+  })
+})
+
+describe('the templates (step 25)', () => {
+  it('lists them by group, says the plugin one needs, and Add opens the form filled in', () => {
+    vi.spyOn(app, 'refreshPlugins').mockImplementation(() => undefined)
+    const market = vi.spyOn(app, 'openMarketItem').mockImplementation(() => undefined)
+    vi.spyOn(app, 'showMarketplace').mockImplementation(() => undefined)
+    app.$workbench.set({
+      executors: [{ installed: true, name: 'claude-code', title: 'Claude Code' } as ExecutorRow],
+      instances: []
+    })
+    render(<RoutinesView />)
+
+    fireEvent.click(screen.getByTestId('routines-tab-templates'))
+    const cards = screen.getAllByTestId('routine-template')
+    expect(cards.map(card => card.dataset.template)).toEqual([
+      'securitySweep',
+      'stalePullRequests',
+      'missingTests',
+      'mailSummary',
+      'agenda',
+      'backup'
+    ])
+    const stale = cards[1]
+    expect(stale?.textContent).toContain(t.templates.needs('github'))
+    fireEvent.click(within(stale as HTMLElement).getByTestId('routine-template-add'))
+    expect(market).toHaveBeenCalledWith('github')
+    fireEvent.click(within(cards[0] as HTMLElement).getByTestId('routine-template-add'))
+
+    expect(app.$routineForm.get()).toEqual({
+      effort: '',
+      executor: { auto: false, draft: false, folder: '', name: 'claude-code', workspace: false },
+      name: t.templates.words.securitySweep.name,
+      prompt: t.templates.words.securitySweep.prompt,
+      schedule: 'every monday at 9am'
+    })
+    app.closeRoutineForm()
+    app.$workbench.set({ executors: [], instances: [] })
   })
 })

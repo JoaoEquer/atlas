@@ -2102,6 +2102,14 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   prompt, its schedule and probe, who runs it (Atlas, a bot, or an executor in a folder with its
   mode, workspace and draft), its model and effort, and Save and run now. A command routine stays
   the terminal's.
+- **The templates** (step 25, asked for by the user on 03/11/2026, a tab of the Routines screen and
+  not a kind of the marketplace): no public catalog has routine templates, so the first are
+  Atlas's own, in the app (`routine-templates.ts`, their words in each language file): a project's
+  (a security sweep, pull requests waiting for 3 days, missing tests in a new workspace), run by
+  the first coding agent installed, and personal ones run by Atlas (the morning email, tomorrow's
+  agenda, a daily backup). Each says its tier (essential, recommended, useful), how often it runs
+  and its effort; Add opens it in the form, and one whose plugin is not on (gh's `github`, gws's
+  `google`) says so and opens that plugin's page in the marketplace instead.
 - **The scoreboard** (step 25): the top of the Routines screen counts this week's runs of every
   routine, since Monday at midnight in the user's time (`Routines.scoreboard`, in `routine.list`):
   the ones that ran alone (answered or silent), the ones that needed the user (`needed`), the ones

@@ -4,16 +4,22 @@ import { useState } from 'react'
 import { t } from '@/i18n'
 import type { RoutineRow, RunRow } from '@/protocol/protocol.generated'
 import {
+  $plugins,
   $readError,
   $routines,
   $runs,
   $scoreboard,
+  $workbench,
   actOnRoutine,
+  openMarketItem,
   openRoutineForm,
   readRuns,
+  refreshPlugins,
   routineDraft,
-  selectConversation
+  selectConversation,
+  showMarketplace
 } from '@/store/app'
+import { templateDraft, templatesOf } from '@/store/routine-templates'
 
 import { PageHeader } from './page-header'
 import { ReadFailed } from './read-failed'
@@ -29,6 +35,7 @@ export function RoutinesView() {
   const routines = useStore($routines)
   const score = useStore($scoreboard)
   const failed = useStore($readError).routines
+  const [tab, setTab] = useState<'routines' | 'templates'>('routines')
 
   return (
     <div className="flex-1 overflow-y-auto" data-testid="routines-view">
@@ -50,17 +57,111 @@ export function RoutinesView() {
           title={t.routines.title}
         />
         <RoutineFormHost />
+        <div className="flex gap-1 border-b border-border text-sm" role="tablist">
+          {(['routines', 'templates'] as const).map(name => (
+            <button
+              aria-selected={tab === name}
+              className={`-mb-px border-b-2 px-3 py-1.5 ${tab === name ? 'border-primary font-medium' : 'border-transparent text-muted-foreground'}`}
+              data-testid={`routines-tab-${name}`}
+              key={name}
+              onClick={() => {
+                setTab(name)
+
+                if (name === 'templates') {
+                  refreshPlugins()
+                }
+              }}
+              role="tab"
+              type="button"
+            >
+              {name === 'routines' ? t.routines.title : t.templates.tab}
+            </button>
+          ))}
+        </div>
+        {tab === 'templates' ? <Templates /> : null}
         {score && (score.alone > 0 || score.needed > 0 || score.failed > 0) ? (
           <p className="text-sm text-soft" data-testid="routines-scoreboard">
             {t.routines.scoreboard(score.alone, score.needed, score.failed)}
           </p>
         ) : null}
-        {failed && <ReadFailed error={failed} what="routines" />}
-        {!failed && routines.length === 0 && <p className="text-sm text-muted-foreground">{t.routines.empty}</p>}
-        {routines.map(routine => (
-          <Routine key={routine.id} routine={routine} />
-        ))}
+        {tab === 'routines' && (
+          <>
+            {failed && <ReadFailed error={failed} what="routines" />}
+            {!failed && routines.length === 0 && <p className="text-sm text-muted-foreground">{t.routines.empty}</p>}
+            {routines.map(routine => (
+              <Routine key={routine.id} routine={routine} />
+            ))}
+          </>
+        )}
       </div>
+    </div>
+  )
+}
+
+/** The templates (step 25): a card each, by group, the essential first; Add opens the form. */
+function Templates() {
+  const plugins = useStore($plugins)
+  const executors = useStore($workbench).executors.filter(found => found.installed)
+  const on = (name: string) => plugins.some(found => found.name === name && found.enabled && found.consented)
+
+  return (
+    <div className="space-y-4" data-testid="routine-templates">
+      <p className="text-sm text-muted-foreground">{t.templates.intro}</p>
+      {(['project', 'personal'] as const).map(group => (
+        <section className="space-y-2" key={group}>
+          <h2 className="text-sm font-medium text-muted-foreground">{t.templates.groups[group]}</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {templatesOf(group).map(template => {
+              const words = t.templates.words[template.id]
+              const missing = template.plugin && !on(template.plugin) ? template.plugin : null
+
+              return (
+                <div
+                  className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                  data-template={template.id}
+                  data-testid="routine-template"
+                  key={template.id}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium">{words.title}</p>
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-soft">
+                      {t.templates.tiers[template.tier]}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {template.schedule} · {group === 'project' ? t.templates.agentRuns : t.templates.atlasRuns} ·{' '}
+                    {t.templates.effort(template.effort)}
+                  </p>
+                  {missing && (
+                    <p className="text-xs text-waiting-text" data-testid="routine-template-needs">
+                      {t.templates.needs(missing)}
+                    </p>
+                  )}
+                  <div className="flex justify-end">
+                    <button
+                      className={BUTTON}
+                      data-testid="routine-template-add"
+                      onClick={() => {
+                        if (missing) {
+                          showMarketplace()
+                          openMarketItem(missing)
+
+                          return
+                        }
+
+                        openRoutineForm(templateDraft(template, words, executors[0]?.name ?? ''))
+                      }}
+                      type="button"
+                    >
+                      {missing ? t.templates.install(missing) : t.templates.add}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   )
 }

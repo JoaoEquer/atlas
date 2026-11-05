@@ -18,7 +18,11 @@ The simplest way is to ask, in a conversation:
 Atlas makes the routine and tells you its schedule. In the app, **New routine** on the Routines
 screen opens a form: what to do, when (and a probe, below), who runs it (Atlas, a bot or a coding
 agent in a folder), its model and effort, and **Save and run now**. **Change** on a prompt routine
-opens the same form. From a terminal:
+opens the same form. The **Templates** tab holds routines Atlas wrote, ready to adjust: for a
+project (a security sweep, pull requests waiting for 3 days, missing tests), run by your coding
+agent, and personal ones (the morning email, tomorrow's agenda, a daily backup). **Add** opens one
+in the form; one that needs a plugin you don't have on says so, and offers to install it first.
+From a terminal:
 
 ```bash
 atlas routines create inbox --schedule "weekdays at 9am" --prompt "Read my unread emails and list the five that need an answer."

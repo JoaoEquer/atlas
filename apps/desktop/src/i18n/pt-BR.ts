@@ -574,6 +574,55 @@ export const ptBR: Override<Messages> = {
       'Ela roda sem ninguém olhando: a primeira pergunta para a execução, que fica esperando você em Executores.',
     workspace: 'Cada execução numa workspace nova (para rotina que muda código)'
   },
+  templates: {
+    add: 'Adicionar',
+    agentRuns: 'Roda no seu agente de código',
+    atlasRuns: 'Roda no modelo do Atlas',
+    effort: (level: string) => `esforço ${level}`,
+    groups: { personal: 'Pessoais', project: 'De projeto' },
+    install: (plugin: string) => `Instalar ${plugin} antes`,
+    intro: 'Rotinas escritas pelo Atlas, prontas para ajustar: Adicionar abre uma no formulário.',
+    needs: (plugin: string) => `Precisa do plugin ${plugin}`,
+    tab: 'Modelos',
+    tiers: { essential: 'Essencial', recommended: 'Recomendado', useful: 'Útil' },
+    words: {
+      agenda: {
+        name: 'amanha',
+        prompt:
+          'Leia minha agenda de amanhã e me diga, em poucas linhas, o que eu tenho e quando, o que preparar hoje à noite e qualquer conflito. Se amanhã estiver vazio, responda [SILENT].',
+        title: 'A agenda de amanhã'
+      },
+      backup: {
+        name: 'backup',
+        prompt: 'Rode `atlas backup`. Se funcionou, responda [SILENT]; se falhou, diga por quê e o que fazer.',
+        title: 'Backup diário'
+      },
+      mailSummary: {
+        name: 'emails',
+        prompt:
+          'Leia meus e-mails não lidos desde ontem e me dê os que precisam de resposta minha, cada um numa linha com quem e o quê, e depois o resto numa linha só. Não responda mais nada.',
+        title: 'Resumo dos e-mails de manhã'
+      },
+      missingTests: {
+        name: 'testes',
+        prompt:
+          'Ache o código mudado nesta semana que nenhum teste cobre. Escreva os testes que faltam, do jeito que este projeto testa, e rode-os. Não mude o código testado; liste o que não conseguiu cobrir e por quê.',
+        title: 'Testes faltando'
+      },
+      securitySweep: {
+        name: 'seguranca',
+        prompt:
+          'Procure problemas de segurança neste projeto: vulnerabilidades conhecidas das dependências, segredos commitados por engano e código inseguro (injeção, entrada sem checagem). Não mude nada: liste o que achou, o pior primeiro, cada um com onde está e como corrigir.',
+        title: 'Varredura de segurança'
+      },
+      stalePullRequests: {
+        name: 'prs-parados',
+        prompt:
+          'Com o gh, liste os pull requests abertos deste projeto sem atividade há 3 dias ou mais: cada um com o título, o autor, há quanto tempo espera e o que espera. Se não houver nenhum, responda [SILENT].',
+        title: 'PRs parados há 3 dias'
+      }
+    }
+  },
   routines: {
     confirmRemove: 'Apagar?',
     empty: 'Nenhuma rotina ainda. Peça ao Atlas para agendar uma, ou use atlas routines create no terminal.',
