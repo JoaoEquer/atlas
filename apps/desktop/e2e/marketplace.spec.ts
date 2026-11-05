@@ -64,9 +64,8 @@ class FakeGitHub {
       `repository = ${JSON.stringify(repository)}`,
       `archive_url = ${JSON.stringify(`${this.url}/archive/{repo}/{ref}`)}`,
       `raw_url = ${JSON.stringify(`${this.url}/raw/{repo}/{ref}/{path}`)}`,
-      `registry_url = ${JSON.stringify(`${this.url}/registry/v0/servers`)}`,
-      `skills_url = ${JSON.stringify(`${this.url}/skills/api/search`)}`,
-      `github_api_url = ${JSON.stringify(`${this.url}/api`)}`
+      // The outside catalogs (step 24) are proved by the server's tests against this fake.
+      'outside = false'
     ].join('\n')
   }
 

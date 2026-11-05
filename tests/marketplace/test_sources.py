@@ -22,19 +22,30 @@ from atlas.marketplace import (
     MarketplaceStore,
     Source,
     State,
+    check_outside,
     fetch,
     outside_sources,
+    outside_text,
 )
+from atlas.marketplace.model import parse_outside
 from atlas.marketplace.sources import home_name, registry_item, registry_order, skill_folder
 from atlas.plugins import Plugins
 from atlas.secrets import Vault
 from atlas.skills import SkillLibrary
 from fake_github import GIT, FakeGitHub
-from marketplace_support import MARKETPLACE, Repository, marketplace, skill_text
+from marketplace_support import (
+    MARKETPLACE,
+    Repository,
+    marketplace,
+    plugin_files,
+    skill_text,
+)
 
 pytestmark = pytest.mark.skipif(GIT is None, reason="the fake GitHub serves git repositories")
 
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
+#: Claude Code's plugin directory, as the tests serve it.
+DIRECTORY = "atlas-test/plugins-directory"
 
 
 def server(name: str, updated: str = "2026-11-01", **fields: Any) -> dict[str, Any]:
@@ -219,6 +230,7 @@ def _market(
         registry_url=github.registry_url,
         skills_url=github.skills_url,
         github_api_url=github.github_api_url,
+        claude_plugins=DIRECTORY,
     )
     return Marketplace(
         home,
@@ -477,3 +489,132 @@ def test_when_skills_sh_breaks_its_last_list_stands_in_and_says_so(
     assert any("its list read on 2026-11-04 stands in" in p for p in listing.source_problems)
     searched = market.listing(query="pdf").source_problems
     assert any(p.startswith("skills.sh could not be searched:") for p in searched)
+
+
+# -- Claude Code's plugin directory ----------------------------------------------------------------
+
+
+def _directory(tmp_path: Path, github: FakeGitHub) -> str:
+    """The directory with three plugins: one in its own folders with no manifest, one in a
+    repository of its own pinned to a commit, and one outside GitHub; the pinned one's commit."""
+    remote = Repository(tmp_path, "someone/remote-tool", github)
+    files = plugin_files("remote-tool")
+    files["bin/tool.exe"] = "MZ compiled"
+    sha = remote.write(files).commit()
+    catalog = {
+        "name": "claude-plugins-official",
+        "plugins": [
+            {
+                "name": "notes",
+                "description": "Notes for every project.",
+                "author": {"name": "Example"},
+                "source": "./plugins/notes",
+            },
+            {
+                "name": "remote-tool",
+                "description": "A tool of its own repository.",
+                "source": {
+                    "source": "url",
+                    "url": "https://github.com/someone/remote-tool.git",
+                    "sha": sha,
+                },
+            },
+            {
+                "name": "elsewhere",
+                "description": "Kept outside GitHub.",
+                "source": {"source": "url", "url": "https://gitlab.example.com/x/y.git"},
+            },
+        ],
+    }
+    directory = Repository(tmp_path, DIRECTORY, github)
+    directory.write(
+        {
+            ".claude-plugin/marketplace.json": json.dumps(catalog),
+            "plugins/notes/skills/take-notes/SKILL.md": skill_text("take-notes"),
+            "plugins/notes/README.md": "# Notes",
+        }
+    ).commit()
+    return sha
+
+
+def test_the_directory_s_plugins_are_listed_searched_and_one_outside_github_says_why(
+    home: Home, vault: Vault, github: FakeGitHub, tmp_path: Path
+) -> None:
+    marketplace(tmp_path, github, {})
+    _directory(tmp_path, github)
+    market = _market(home, vault, github)
+
+    rows = [row for row in market.listing().rows if row.source is Source.CLAUDE_PLUGINS]
+    assert [(row.name, row.kind) for row in rows] == [
+        ("claude-plugins:elsewhere", Kind.PLUGIN),
+        ("claude-plugins:notes", Kind.PLUGIN),
+        ("claude-plugins:remote-tool", Kind.PLUGIN),
+    ]
+    assert rows[0].problem == "Atlas installs plugins from GitHub only."
+    assert rows[1].author == "Example"
+    found = market.listing(query="project notes").rows
+    assert [r.name for r in found if r.source is Source.CLAUDE_PLUGINS] == ["claude-plugins:notes"]
+
+
+def test_a_directory_plugin_with_no_manifest_arrives_off_from_the_directory_s_commit(
+    home: Home, vault: Vault, github: FakeGitHub, tmp_path: Path
+) -> None:
+    marketplace(tmp_path, github, {})
+    _directory(tmp_path, github)
+    market = _market(home, vault, github)
+    name = "claude-plugins:notes"
+
+    done = market.install(name)
+
+    assert done.row.state is State.OFF
+    assert (home.plugins_folder / "notes" / "skills" / "take-notes" / "SKILL.md").is_file()
+    assert market.store.records()[name].target == "notes"
+    market.remove(name)
+    assert not (home.plugins_folder / "notes").exists()
+
+
+def test_what_the_nightly_check_finds_marks_a_plugin_that_does_not_work_in_atlas(
+    home: Home, vault: Vault, github: FakeGitHub, tmp_path: Path
+) -> None:
+    store = marketplace(tmp_path, github, {})
+    _directory(tmp_path, github)
+    market = _market(home, vault, github)
+    sources = market.sources
+    assert sources is not None
+
+    found = check_outside(sources, market.store)
+
+    assert set(found) == {"claude-plugins:elsewhere", "claude-plugins:remote-tool"}
+    assert "compiled" in found["claude-plugins:remote-tool"]
+    text = outside_text(found)
+    assert parse_outside(text) == found
+    store.write({"outside.yaml": text}).commit("The nightly check")
+    market.listing(refresh=True)
+    assert market.row("claude-plugins:remote-tool").problem == (
+        f"It does not work in Atlas: {found['claude-plugins:remote-tool']}"
+    )
+    with pytest.raises(MarketplaceError, match="does not work in Atlas"):
+        market.install("claude-plugins:remote-tool")
+
+
+def test_the_terminal_writes_the_nightly_check_s_file(
+    home: Home, github: FakeGitHub, tmp_path: Path
+) -> None:
+    marketplace(tmp_path, github, {})
+    _directory(tmp_path, github)
+    out = tmp_path / "outside.yaml"
+    environ = {
+        "ATLAS_HOME": str(home.root),
+        "ATLAS_MARKETPLACE_REPOSITORY": MARKETPLACE,
+        "ATLAS_MARKETPLACE_ARCHIVE_URL": github.archive_url,
+        "ATLAS_MARKETPLACE_RAW_URL": github.raw_url,
+        "ATLAS_MARKETPLACE_GITHUB_API_URL": github.github_api_url,
+        "ATLAS_MARKETPLACE_CLAUDE_PLUGINS": DIRECTORY,
+    }
+
+    assert main(["marketplace", "outside", "--out", str(out)], environ) == 0
+
+    assert set(parse_outside(out.read_text("utf-8"))) == {
+        "claude-plugins:elsewhere",
+        "claude-plugins:remote-tool",
+    }

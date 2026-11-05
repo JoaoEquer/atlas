@@ -38,6 +38,8 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Literal, cast
 
+import yaml
+
 from atlas.home import Home, format_utc, utc_now
 from atlas.marketplace.errors import MarketplaceError
 from atlas.marketplace.model import (
@@ -286,6 +288,7 @@ class Marketplace:
                 if item.name in listed or (retired is not None and item.name not in records):
                     continue
                 listed.add(item.name)
+                item = _marked(item, index)
                 outside.append(self._row(item, records.get(item.name), views, servers))
         for record in records.values():
             if record.name not in listed and record.name not in shipped:
@@ -466,6 +469,7 @@ class Marketplace:
         except MarketplaceError:
             item = None
         if item is not None:
+            item = _marked(item, self.index()[0])
             return self._row(item, records.get(name), views, servers)
         record = records.get(name)
         if record is None:
@@ -481,6 +485,7 @@ class Marketplace:
         item = self._item(index, name)
         if item is None:
             raise MarketplaceError(f"The marketplace has no item {name}.")
+        item = _marked(item, index)
         retired = index.retired_for(item) if index is not None else None
         if retired is not None:
             raise MarketplaceError(f"{name} was retired from the marketplace: {retired.reason}")
@@ -552,7 +557,8 @@ class Marketplace:
 
     def _put_plugin(self, item: Item, *, replacing: bool) -> list[str]:
         with self.store.archive(item.repo, item.sha) as root:
-            folder = _named(subfolder(root, item.path), item.name)
+            outside = item.source is not Source.ATLAS
+            folder = _named(subfolder(root, item.path), item.home_name, optional=outside)
             found = read_plugin(folder, bundled=False)
             problem = plugin_problem(found, item)
             if problem is not None:
@@ -568,7 +574,7 @@ class Marketplace:
             )
             try:
                 place_plugin(
-                    self.plugins, folder, record, replacing=item.name if replacing else None
+                    self.plugins, folder, record, replacing=item.home_name if replacing else None
                 )
             except PluginError as error:
                 raise MarketplaceError(str(error)) from error
@@ -614,9 +620,9 @@ class Marketplace:
                     raise MarketplaceError(str(error)) from error
         elif record.kind is Kind.MCP:
             self.mcp.drop(record.home_name)
-        elif (self.plugins.folder / record.name).is_dir():
+        elif (self.plugins.folder / record.home_name).is_dir():
             try:
-                remove_plugin(self.plugins, record.name)
+                remove_plugin(self.plugins, record.home_name)
             except PluginError as error:
                 raise MarketplaceError(str(error)) from error
 
@@ -625,7 +631,7 @@ class Marketplace:
             return (self.library.folder / record.home_name).is_dir()
         if record.kind is Kind.MCP:
             return record.home_name in self.mcp.servers()
-        return (self.plugins.folder / record.name).is_dir()
+        return (self.plugins.folder / record.home_name).is_dir()
 
     def _changed_here(self, record: Record) -> bool:
         if record.kind is Kind.SKILL:
@@ -648,7 +654,7 @@ class Marketplace:
         views: dict[str, PluginView],
         servers: Collection[str],
     ) -> Row:
-        state, problem = self._state(item.name, item.kind, record, views, servers)
+        state, problem = self._state(item.home_name, item.kind, record, views, servers)
         if state is State.AVAILABLE and problem is None:
             problem = self._taken(item, views, servers) or item.problem
         if state in (State.INSTALLED, State.ON) and item.kind is Kind.MCP:
@@ -686,7 +692,7 @@ class Marketplace:
     def _unlisted(
         self, record: Record, views: dict[str, PluginView], servers: Collection[str]
     ) -> Row:
-        state, problem = self._state(record.name, record.kind, record, views, servers)
+        state, problem = self._state(record.home_name, record.kind, record, views, servers)
         return Row(
             name=record.name,
             kind=record.kind,
@@ -732,8 +738,8 @@ class Marketplace:
             return f"You have a skill named {item.home_name} already."
         if item.kind is Kind.MCP and item.home_name in servers:
             return f"Your mcp.json has a server named {item.home_name} already."
-        if item.kind.has_code and item.kind is not Kind.SKILL and item.name in views:
-            return f"You have a plugin named {item.name} already."
+        if item.kind.has_code and item.kind is not Kind.SKILL and item.home_name in views:
+            return f"You have a plugin named {item.home_name} already."
         return None
 
     def _shipped(self, views: dict[str, PluginView]) -> list[Row]:
@@ -831,6 +837,15 @@ def _refuse_threats(name: str, files: Mapping[PurePosixPath, bytes]) -> None:
             raise MarketplaceError(f"{name} was refused: {path} holds {hits[0]}.")
 
 
+def _marked(item: Item, index: Index | None) -> Item:
+    """An outside item as the marketplace's nightly check found it: one that does not work in
+    Atlas says why, and does not install."""
+    reason = index.incompatible.get(item.name) if index is not None else None
+    if reason is None:
+        return item
+    return replace(item, problem=f"It does not work in Atlas: {reason}")
+
+
 def _outside(name: str) -> bool:
     """Whether a name is an outside source's item, `<source>:<its id>`."""
     return ":" in name
@@ -865,8 +880,8 @@ def plugin_problem(found: Found, item: Item) -> str | None:
     manifest = found.manifest
     if manifest is None:
         return f"{item.name} cannot be read as a plugin: {found.problem}"
-    if found.name != item.name:
-        return f"The plugin is named {found.name}, not {item.name} as its item says."
+    if found.name != item.home_name:
+        return f"The plugin is named {found.name}, not {item.home_name} as its item says."
     if manifest.api > API_VERSION:
         return (
             f"{item.name} was written for a newer Atlas (SDK {manifest.api}; this one is "
@@ -934,6 +949,40 @@ def check(
     return problems
 
 
+def check_outside(sources: Sources, store: MarketplaceStore) -> dict[str, str]:
+    """The plugins of Claude Code's directory that do not work in Atlas, by name, with why
+    (`atlas marketplace outside`, the marketplace's nightly check, step 24): each fetched at the
+    commit it would install from and read as Atlas reads a plugin, none of its code run. Raises
+    `MarketplaceError` when the directory cannot be read."""
+    found: dict[str, str] = {}
+    for listed in sources.plugins():
+        if listed.problem is not None:
+            found[listed.name] = listed.problem
+            continue
+        try:
+            item = sources.item(listed.name) or listed
+            with store.archive(item.repo, item.sha) as code:
+                folder = _named(subfolder(code, item.path), item.home_name, optional=True)
+                problem = plugin_problem(read_plugin(folder, bundled=False), item)
+                if problem is not None:
+                    raise MarketplaceError(problem)
+                _refuse_compiled(folder)
+        except MarketplaceError as error:
+            found[listed.name] = str(error).splitlines()[0]
+    return found
+
+
+def outside_text(found: Mapping[str, str]) -> str:
+    """`outside.yaml` for what `check_outside` found, by name."""
+    entries = [{"name": name, "reason": found[name]} for name in sorted(found)]
+    head = (
+        "# Written by `atlas marketplace outside`: the outside items that do not work in Atlas.\n"
+    )
+    return head + (
+        yaml.safe_dump(entries, sort_keys=False, allow_unicode=True) if entries else "[]\n"
+    )
+
+
 def shipped_names() -> set[str]:
     """The names of what Atlas ships, which no item of the marketplace may take."""
     names = set(bundled_skills())
@@ -941,16 +990,21 @@ def shipped_names() -> set[str]:
     return names
 
 
-def _named(folder: Path, name: str) -> Path:
+def _named(folder: Path, name: str, *, optional: bool = False) -> Path:
     """The plugin in `folder`, copied beside it into a folder named `name`: Atlas reads a plugin
     only in a folder of its own name, and an archive's folder is named otherwise. Raises
-    `MarketplaceError` when its manifest names it otherwise, or there is none to name it."""
+    `MarketplaceError` when its manifest names it otherwise, or there is none to name it; an
+    outside catalog names its plugins itself, so for one of them (`optional`) the manifest may be
+    missing, as Claude Code allows."""
     try:
         data: object = json.loads((folder / MANIFEST).read_text(encoding="utf-8"))
     except FileNotFoundError as error:
-        raise MarketplaceError(
-            f"{name} has no {MANIFEST}: a plugin of the marketplace names itself there."
-        ) from error
+        if optional:
+            data = {"name": name}
+        else:
+            raise MarketplaceError(
+                f"{name} has no {MANIFEST}: a plugin of the marketplace names itself there."
+            ) from error
     except (OSError, ValueError) as error:
         raise MarketplaceError(f"{name}'s {MANIFEST} cannot be read: {error}") from error
     said = cast("dict[str, object]", data).get("name") if isinstance(data, dict) else None

@@ -25,6 +25,8 @@ from atlas.marketplace.service import (
     Row,
     SecretState,
     check,
+    check_outside,
+    outside_text,
     shipped_names,
 )
 from atlas.marketplace.sources import Sources, outside_sources
@@ -53,8 +55,10 @@ __all__ = [
     "State",
     "Tier",
     "check",
+    "check_outside",
     "fetch",
     "outside_sources",
+    "outside_text",
     "parse_item",
     "parse_meta",
     "parse_removed",

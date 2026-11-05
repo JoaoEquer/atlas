@@ -83,10 +83,11 @@ An unknown key in `config.toml` stops Atlas with an error, so a typo never passe
 | `branch` | text | `"main"` | `ATLAS_MARKETPLACE_BRANCH` | The branch Atlas reads it from. |
 | `archive_url` | text | `"https://codeload.github.com/{repo}/tar.gz/{ref}"` | `ATLAS_MARKETPLACE_ARCHIVE_URL` | Where a repository's archive is fetched, with `{repo}` and `{ref}`: a mirror's address, or a test's. |
 | `raw_url` | text | `"https://raw.githubusercontent.com/{repo}/{ref}/{path}"` | `ATLAS_MARKETPLACE_RAW_URL` | Where one file of a repository is read, with `{repo}`, `{ref}` and `{path}`. |
-| `outside` | `true` or `false` | `true` | `ATLAS_MARKETPLACE_OUTSIDE` | List what the outside catalogs offer beside the marketplace (step 24): the MCP Registry and skills.sh. |
+| `outside` | `true` or `false` | `true` | `ATLAS_MARKETPLACE_OUTSIDE` | List what the outside catalogs offer beside the marketplace (step 24): the MCP Registry, Claude Code's plugin directory and skills.sh. |
 | `registry_url` | text | `"https://registry.modelcontextprotocol.io/v0/servers"` | `ATLAS_MARKETPLACE_REGISTRY_URL` | Where the MCP Registry's list of servers is read. |
 | `skills_url` | text | `"https://skills.sh/api/search"` | `ATLAS_MARKETPLACE_SKILLS_URL` | Where skills.sh is searched. |
-| `github_api_url` | text | `"https://api.github.com"` | `ATLAS_MARKETPLACE_GITHUB_API_URL` | Where GitHub's API is reached, to pin a skill of skills.sh to its repository's commit. |
+| `github_api_url` | text | `"https://api.github.com"` | `ATLAS_MARKETPLACE_GITHUB_API_URL` | Where GitHub's API is reached, to pin an outside item to its repository's commit. |
+| `claude_plugins` | text | `"anthropics/claude-plugins-official"` | `ATLAS_MARKETPLACE_CLAUDE_PLUGINS` | Claude Code's plugin directory on GitHub, `owner/name`, whose catalog is read at its branch. |
 
 ## [voice]
 

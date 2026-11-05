@@ -9,6 +9,12 @@ and no copy, beside its own repository.
   with why, and does not install. What a server asks for (an environment variable, a header, a
   part of its address) becomes a secret the vault holds; a remote one that signs in with OAuth
   gets the Sign in button as any other.
+- **Claude Code's plugin directory** (`anthropics/claude-plugins-official`), in the format
+  Atlas's plugins already have, many by the service's own maker. Its catalog is read at its branch,
+  at most once an hour, and searched here; a plugin installs from its repository at the commit the
+  catalog pins, or, when it pins none, at the one its branch is on then, and arrives off, as every
+  plugin. Atlas's marketplace marks the ones that do not work in Atlas (`outside.yaml`), which do
+  not install.
 - **skills.sh**, whose search gives each skill's installs. Opening the tab is one search (the most
   installed for "skill"), and each search another; its API is not documented, so the last opening
   list read is kept, and stands in, said, when the search breaks. A skill installs from its GitHub
@@ -60,6 +66,14 @@ SKILLS_LIMIT = 60
 HEAD_STALE = timedelta(hours=1)
 #: Where the last opening list of skills.sh is kept, in the marketplace's folder.
 SKILLS_FILE = "skills-sh.json"
+#: The catalog in Claude Code's plugin directory.
+CLAUDE_PLUGINS_FILE = ".claude-plugin/marketplace.json"
+#: Where the last catalog of Claude Code's plugin directory read is kept, and how long it stands.
+PLUGINS_FILE = "claude-plugins.json"
+PLUGINS_STALE = timedelta(hours=1)
+_GITHUB_URL = re.compile(
+    r"^https://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}?)(?:\.git)?/?$"
+)
 _REPOSITORY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$")
 
 _REGISTRY_META = "io.modelcontextprotocol.registry/official"
@@ -87,6 +101,10 @@ def outside_sources(
         registry_url=settings.registry_url,
         skills_url=settings.skills_url,
         github_api_url=settings.github_api_url,
+        plugins_url=settings.raw_url.format(
+            repo=settings.claude_plugins, ref="main", path=CLAUDE_PLUGINS_FILE
+        ),
+        plugins_repository=settings.claude_plugins,
         folder=folder,
     )
 
@@ -287,6 +305,19 @@ def _author(namespace: str) -> str:
     return ".".join(reversed(namespace.split(".")))
 
 
+def _matching(items: list[Item], query: str) -> list[Item]:
+    """The items whose name, title, summary or author hold every word of `query`."""
+    words = query.lower().split()
+    return [
+        item
+        for item in items
+        if all(
+            word in f"{item.name} {item.title} {item.summary} {item.author}".lower()
+            for word in words
+        )
+    ]
+
+
 def _text(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
@@ -371,6 +402,76 @@ def skill_folder(tree: bytes, own: str) -> str | None:
     return "" if "SKILL.md" in paths else None
 
 
+# -- Claude Code's plugin directory --------------------------------------------------------------
+
+
+def plugins_items(data: bytes, repository: str) -> list[Item]:
+    """The plugins of the directory's catalog, by name. Raises `MarketplaceError` when it is
+    not one."""
+    try:
+        document: object = json.loads(data)
+    except ValueError as error:
+        raise MarketplaceError(f"The plugin directory answered something else: {error}") from error
+    fields: Mapping[str, Any] = (
+        cast("Mapping[str, Any]", document) if isinstance(document, Mapping) else {}
+    )
+    plugins = fields.get("plugins")
+    if not isinstance(plugins, list):
+        raise MarketplaceError("The plugin directory lists no plugins.")
+    found = [plugins_item(entry, repository) for entry in cast("list[object]", plugins)]
+    return sorted((item for item in found if item is not None), key=lambda item: item.title.lower())
+
+
+def plugins_item(entry: object, repository: str) -> Item | None:
+    """One plugin of the directory as an item: its repository, its folder in it, and the commit
+    the catalog pins (none when it pins none)."""
+    if not isinstance(entry, Mapping):
+        return None
+    fields = cast("Mapping[str, Any]", entry)
+    name = _text(fields.get("name"))
+    if not name:
+        return None
+    source = fields.get("source")
+    repo, sha, path, problem = repository, "", "", None
+    if isinstance(source, str):
+        path = source.removeprefix("./").strip("/")
+    elif isinstance(source, Mapping):
+        source = cast("Mapping[str, Any]", source)
+        match = _GITHUB_URL.match(_text(source.get("url")))
+        if match is None:
+            repo, problem = "", "Atlas installs plugins from GitHub only."
+        else:
+            repo = match.group(1)
+        sha = _text(source.get("sha"))
+        path = _text(source.get("path")).strip("/")
+    else:
+        return None
+    if path and (".." in path.split("/") or not re.fullmatch(r"[A-Za-z0-9._/-]+", path)):
+        problem = "Its folder is not one Atlas reads."
+    if not NAME.fullmatch(name):
+        problem = f"Its name, {name}, cannot be a plugin's name here."
+    author: object = fields.get("author")
+    homepage = _text(fields.get("homepage"))
+    return Item(
+        name=f"{Source.CLAUDE_PLUGINS.value}:{name}",
+        kind=Kind.PLUGIN,
+        title=name[:TITLE_CHARS],
+        summary=_cut(" ".join(_text(fields.get("description")).split()), SUMMARY_CHARS),
+        author=_text(cast("Mapping[str, Any]", author).get("name"))
+        if isinstance(author, Mapping)
+        else "",
+        license="",
+        version=_text(fields.get("version")),
+        repo=repo,
+        sha=sha if COMMIT.fullmatch(sha) else "",
+        path=path,
+        homepage=homepage if homepage.startswith("https://") else "",
+        source=Source.CLAUDE_PLUGINS,
+        target=name,
+        problem=problem,
+    )
+
+
 # -- reading them ---------------------------------------------------------------------------------
 
 
@@ -392,13 +493,19 @@ class Sources:
         registry_url: str,
         skills_url: str,
         github_api_url: str,
+        plugins_url: str = "",
+        plugins_repository: str = "",
         folder: Path | None = None,
     ) -> None:
         self._get = get
         self._registry = registry_url
         self._skills = skills_url
         self._github = github_api_url.rstrip("/")
+        self._plugins_url = plugins_url
+        self._plugins_repository = plugins_repository
         self._folder = folder
+        #: The directory's catalog as last read, and when.
+        self._plugins: tuple[list[Item], datetime] | None = None
         #: Each repository's newest commit as last read, and when.
         self._heads: dict[str, tuple[str, datetime]] = {}
 
@@ -412,6 +519,12 @@ class Sources:
         except MarketplaceError as error:
             _logger.warning("The MCP Registry could not be read: %s", error)
             problems.append(f"The MCP Registry could not be read: {error}")
+        if self._plugins_url:
+            try:
+                items += _matching(self._plugins_read(now), query)
+            except MarketplaceError as error:
+                _logger.warning("The plugin directory could not be read: %s", error)
+                problems.append(f"Claude Code's plugin directory could not be read: {error}")
         try:
             items += self._skills_read(query, now)
         except MarketplaceError as error:
@@ -427,9 +540,20 @@ class Sources:
                 )
         return Found(items, problems)
 
+    def plugins(self) -> list[Item]:
+        """Every plugin of Claude Code's directory, its catalog read now. Raises
+        `MarketplaceError`."""
+        self._plugins = None
+        return self._plugins_read(None) if self._plugins_url else []
+
     def revision(self, item: Item, now: datetime) -> str | None:
         """The commit an outside skill would install from now, read at most once an hour per
         repository; `None` when GitHub cannot say."""
+        if item.source is Source.CLAUDE_PLUGINS and not item.sha and item.repo:
+            try:
+                return self._head(item.repo, now)
+            except MarketplaceError:
+                return None
         if item.source is not Source.SKILLS_SH:
             return None
         try:
@@ -457,7 +581,42 @@ class Sources:
             return found if found is not None and found.name == name else None
         if source == Source.SKILLS_SH.value and own.count("/") >= 2:
             return self._skill(name, own)
+        if source == Source.CLAUDE_PLUGINS.value and self._plugins_url:
+            listed = next((i for i in self._plugins_read(None) if i.name == name), None)
+            if listed is None or listed.sha or listed.problem is not None:
+                return listed
+            return replace(listed, sha=self._head(listed.repo, None))
         return None
+
+    def _plugins_read(self, now: datetime | None) -> list[Item]:
+        """The directory's catalog: as last read within the hour, read again, or kept from the
+        last read well when it cannot be read."""
+        if self._plugins is not None and (now is None or now - self._plugins[1] < PLUGINS_STALE):
+            return self._plugins[0]
+        try:
+            data = self._get(self._plugins_url, SOURCE_BYTES)
+            if data is None:
+                raise MarketplaceError("The plugin directory's catalog is not there.")
+            items = plugins_items(data, self._plugins_repository)
+        except MarketplaceError:
+            kept = self._kept(PLUGINS_FILE)
+            if kept is None:
+                raise
+            return plugins_items(kept.encode("utf-8"), self._plugins_repository)
+        if self._folder is not None:
+            self._folder.mkdir(parents=True, exist_ok=True)
+            replace_file(self._folder / PLUGINS_FILE, data)
+        if now is not None:
+            self._plugins = (items, now)
+        return items
+
+    def _kept(self, file: str) -> str | None:
+        if self._folder is None:
+            return None
+        try:
+            return (self._folder / file).read_text(encoding="utf-8")
+        except OSError:
+            return None
 
     def _skill(self, name: str, own: str) -> Item | None:
         owner, repo_name, skill = own.split("/", 2)

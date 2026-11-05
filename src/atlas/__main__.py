@@ -127,8 +127,10 @@ from atlas.marketplace import (
     Row,
     Source,
     State,
+    check_outside,
     fetch,
     outside_sources,
+    outside_text,
     shipped_names,
 )
 from atlas.marketplace import check as check_marketplace
@@ -638,6 +640,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also load each plugin's Python, in a home thrown away after: only where foreign "
         "code may run, as the marketplace's CI.",
+    )
+
+    market_outside = market_actions.add_parser(
+        "outside",
+        help="Check every plugin of Claude Code's directory as Atlas reads one, running none, and "
+        "write what does not work in Atlas, as the marketplace's nightly check does.",
+    )
+    market_outside.add_argument(
+        "--out", type=Path, help="Write outside.yaml here; by default, print it."
     )
 
     pairing = commands.add_parser("pairing", help="Who may talk to Atlas through a channel.")
@@ -1907,6 +1918,18 @@ def _marketplace(args: argparse.Namespace, home: Home, settings: Settings, vault
         else:
             sys.stdout.write("No items yet: the marketplace's own files read well.\n")
         return 1 if lines else 0
+    if action == "outside":
+        sources = outside_sources(settings.marketplace, fetch)
+        if sources is None:
+            sys.stdout.write("The outside sources are off ([marketplace] outside = false).\n")
+            return 1
+        text = outside_text(check_outside(sources, store))
+        out: Path | None = args.out
+        if out is None:
+            sys.stdout.write(text)
+        else:
+            out.write_bytes(text.encode("utf-8"))
+        return 0
     database = _migrate(home)
     market = Marketplace(
         home,

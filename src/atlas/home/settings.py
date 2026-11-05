@@ -37,6 +37,7 @@ from atlas.home.errors import SettingsError
 from atlas.home.files import replace_file
 from atlas.home.model import (
     ARCHIVE_URL,
+    CLAUDE_PLUGINS_REPOSITORY,
     CONFIG_FILE,
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -166,6 +167,7 @@ def _settings(home: Path, source: "_Source") -> LoadedSettings:
             registry_url=source.text("marketplace", "registry_url", REGISTRY_URL),
             skills_url=source.text("marketplace", "skills_url", SKILLS_URL),
             github_api_url=source.text("marketplace", "github_api_url", GITHUB_API_URL),
+            claude_plugins=source.text("marketplace", "claude_plugins", CLAUDE_PLUGINS_REPOSITORY),
         ),
         voice=VoiceSettings(
             transcription=source.one_of(

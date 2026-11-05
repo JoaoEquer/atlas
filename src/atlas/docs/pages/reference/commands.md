@@ -801,6 +801,18 @@ atlas marketplace check [items ...] [--root ROOT] [--load]
 | `--root ROOT` | The marketplace's folder; by default this one. |
 | `--load` | Also load each plugin's Python, in a home thrown away after: only where foreign code may run, as the marketplace's CI. |
 
+### `atlas marketplace outside`
+
+Check every plugin of Claude Code's directory as Atlas reads one, running none, and write what does not work in Atlas, as the marketplace's nightly check does.
+
+```
+atlas marketplace outside [--out OUT]
+```
+
+| Argument | What it does |
+|---|---|
+| `--out OUT` | Write outside.yaml here; by default, print it. |
+
 ## `atlas pairing`
 
 Who may talk to Atlas through a channel.

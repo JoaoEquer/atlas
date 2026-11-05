@@ -3081,6 +3081,22 @@ people made for Atlas, a tab per kind, the Atlas team's items marked, a page per
     has already refuses it, as for the marketplace's own. Installing reads its entry again from
     the registry, so what installs is its latest version, and works while Atlas's own repository
     cannot be read.
+  - **Claude Code's plugin directory** (`anthropics/claude-plugins-official`,
+    `[marketplace] claude_plugins`), in the format Atlas's plugins already have: its catalog
+    (`.claude-plugin/marketplace.json`) read at its branch at most once an hour, the last read well
+    kept (`marketplace/claude-plugins.json`) and standing in, and searched here by its words. A
+    plugin installs from its GitHub repository (a folder of the directory's own, a repository, or a
+    folder of one) at the commit the catalog pins, or the one its branch is on then, through the
+    marketplace's own plugin install (the folder named, nothing compiled, `read_plugin`), its
+    manifest optional as Claude Code allows, and arrives off: turning it on is the consent. One
+    outside GitHub is listed with why.
+  - **What does not work in Atlas** (the twelve with a language server, say): `atlas marketplace
+    outside` fetches every plugin of the directory at the commit it would install from and reads
+    it as Atlas reads a plugin, running none of it, and writes what fails, with why, as
+    `outside.yaml`; the marketplace's repository runs it each night and keeps only that file (no
+    code of anyone's is copied). Atlas reads it with the marketplace, and such a card says "It does
+    not work in Atlas" and does not install. A broken `outside.yaml` is left out, logged: it only
+    marks cards, where a broken `removed.yaml` refuses the whole.
   - **skills.sh** (`[marketplace] skills_url`), whose search says each skill's installs: opening
     the tab searches for "skill" (its search needs two characters), the most installed first, and
     each search is another. Its API is not documented, so the last opening list read is kept

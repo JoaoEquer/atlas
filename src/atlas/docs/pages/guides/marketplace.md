@@ -64,6 +64,9 @@ it: nothing there was reviewed for Atlas, and each card says where it comes from
   it. A server that signs you in with your account shows **Sign in** once installed.
 - It takes a short name in your `mcp.json` (`stripe`, `notes-mcp`); when you have a server by that
   name already, it does not install.
+- **Plugins, from Claude Code's plugin directory**, many of them by the service's own maker. A
+  plugin arrives turned off, as every plugin does; one the marketplace found does not work in
+  Atlas says so, and does not install.
 - **Skills, from skills.sh**, with how many times each was installed, the most installed first. A
   skill installs from its GitHub repository as it is at that moment, and shows **Update** once its
   repository changed. Before it lands, Atlas reads its text for instructions meant to take over the

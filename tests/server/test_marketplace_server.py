@@ -67,6 +67,9 @@ def test_the_app_installs_from_the_marketplace_and_every_client_hears_it(
                 },
             }
         ]
+        Repository(tmp_path, "atlas-test/plugins-directory", github).write(
+            {".claude-plugin/marketplace.json": '{"plugins": []}'}
+        ).commit()
         tools = Repository(tmp_path, "someone/tools", github)
         sha = tools.write(
             {"pdf/SKILL.md": skill_text("pdf", requires={"mcp": ["docs"]}, body="Read PDFs.")}
@@ -94,6 +97,7 @@ def test_the_app_installs_from_the_marketplace_and_every_client_hears_it(
                 registry_url=github.registry_url,
                 skills_url=github.skills_url,
                 github_api_url=github.github_api_url,
+                claude_plugins="atlas-test/plugins-directory",
             ),
         )
         with (
