@@ -641,6 +641,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also load each plugin's Python, in a home thrown away after: only where foreign "
         "code may run, as the marketplace's CI.",
     )
+    market_check.add_argument(
+        "--base",
+        type=Path,
+        help="The marketplace as it is on its branch: refuse what only its owner changes (an "
+        "official mark, removed.yaml, outside.yaml), for a pull request of someone else.",
+    )
 
     market_outside = market_actions.add_parser(
         "outside",
@@ -1904,7 +1910,7 @@ def _marketplace(args: argparse.Namespace, home: Home, settings: Settings, vault
         root: Path = args.root
         items: list[Path] = args.items or sorted((root / "items").glob("*.yaml"))
         problems = check_marketplace(
-            items, store, root=root, shipped=shipped_names(), load=args.load
+            items, store, root=root, shipped=shipped_names(), load=args.load, base=args.base
         )
         lines = [line for problem in problems for line in problem.splitlines()]
         for line in lines:

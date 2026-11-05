@@ -792,7 +792,7 @@ atlas marketplace remove name
 Check item files as the marketplace's CI does: each by its rules, its code fetched at its commit.
 
 ```
-atlas marketplace check [items ...] [--root ROOT] [--load]
+atlas marketplace check [items ...] [--root ROOT] [--load] [--base BASE]
 ```
 
 | Argument | What it does |
@@ -800,6 +800,7 @@ atlas marketplace check [items ...] [--root ROOT] [--load]
 | `[items ...]` | Item files; by default every one in the folder's items. |
 | `--root ROOT` | The marketplace's folder; by default this one. |
 | `--load` | Also load each plugin's Python, in a home thrown away after: only where foreign code may run, as the marketplace's CI. |
+| `--base BASE` | The marketplace as it is on its branch: refuse what only its owner changes (an official mark, removed.yaml, outside.yaml), for a pull request of someone else. |
 
 ### `atlas marketplace outside`
 

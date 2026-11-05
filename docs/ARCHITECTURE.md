@@ -3047,6 +3047,10 @@ people made for Atlas, a tab per kind, the Atlas team's items marked, a page per
 - **The marketplace's own CI** runs `atlas marketplace check --load` on each pull request: every
   item read by these rules, its code fetched at its commit and checked for its kind, and a plugin's
   Python loaded in a home thrown away after (only there: `check` without `--load` runs nothing).
+  For a pull request of someone other than the owner, `--base` (the marketplace as on its branch)
+  also refuses what only the owner changes (step 24): an item marked official, `removed.yaml` and
+  `outside.yaml`. The workflows that use it, a check with no secret and a merge that runs none of
+  the pull request's code, live in the marketplace's repository.
 - **The screen:** a Marketplace entry in the sidebar opens it in the main area: a search, a tab per
   kind with its count, the Atlas team's items before the community's, a card each, and a page with
   the README at the commit (a skill's own `SKILL.md`, which is what the model reads; an MCP server's

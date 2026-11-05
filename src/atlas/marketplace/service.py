@@ -45,6 +45,7 @@ from atlas.marketplace.errors import MarketplaceError
 from atlas.marketplace.model import (
     ITEMS_FOLDER,
     META_FILE,
+    OUTSIDE_FILE,
     PLUGIN_MARKS,
     REMOVED_FILE,
     Index,
@@ -901,13 +902,20 @@ def check(
     root: Path | None = None,
     shipped: Collection[str] = (),
     load: bool = False,
+    base: Path | None = None,
 ) -> list[str]:
     """What keeps the item files at `paths` out of the marketplace, a line each; empty when every
     one may enter (`atlas marketplace check`, its CI's gate). Each is read by the marketplace's
     rules, then its code is fetched at its commit and checked for its kind; with `load`, a
     plugin's Python is loaded as Atlas loads it, in a home thrown away after. `root` is the
-    marketplace's own folder, whose `marketplace.yaml` and `removed.yaml` are read too."""
+    marketplace's own folder, whose `marketplace.yaml` and `removed.yaml` are read too.
+
+    `base` is the marketplace as it is on its branch, for a pull request of someone other than its
+    owner (step 24): such a one may not mark an item official, nor change what was retired or what
+    the nightly check found (`removed.yaml`, `outside.yaml`), which the owner alone changes."""
     problems: list[str] = []
+    if base is not None and root is not None:
+        problems += _owner_only(root, base, paths)
     if root is not None:
         for file, parse in ((META_FILE, parse_meta), (REMOVED_FILE, parse_removed)):
             path = root / file
@@ -946,6 +954,33 @@ def check(
                     problems.extend(f"{where}: {line}" for line in validation.problems)
         except MarketplaceError as error:
             problems.append(f"{where}: {error}")
+    return problems
+
+
+def _owner_only(root: Path, base: Path, paths: Sequence[Path]) -> list[str]:
+    """What a pull request changed that only the marketplace's owner changes."""
+    problems: list[str] = []
+    for file in (REMOVED_FILE, OUTSIDE_FILE):
+        now, before = root / file, base / file
+        held = now.read_bytes() if now.is_file() else None
+        if held != (before.read_bytes() if before.is_file() else None):
+            problems.append(f"{file}: only the marketplace's owner changes it.")
+    for path in paths:
+        try:
+            item = parse_item(path.read_text(encoding="utf-8"), f"{ITEMS_FOLDER}/{path.name}")
+        except (MarketplaceError, OSError, UnicodeDecodeError):
+            continue
+        if item.tier is not Tier.OFFICIAL:
+            continue
+        was = base / ITEMS_FOLDER / path.name
+        try:
+            before = parse_item(was.read_text(encoding="utf-8"), f"{ITEMS_FOLDER}/{path.name}")
+        except (MarketplaceError, OSError, UnicodeDecodeError):
+            before = None
+        if before is None or before.tier is not Tier.OFFICIAL:
+            problems.append(
+                f"{ITEMS_FOLDER}/{path.name}: only the marketplace's owner marks an item official."
+            )
     return problems
 
 

@@ -737,3 +737,30 @@ def test_the_terminal_check_says_each_problem_and_fails(
     said = capsys.readouterr().out
     assert "items/bad.yaml: name must be lowercase" in said
     assert "2 items checked: 7 problems." in said
+
+
+def test_a_pull_request_of_someone_else_may_not_change_what_only_the_owner_does(
+    home: Home, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base, root = tmp_path / "main", tmp_path / "pull"
+    for folder in (base, root):
+        (folder / "items").mkdir(parents=True)
+        (folder / "marketplace.yaml").write_text("format: 1\nname: M\n", "utf-8")
+        _write_item(folder, {**entry("docs", "mcp"), "server": DOCS_SERVER, "secrets": DOCS_SECRET})
+    environ = {"ATLAS_HOME": str(home.root)}
+    check = ["marketplace", "check", "--root", str(root), "--base", str(base)]
+    assert main(check, dict(environ)) == 0, "a pull request that changes none of it passes"
+    capsys.readouterr()
+
+    _write_item(
+        root,
+        {**entry("docs", "mcp"), "server": DOCS_SERVER, "secrets": DOCS_SECRET, "tier": "official"},
+    )
+    (root / "removed.yaml").write_text("- name: other\n  reason: Taken down.\n", "utf-8")
+    (root / "outside.yaml").write_text("[]\n", "utf-8")
+    assert main(check, dict(environ)) == 1
+
+    said = capsys.readouterr().out
+    assert "items/docs.yaml: only the marketplace's owner marks an item official." in said
+    assert "removed.yaml: only the marketplace's owner changes it." in said
+    assert "outside.yaml: only the marketplace's owner changes it." in said
