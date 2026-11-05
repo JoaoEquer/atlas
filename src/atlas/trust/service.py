@@ -170,6 +170,18 @@ class ApprovalGate:
                     judged = await self._command(command, tool=ROUTINE_TOOL)
                     if judged is not None:
                         return judged
+            executor = arguments.get("executor")
+            if isinstance(executor, str) and executor.strip():
+                # It will run with nobody watching, with the harness's permissions: the user
+                # sees once where, which and how, and says yes (step 25).
+                mode = "its automatic mode" if arguments.get("auto") is True else "its own mode"
+                folder = arguments.get("folder")
+                target = f"{executor.strip()} in {folder}, in {mode}"
+                if arguments.get("workspace") is True:
+                    target += ", a new workspace each run"
+                return await self.ask_first(
+                    ROUTINE_TOOL, target, "a routine an outside executor runs with nobody watching"
+                )
         if tool.name in WRITE_TOOLS:
             path = arguments.get("path")
             refused = self._write(path)

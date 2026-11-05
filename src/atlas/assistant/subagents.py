@@ -135,6 +135,12 @@ class TaskWorkspaces(Protocol):
         """What the workspace at `folder` changed since it was made, in a line."""
         ...
 
+    async def finish(self, folder: Path, title: str, *, draft: bool) -> str:
+        """A routine's run's workspace once the run ended (step 25): archived when it changed
+        nothing; otherwise kept for the user and, with `draft`, its changes committed, sent and
+        opened as a draft pull request by the GitHub plugin. What became of it, in a line."""
+        ...
+
 
 @dataclass
 class _Child:

@@ -17,7 +17,7 @@ none.
 from typing import Any
 
 from atlas.agent import Tool
-from atlas.jobs import Creator, JobsError, Routine, Routines
+from atlas.jobs import Creator, JobsError, Routine, RoutineExecutor, Routines
 
 _ACTIONS = ("create", "list", "update", "pause", "resume", "remove", "run")
 
@@ -32,8 +32,10 @@ _DESCRIPTION = (
     "runs a shell command with no model, for a script or a check that needs no thinking: its "
     "output is what the user gets, and an empty output notifies nobody. A probe, beside a prompt "
     "and a repeating schedule, is a command run first with no model: the prompt runs only when "
-    "the probe prints something new, which it receives. Prefer updating a routine over making a "
-    "near-duplicate."
+    "the probe prints something new, which it receives. An executor (claude-code, codex...) with "
+    "a folder runs the prompt as its own session there instead of you; the user approves it once "
+    "when it is made, and a question it asks stops the run for the user. Prefer updating a "
+    "routine over making a near-duplicate."
 )
 
 _SCHEDULE = (
@@ -66,6 +68,9 @@ def cronjob_manage(routines: Routines, *, bot: str | None = None) -> Tool:
             probe = probe if isinstance(probe, str) else None
             if probe and bot is not None:
                 return "[Atlas: a bot's routine has no probe: a probe is a command, run as nobody.]"
+            executor = _executor(arguments)
+            if executor is not None and bot is not None:
+                return "[Atlas: a bot's routine runs on Atlas's model, never in an executor.]"
             if action == "create":
                 prompt = _optional(arguments.get("prompt"))
                 command = _optional(arguments.get("command"))
@@ -77,6 +82,7 @@ def cronjob_manage(routines: Routines, *, bot: str | None = None) -> Tool:
                     created_by=Creator.AGENT,
                     bot=bot,
                     probe=probe,
+                    executor=executor,
                 )
                 return f"Made routine {made.id} ({made.name}): {_line(made)}"
             if not isinstance(key, str) or not key.strip():
@@ -90,6 +96,7 @@ def cronjob_manage(routines: Routines, *, bot: str | None = None) -> Tool:
                     prompt=_optional(arguments.get("prompt")),
                     command=_optional(arguments.get("command")),
                     probe=probe,
+                    executor=executor,
                 )
                 return f"Updated {changed.id}: {_line(changed)}"
             if action == "pause":
@@ -136,6 +143,31 @@ def cronjob_manage(routines: Routines, *, bot: str | None = None) -> Tool:
                     "that prints unread mail. It may keep state in $ATLAS_PROBE_STATE. Empty on "
                     "update removes it.",
                 },
+                "executor": {
+                    "type": "string",
+                    "description": "With a prompt and a folder: the outside executor that runs it "
+                    "(claude-code, codex, gemini-cli). Empty on update gives it back to you.",
+                },
+                "folder": {
+                    "type": "string",
+                    "description": "With an executor: the project folder it works in, its whole "
+                    "path.",
+                },
+                "auto": {
+                    "type": "boolean",
+                    "description": "With an executor: run in its automatic mode, which asks "
+                    "nothing. Off, its first question stops the run for the user.",
+                },
+                "workspace": {
+                    "type": "boolean",
+                    "description": "With an executor: each run in a new workspace of the folder, "
+                    "for a routine that changes code; one that only reads works in the folder.",
+                },
+                "draft": {
+                    "type": "boolean",
+                    "description": "With a workspace: open a draft pull request of what a run "
+                    "changed (the GitHub plugin). Only when the user asks for it.",
+                },
             },
             "required": ["action"],
             "additionalProperties": False,
@@ -167,7 +199,24 @@ def _line(routine: Routine) -> str:
     last = "" if routine.last_status is None else f", last run {routine.last_status.value}"
     what = routine.prompt if routine.prompt is not None else f"command: {routine.command}"
     probe = "" if routine.probe is None else f" Woken by the probe: {routine.probe}"
-    return f"{routine.schedule.display}, {state}, {upcoming}{last}. {what}{probe}"
+    runs = routine.executor
+    where = "" if runs is None else f" Run by {runs.name} in {runs.folder}."
+    return f"{routine.schedule.display}, {state}, {upcoming}{last}. {what}{probe}{where}"
+
+
+def _executor(arguments: dict[str, Any]) -> RoutineExecutor | None:
+    """The executor the arguments name (step 25); an empty name gives the routine back to the
+    agent's model on update; `None` when they name none."""
+    name = arguments.get("executor")
+    if not isinstance(name, str):
+        return None
+    return RoutineExecutor(
+        name.strip(),
+        _text(arguments.get("folder")).strip(),
+        auto=arguments.get("auto") is True,
+        workspace=arguments.get("workspace") is True,
+        draft=arguments.get("draft") is True,
+    )
 
 
 def _text(value: object) -> str:

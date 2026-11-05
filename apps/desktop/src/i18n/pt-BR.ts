@@ -3,6 +3,7 @@ import type { Messages } from './en'
 
 const STATUSES: Record<string, string> = {
   error: 'falhou',
+  needed: 'precisou de você',
   ok: 'respondeu',
   running: 'rodando',
   silent: 'em silêncio',
@@ -560,6 +561,8 @@ export const ptBR: Override<Messages> = {
     open: 'Abrir',
     pause: 'Pausar',
     paused: 'pausada',
+    executor: (name: string, folder: string, workspace: boolean) =>
+      `Rodada pelo ${name} em ${folder}${workspace ? ', numa workspace nova a cada vez' : ''}`,
     probe: (command: string) => `Acordada pela sonda: $ ${command}`,
     probed: 'a sonda ouviu algo',
     remove: 'Apagar',

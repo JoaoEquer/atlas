@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from atlas.home import Database, migrate
-from atlas.jobs import SCHEMA, Creator, Routines, RoutineStore
+from atlas.jobs import SCHEMA, Creator, RoutineExecutor, Routines, RoutineStore
 from atlas.tools import cronjob_manage
 
 NOW = datetime(2026, 10, 12, 13, 0, tzinfo=UTC)
@@ -195,3 +195,37 @@ def test_a_bots_routine_has_no_probe(routines: Routines) -> None:
 
     assert "a bot's routine has no probe" in refused
     assert routines.store.all() == []
+
+
+def test_the_agent_makes_a_routine_an_executor_runs_and_gives_it_back(
+    routines: Routines, tmp_path: Path
+) -> None:
+    folder = str(tmp_path / "project")
+    made = _call(
+        routines,
+        action="create",
+        name="sweep",
+        schedule="every 1d",
+        prompt="Sweep the dependencies.",
+        executor="claude-code",
+        folder=folder,
+        workspace=True,
+    )
+    refused = _as(
+        routines,
+        "finance",
+        action="create",
+        name="bills",
+        schedule="every 1h",
+        prompt="Bills.",
+        executor="codex",
+        folder=folder,
+    )
+
+    assert f"Run by claude-code in {folder}." in made
+    assert routines.store.get("sweep").executor == RoutineExecutor(
+        "claude-code", folder, workspace=True
+    )
+    assert "never in an executor" in refused
+    given_back = _call(routines, action="update", job_id="sweep", executor="")
+    assert "Run by" not in given_back

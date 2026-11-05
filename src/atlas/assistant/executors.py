@@ -232,6 +232,8 @@ class ExecutorRun:
         self.atlas_answers = False
         #: Requests waiting for an answer: the watchdog leaves a waiting executor alone.
         self.waiting = 0
+        #: Told what it asked when nobody answered (a routine's run, step 25), which stops there.
+        self.on_nobody: Callable[[str], None] | None = None
         self.last_tool: str | None = None
         self.tools = 0
         self.problem = ""
@@ -598,6 +600,8 @@ class ExecutorRun:
             if answers is None and self._desk is not None:
                 answers = await self._desk.ask(self.view(), questions)
                 by = Answerer.USER if answers is not None else by
+            if answers is None and self.on_nobody is not None:
+                self.on_nobody(asked)
             return answers
         finally:
             self._waiting(-1)
@@ -619,6 +623,8 @@ class ExecutorRun:
                 verdict = await self._desk.approve(self.view(), permission)
                 by = Answerer.USER
             if verdict is None:
+                if self.on_nobody is not None:
+                    self.on_nobody(asked)
                 verdict = ExecutorVerdict(
                     False, "Nobody is there to answer this request, so it is refused."
                 )

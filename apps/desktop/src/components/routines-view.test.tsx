@@ -22,6 +22,7 @@ describe('a routine woken by its probe (step 23)', () => {
         command: null,
         created_by: 'agent',
         enabled: true,
+        executor: null,
         id: 'r1',
         last_run_at: null,
         last_status: 'ok',
@@ -64,5 +65,35 @@ describe('a routine woken by its probe (step 23)', () => {
     const woken = screen.getAllByTestId('run-event')
     expect(woken).toHaveLength(1)
     expect(woken[0]?.getAttribute('title')).toBe('1 new mail')
+  })
+})
+
+describe('a routine an executor runs (step 25)', () => {
+  it('says which executor runs it, and where', () => {
+    vi.spyOn(app, 'readRuns').mockResolvedValue(undefined)
+    app.$routines.set([
+      {
+        bot: null,
+        command: null,
+        created_by: 'user',
+        enabled: true,
+        executor: { auto: false, draft: false, folder: '/work/shop', name: 'claude-code', workspace: true },
+        id: 'r2',
+        last_run_at: null,
+        last_status: 'needed',
+        name: 'sweep',
+        next_run_at: null,
+        probe: null,
+        prompt: 'Sweep the dependencies.',
+        running: false,
+        schedule: 'every 1d'
+      }
+    ])
+    render(<RoutinesView />)
+
+    expect(screen.getByTestId('routine-executor').textContent).toBe(
+      t.routines.executor('claude-code', '/work/shop', true)
+    )
+    expect(screen.getByText(t.routines.last(t.routines.status('needed')), { exact: false })).toBeTruthy()
   })
 })

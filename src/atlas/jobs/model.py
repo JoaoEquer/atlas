@@ -102,6 +102,9 @@ class RunStatus(StrEnum):
     ERROR = "error"
     #: Atlas stopped while it ran; whether it finished is unknown, never assumed.
     UNKNOWN = "unknown"
+    #: It stopped at a question or an approval nobody was there to give (step 25): what it asked
+    #: waits for the user, its session kept to go on by hand.
+    NEEDED = "needed"
 
 
 def parse_duration(text: str) -> int:
@@ -230,6 +233,27 @@ class Creator(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class RoutineExecutor:
+    """Where a prompt routine runs when an outside executor runs it (step 25): a session of the
+    executor in a folder, each run a new one."""
+
+    #: The executor's name, as the workbench lists it (`claude-code`).
+    name: str
+    #: The folder it works in, absolute.
+    folder: str
+    #: It runs in the executor's automatic mode, chosen at creation; otherwise in its default,
+    #: where what it asks stops the run.
+    auto: bool = False
+    #: Each run works in a new workspace of the folder (step 21), archived when it changed nothing:
+    #: for a routine that changes code. Without, it works in the folder itself: one that only
+    #: reads.
+    workspace: bool = False
+    #: A run that changed something opens a draft pull request of its workspace (the GitHub
+    #: plugin's); off unless the user turned it on.
+    draft: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Routine:
     """A scheduled prompt, or a scheduled command when `command` is set.
     Times are aware, in UTC."""
@@ -257,6 +281,8 @@ class Routine:
     #: Its probe (step 23): a command run with no model on its schedule, whose output wakes its
     #: prompt only when it is something new; `None`, the schedule fires the prompt itself.
     probe: str | None = None
+    #: The executor its prompt runs in, in a folder (step 25); `None`, Atlas's model runs it.
+    executor: RoutineExecutor | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -118,7 +118,7 @@ from atlas.instances import (
     tailnet,
 )
 from atlas.jobs import SCHEMA as JOBS_SCHEMA
-from atlas.jobs import JobsError, Routine, Routines, RoutineStore
+from atlas.jobs import JobsError, Routine, RoutineExecutor, Routines, RoutineStore
 from atlas.marketplace import (
     Kind,
     Marketplace,
@@ -396,6 +396,28 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="COMMAND",
         help="With --prompt and a schedule that repeats: a command run first, with no model; the "
         "prompt runs only when it prints something new, which the prompt receives.",
+    )
+    make.add_argument(
+        "--executor",
+        metavar="NAME",
+        help="With --prompt and --folder: the outside executor that runs the prompt there, as a "
+        "session of its own each run (claude-code, codex...).",
+    )
+    make.add_argument("--folder", type=Path, help="The folder the executor works in.")
+    make.add_argument(
+        "--auto",
+        action="store_true",
+        help="Run the executor in its automatic mode; otherwise its first question stops a run.",
+    )
+    make.add_argument(
+        "--workspace",
+        action="store_true",
+        help="Each run in a new workspace of the folder, archived when it changed nothing.",
+    )
+    make.add_argument(
+        "--draft",
+        action="store_true",
+        help="With --workspace: open a draft pull request of what a run changed (GitHub plugin).",
     )
     for name, text in (
         ("pause", "Stop a routine firing until resumed."),
@@ -1345,6 +1367,15 @@ def _routines(args: argparse.Namespace, home: Home, settings: Settings) -> int:
                 model=model,
                 bot=args.bot or None,
                 probe=args.probe,
+                executor=None
+                if not args.executor
+                else RoutineExecutor(
+                    args.executor,
+                    str(args.folder.expanduser().resolve()) if args.folder else "",
+                    auto=args.auto,
+                    workspace=args.workspace,
+                    draft=args.draft,
+                ),
             )
             out.write(f"Made {made.id}  {made.name}  {_routine_line(made, routines)}\n")
             return 0
@@ -1388,7 +1419,8 @@ def _routine_line(routine: Routine, routines: Routines) -> str:
     last = "" if routine.last_status is None else f", last {routine.last_status.value}"
     whose = "" if routine.bot is None else f", as the bot {routine.bot}"
     probe = "" if routine.probe is None else ", woken by its probe"
-    return f"{routine.schedule.display}, {state}, {upcoming}{last}{whose}{probe}"
+    runs = "" if routine.executor is None else f", run by {routine.executor.name}"
+    return f"{routine.schedule.display}, {state}, {upcoming}{last}{whose}{probe}{runs}"
 
 
 def _installation(args: argparse.Namespace, home: Home, environ: Mapping[str, str]) -> int:

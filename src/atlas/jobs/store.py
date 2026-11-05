@@ -54,6 +54,7 @@ from atlas.jobs.model import (
     ProbeState,
     RouteTarget,
     Routine,
+    RoutineExecutor,
     Run,
     RunStatus,
     Schedule,
@@ -285,6 +286,17 @@ CREATE TABLE jobs_probes (
 ) STRICT;
 """,
         ),
+        Migration(
+            13,
+            "the executor a routine runs in, its folder, its mode and its workspaces (step 25)",
+            """
+ALTER TABLE jobs_routines ADD COLUMN executor TEXT;
+ALTER TABLE jobs_routines ADD COLUMN folder TEXT NOT NULL DEFAULT '';
+ALTER TABLE jobs_routines ADD COLUMN executor_auto INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs_routines ADD COLUMN workspace INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs_routines ADD COLUMN draft INTEGER NOT NULL DEFAULT 0;
+""",
+        ),
     ),
 )
 
@@ -294,7 +306,7 @@ _ID_TRIES = 8
 _ROUTINE_COLUMNS = (
     "id, name, schedule_kind, schedule_display, minutes, expr, run_at, prompt, command, enabled, "
     "created_at, created_by, next_run_at, last_run_at, last_status, model_provider, model_name, "
-    "model_effort, run_now, bot, probe"
+    "model_effort, run_now, bot, probe, executor, folder, executor_auto, workspace, draft"
 )
 _RUN_COLUMNS = (
     "number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error, "
@@ -324,7 +336,7 @@ class RoutineStore:
                     with transaction(connection):
                         connection.execute(
                             f"INSERT INTO jobs_routines ({_ROUTINE_COLUMNS}) "  # noqa: S608
-                            f"VALUES ({', '.join('?' * 21)})",
+                            f"VALUES ({', '.join('?' * 26)})",
                             _routine_row(made),
                         )
                 except sqlite3.IntegrityError as error:
@@ -348,7 +360,8 @@ class RoutineStore:
                     "minutes = ?, expr = ?, run_at = ?, prompt = ?, command = ?, enabled = ?, "
                     "created_at = ?, created_by = ?, next_run_at = ?, last_run_at = ?, "
                     "last_status = ?, model_provider = ?, model_name = ?, model_effort = ?, "
-                    "run_now = ?, bot = ?, probe = ? WHERE id = ?",
+                    "run_now = ?, bot = ?, probe = ?, executor = ?, folder = ?, "
+                    "executor_auto = ?, workspace = ?, draft = ? WHERE id = ?",
                     (*_routine_row(routine)[1:], routine.id),
                 ).rowcount
         except sqlite3.IntegrityError as error:
@@ -1268,6 +1281,7 @@ def _moment(value: object) -> datetime | None:
 
 def _routine_row(routine: Routine) -> tuple[object, ...]:
     schedule = routine.schedule
+    executor = routine.executor
     return (
         routine.id,
         routine.name,
@@ -1290,6 +1304,11 @@ def _routine_row(routine: Routine) -> tuple[object, ...]:
         int(routine.run_now),
         routine.bot,
         routine.probe,
+        None if executor is None else executor.name,
+        "" if executor is None else executor.folder,
+        int(executor is not None and executor.auto),
+        int(executor is not None and executor.workspace),
+        int(executor is not None and executor.draft),
     )
 
 
@@ -1297,7 +1316,7 @@ def _routine(row: Sequence[object]) -> Routine:
     (
         routine_id, name, kind, display, minutes, expr, run_at, prompt, command, enabled,
         created_at, created_by, next_run_at, last_run_at, last_status, provider, model, effort,
-        run_now, bot, probe,
+        run_now, bot, probe, executor, folder, auto, workspace, draft,
     ) = row  # fmt: skip
     schedule = Schedule(
         ScheduleKind(str(kind)),
@@ -1327,6 +1346,9 @@ def _routine(row: Sequence[object]) -> Routine:
         run_now=bool(run_now),
         bot=None if bot is None else str(bot),
         probe=None if probe is None else str(probe),
+        executor=None
+        if executor is None
+        else RoutineExecutor(str(executor), str(folder), bool(auto), bool(workspace), bool(draft)),
     )
 
 

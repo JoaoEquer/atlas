@@ -28,6 +28,26 @@ shell and delivers its output. `--model openai/gpt-6-sol` pins a model to a rout
 on the default model. `--bot NAME` runs it as one of your [bots](/docs/guides/bots/), its result
 entering the bot's conversation.
 
+## Run by a coding agent
+
+A prompt routine may run in one of your coding agents (Claude Code, Codex, the Gemini CLI) in a
+project folder, instead of in Atlas: each run is a new session of that agent there, which you find
+in **Executors** afterwards.
+
+```bash
+atlas routines create sweep --schedule "every monday 9am" --executor claude-code --folder ~/code/shop --prompt "Look for new vulnerabilities in the dependencies and list them."
+```
+
+- **Nobody watches it**, so nobody answers what it asks: its first question or permission stops
+  the run, which says **needed you**, and its session waits in Executors for you to answer and go
+  on. `--auto` runs it in the agent's automatic mode, which asks nothing.
+- **A routine that changes code** works in a new workspace of the folder each run
+  (`--workspace`): one that changed nothing is archived, one that changed something is kept for
+  you. `--draft` also opens a draft pull request of it, with the GitHub plugin on.
+- **A routine that only reads**, a sweep, works in the folder itself.
+- When the agent makes one, Atlas shows you the folder, the agent and its mode once, and waits for
+  your yes.
+
 ## Woken by something new
 
 A prompt routine may have a **probe**: a command that runs first, with no model and no cost, each

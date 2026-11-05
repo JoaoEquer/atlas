@@ -4,12 +4,14 @@ parent's model is the fake model server. What Claude Code asks reaches a desk th
 user's screen, or Atlas answers it. The database and the tools are real, in a temporary home."""
 
 import asyncio
+import dataclasses
 import json
 import os
 import shutil
 import subprocess
 import weakref
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,16 +28,29 @@ from atlas.assistant import (
     InstanceActivity,
     InstanceChanged,
     OpenConversation,
+    RoutineRunner,
     SubagentChanged,
     WorkbenchEvent,
 )
 from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
-from atlas.jobs import DelegationError, SubagentStatus, SubagentStore
+from atlas.jobs import (
+    Creator,
+    DelegationError,
+    Lateness,
+    Routine,
+    RoutineExecutor,
+    Run,
+    RunStatus,
+    Schedule,
+    ScheduleKind,
+    SubagentStatus,
+    SubagentStore,
+)
 from atlas.models import AssistantMessage, CallLedger, ToolResult, UserMessage
 from atlas.plugins import Answers, Executor, Permission, Question, Verdict
 from atlas.secrets import Vault
 from atlas.trust import ApprovalAnswer, ApprovalRequest, Choice, Outcome
-from atlas.workspaces import WorkspaceError, Workspaces
+from atlas.workspaces import WorkspaceError, Workspaces, WorkspaceState
 from claude_code_support import claude_code
 from codex_support import codex
 from fake_model import FakeCall, FakeModelServer, FakeReply
@@ -1015,6 +1030,15 @@ class _Workspaces:
         found = self.made.found_at(folder)
         return "" if found is None else self.made.changes(found.id)
 
+    async def finish(self, folder: Path, title: str, *, draft: bool) -> str:
+        found = self.made.found_at(folder)
+        if found is None:
+            return ""
+        if self.made.status(found.id) == (False, 0):
+            self.made.archive(found.id)
+            return f"Its workspace {found.branch} changed nothing, and was archived."
+        return f"Its changes are in the workspace {found.branch} (draft: {draft})."
+
 
 def _git_project(folder: Path) -> None:
     identity = {
@@ -1109,3 +1133,115 @@ def test_a_task_in_a_folder_another_agent_works_in_is_warned_of(
     said = _run(scenario)
 
     assert "Another agent works in" in json.loads(said)["warning"]
+
+
+# -- a routine an executor runs (step 25) ---------------------------------------------------------
+
+
+def _executor_routine(folder: Path, **chosen: Any) -> Routine:
+    return Routine(
+        id="r1",
+        name="security sweep",
+        schedule=Schedule(ScheduleKind.INTERVAL, "every 1d", minutes=1440),
+        prompt="Look for new vulnerabilities in the dependencies.",
+        command=None,
+        enabled=True,
+        created_at=datetime(2026, 11, 4, 13, 0, tzinfo=UTC),
+        created_by=Creator.USER,
+        executor=RoutineExecutor(CLAUDE_CODE, str(folder), **chosen),
+    )
+
+
+def _routine_run(assistant: Assistant, routine: Routine) -> Run:
+    async def scenario() -> Run:
+        try:
+            when = datetime(2026, 11, 4, 13, 0, tzinfo=UTC)
+            return await RoutineRunner(assistant).run(
+                routine, Run(1, routine.id, when, Lateness.ON_TIME)
+            )
+        finally:
+            await assistant.close()
+
+    return _run(scenario)
+
+
+def test_an_executor_routine_runs_its_prompt_as_a_session_in_its_folder(
+    make: Make, claude: Callable[..., None], tmp_path: Path
+) -> None:
+    claude({"say": "Read the lock file."}, {"result": "No new vulnerabilities."})
+    assistant, _ = make(None)
+    project = tmp_path / "work" / "project"
+
+    run = _routine_run(assistant, _executor_routine(project))
+
+    assert (run.status, run.output) == (RunStatus.OK, "No new vulnerabilities.")
+    log = tmp_path / "claude-log.jsonl"
+    assert _prompts(log) == ["Look for new vulnerabilities in the dependencies."]
+    assert len(_started(log, project)) == 1
+    assert run.conversation_id is not None
+    info = assistant.conversations.info(run.conversation_id)
+    assert (info.title, info.source) == ("security sweep", "routine")
+    assert assistant.workbench.runs() == []
+
+
+def test_what_an_executor_routine_asks_stops_the_run_for_the_user(
+    make: Make, claude: Callable[..., None], tmp_path: Path
+) -> None:
+    claude({"tool": "Bash", "input": {"command": "npm audit fix"}}, {"result": "Fixed."})
+    assistant, _ = make(None)
+
+    run = _routine_run(assistant, _executor_routine(tmp_path / "work" / "project"))
+
+    assert run.status is RunStatus.NEEDED
+    assert run.output.startswith("It stopped to ask: Bash: npm audit fix")
+    assert "Its session is kept" in run.output
+    assert assistant.workbench.runs() == []
+
+
+def test_an_executor_routine_that_cannot_run_says_why(make: Make, tmp_path: Path) -> None:
+    assistant, _ = make(None)
+    project = tmp_path / "work" / "project"
+    gone = dataclasses.replace(
+        _executor_routine(project), executor=RoutineExecutor("other-harness", str(project))
+    )
+    nowhere = _executor_routine(tmp_path / "nowhere")
+
+    async def scenario() -> list[Run]:
+        try:
+            when = datetime(2026, 11, 4, 13, 0, tzinfo=UTC)
+            runner = RoutineRunner(assistant)
+            return [
+                await runner.run(routine, Run(1, routine.id, when, Lateness.ON_TIME))
+                for routine in (gone, nowhere)
+            ]
+        finally:
+            await assistant.close()
+
+    not_installed, no_folder = _run(scenario)
+
+    assert (not_installed.status, not_installed.error) == (
+        RunStatus.ERROR,
+        "other-harness is not installed on this computer, or is turned off.",
+    )
+    assert no_folder.status is RunStatus.ERROR
+    assert "is not there" in (no_folder.error or "")
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_each_run_in_a_new_workspace_archived_when_it_changed_nothing(
+    make: Make, claude: Callable[..., None], home: Home, tmp_path: Path
+) -> None:
+    claude({"result": "Nothing to change."})
+    assistant, _ = make(None)
+    project = tmp_path / "work" / "project"
+    _git_project(project)
+    workspaces = _Workspaces(home)
+    assistant.use_workspaces(workspaces)
+
+    run = _routine_run(assistant, _executor_routine(project, workspace=True, draft=True))
+
+    assert run.status is RunStatus.OK
+    [made] = workspaces.made.listed(project)
+    assert made.state is WorkspaceState.ARCHIVED
+    assert run.output.endswith(f"Its workspace {made.branch} changed nothing, and was archived.")
+    assert len(_started(tmp_path / "claude-log.jsonl", Path(made.folder))) == 1

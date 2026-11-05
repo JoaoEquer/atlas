@@ -2079,6 +2079,23 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   so. The probe is a command, so the approval gate judges it as it judges a routine's command; a
   bot gives none, since a command runs as nobody. `atlas routines create --probe`, the tool's
   `probe`, and the Routines screen shows it and which runs it woke.
+- **An executor's routine** (step 25, decided by the user on 03/11/2026): a prompt routine may
+  name an outside executor and a folder (`RoutineExecutor`), and each run is then a new session of
+  that executor there, on Atlas's workbench as an instance of Atlas's, in the mode chosen when it
+  was made (`auto`, the executor's automatic mode; otherwise its own). Nobody answers what it asks:
+  the first question or permission stops the run (`ExecutorRun.on_nobody`), which ends as
+  `needed` (`RunStatus.NEEDED`), its session kept for the user to open in Executors and go on; it
+  never approves anything past its mode. A routine that changes code works in a new workspace of
+  the folder each run (`workspace`, step 21), archived when the run changed nothing and kept
+  otherwise; with `draft`, off unless the user turns it on, a run that changed something has its
+  workspace committed, sent and opened as a draft pull request by the GitHub plugin (its
+  `open_pull_request` call), and a run without the plugin on says so. One that only reads works in
+  the folder. The agent's `cronjob_manage` gives `executor`, `folder`, `auto`, `workspace` and
+  `draft`, and the approval gate asks the user once, showing where, which and how
+  (`ask_first`), since it will run unwatched with the harness's permissions; the user's own,
+  from the terminal (`--executor`) or the app, is theirs already. A bot's routine stays a prompt on
+  Atlas's model, never an executor's. A prompt routine whose run met a refusal for want of someone
+  to approve (`NOBODY_TO_APPROVE`) ends `needed` too, so the scoreboard counts both.
 - **A plugin's probe** (SDK version 30, `PluginContext.register_probe`, `atlas.probes` in the
   manifest, shown at consent and counted in its fingerprint): the source of events of a service
   the plugin speaks to (GitHub, a calendar), in its Python. A routine names it as its probe,

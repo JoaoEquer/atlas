@@ -61,6 +61,11 @@ function Routine({ routine }: { routine: RoutineRow }) {
               {t.routines.probe(routine.probe)}
             </p>
           ) : null}
+          {routine.executor ? (
+            <p className="mt-1 truncate text-xs text-muted-foreground" data-testid="routine-executor">
+              {t.routines.executor(routine.executor.name, routine.executor.folder, routine.executor.workspace)}
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 gap-2 text-sm">
           <button

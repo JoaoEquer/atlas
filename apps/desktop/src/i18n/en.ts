@@ -1,5 +1,6 @@
 const STATUSES: Record<string, string> = {
   error: 'failed',
+  needed: 'needed you',
   ok: 'answered',
   running: 'running',
   silent: 'silent',
@@ -575,6 +576,8 @@ export const en = {
     open: 'Open',
     pause: 'Pause',
     paused: 'paused',
+    executor: (name: string, folder: string, workspace: boolean) =>
+      `Run by ${name} in ${folder}${workspace ? ', a new workspace each run' : ''}`,
     probe: (command: string) => `Woken by its probe: $ ${command}`,
     probed: 'its probe heard something',
     remove: 'Remove',

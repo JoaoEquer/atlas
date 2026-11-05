@@ -902,6 +902,20 @@ export interface RoutineRow {
   bot: string | null
   /** The command whose new output wakes its prompt (step 23); `null`, its schedule does. */
   probe: string | null
+  /** The executor its prompt runs in (step 25); `null`, Atlas's model. */
+  executor: RoutineExecutorRow | null
+}
+/** Where a routine's prompt runs when an outside executor runs it (step 25). */
+export interface RoutineExecutorRow {
+  name: string
+  /** The folder it works in, whole. */
+  folder: string
+  /** In the executor's automatic mode; otherwise its first question stops a run for the user. */
+  auto: boolean
+  /** Each run in a new workspace of the folder, archived when it changed nothing. */
+  workspace: boolean
+  /** A run that changed something opens a draft pull request (the GitHub plugin's). */
+  draft: boolean
 }
 export interface RoutineRef {
   routine_id: string

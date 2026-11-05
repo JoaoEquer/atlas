@@ -250,7 +250,7 @@ atlas routines list
 Make a routine that runs a prompt, or a command, on a schedule.
 
 ```
-atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHELL_COMMAND] [--model MODEL] [--bot NAME] [--probe COMMAND]
+atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHELL_COMMAND] [--model MODEL] [--bot NAME] [--probe COMMAND] [--executor NAME] [--folder FOLDER] [--auto] [--workspace] [--draft]
 ```
 
 | Argument | What it does |
@@ -262,6 +262,11 @@ atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHEL
 | `--model MODEL` | Pin a model, provider/model (openai/gpt-6-sol); unset, the settings'. |
 | `--bot NAME` | The bot the prompt runs as; its result enters the bot's fixed conversation. |
 | `--probe COMMAND` | With --prompt and a schedule that repeats: a command run first, with no model; the prompt runs only when it prints something new, which the prompt receives. |
+| `--executor NAME` | With --prompt and --folder: the outside executor that runs the prompt there, as a session of its own each run (claude-code, codex...). |
+| `--folder FOLDER` | The folder the executor works in. |
+| `--auto` | Run the executor in its automatic mode; otherwise its first question stops a run. |
+| `--workspace` | Each run in a new workspace of the folder, archived when it changed nothing. |
+| `--draft` | With --workspace: open a draft pull request of what a run changed (GitHub plugin). |
 
 One of `--prompt` or `--command` is required.
 

@@ -2,6 +2,7 @@
 run after with every client told, archived, brought back and deleted; the session environment's
 new worktree (step 18g) is a workspace in the home now, never beside the project."""
 
+import asyncio
 import json
 import os
 import shutil
@@ -161,3 +162,27 @@ def test_a_prompt_in_a_workspace_keeps_a_checkpoint_to_go_back_to(
         "Before going back to an earlier checkpoint",
         "Add the cart.",
     ]
+
+
+def test_a_routine_run_s_workspace_is_archived_when_unchanged_and_kept_otherwise(
+    serve: Serve, tmp_path: Path
+) -> None:
+    """Step 25: what became of the workspace of an executor routine's run, said in its output."""
+    site = _repository(tmp_path / "site")
+    gateway = serve().gateway
+
+    async def scenario() -> tuple[str, str, list[str]]:
+        empty, _ = await gateway.task_workspace(site, "sweep one")
+        unchanged = await gateway.task_workspace_finish(empty, "Sweep", draft=True)
+        busy, _ = await gateway.task_workspace(site, "sweep two")
+        (busy / "fix.md").write_text("Fixed.\n", encoding="utf-8")
+        kept = await gateway.task_workspace_finish(busy, "Sweep", draft=True)
+        states = [w.state.value for w in gateway.workspaces.listed(site)]
+        return unchanged, kept, sorted(states)
+
+    unchanged, kept, states = asyncio.run(scenario())
+
+    assert unchanged == "Its workspace atlas/sweep-one changed nothing, and was archived."
+    assert kept.startswith("Its changes are in the workspace atlas/sweep-two: 1 new file")
+    assert kept.endswith("No draft pull request was opened: the GitHub plugin is not on.")
+    assert states == ["archived", "ready"]

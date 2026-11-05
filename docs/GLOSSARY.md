@@ -216,6 +216,10 @@ becomes an identifier. Portuguese is listed because the roadmap is written in Po
 | `probe` | sonda | A routine's cheap command, run with no model on its schedule, whose output wakes the routine's prompt only when it prints something new; it keeps its own cursor in `ATLAS_PROBE_STATE` |
 | `trigger` | gatilho | What fires a routine: its schedule, or an event its `probe` heard; an event's text reaches the run marked as text from outside |
 | `event source` | fonte de evento | A plugin's own probe, written in Python (`ctx.register_probe`), which a routine names in place of a command (`plugin:<plugin>:<name>`) |
+| `executor routine` | rotina num executor | A prompt routine an outside executor runs (`RoutineExecutor`, step 25): each run a new session of the executor in a folder, or in a new workspace of it, in the mode chosen when it was made; nobody answers what it asks |
+| `needed you` | precisou de você | How a routine's run ended when it stopped at a question or an approval nobody was there to give (`RunStatus.NEEDED`, step 25): an executor's run, its session kept to go on by hand, or a prompt's run that met a refusal for want of someone to approve |
+| `scoreboard` | placar | The count at the top of the Routines screen of this week's runs: the ones that ran alone, the ones that needed the user, the ones that failed (step 25) |
+| `routine template` | modelo de rotina | A routine written by Atlas, ready to adjust, on the Routines screen's Templates tab: its category, its tier (essential, recommended, useful), its model, its effort and how often it runs; Add opens it in the form (step 25) |
 | `routine run` | execução da rotina | One firing of a routine: a new conversation of source `routine`, or a command's output |
 | `script-only routine` | rotina sem modelo | A routine that runs a command and delivers its output, with no model call |
 | `catch-up run` | execução atrasada | The one run a routine gets for the runs it missed past its grace, however many |

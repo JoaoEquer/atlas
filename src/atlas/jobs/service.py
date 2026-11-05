@@ -20,6 +20,7 @@ import dataclasses
 import logging
 from collections.abc import Callable
 from datetime import datetime, tzinfo
+from pathlib import Path
 from typing import Protocol
 
 from atlas.jobs.errors import JobsError
@@ -27,6 +28,7 @@ from atlas.jobs.model import (
     Creator,
     Lateness,
     Routine,
+    RoutineExecutor,
     Run,
     RunStatus,
     Schedule,
@@ -86,10 +88,12 @@ class Routines:
         model: tuple[str, str, str | None] | None = None,
         bot: str | None = None,
         probe: str | None = None,
+        executor: RoutineExecutor | None = None,
     ) -> Routine:
         """A new routine: a prompt the agent runs, or a command, which runs with no model. `bot` is
         the bot a prompt runs as; a command is nobody's. `probe`, for a prompt, is the command
-        whose new output wakes it (step 23), on a schedule that repeats."""
+        whose new output wakes it (step 23), on a schedule that repeats. `executor`, for a prompt,
+        is the outside executor that runs it in a folder (step 25), in place of Atlas's model."""
         name = _name(name)
         if (prompt is None) == (command is None) or not (prompt or command or "").strip():
             raise JobsError("A routine runs a prompt or a command: give one of them.")
@@ -98,6 +102,7 @@ class Routines:
         now = self._clock()
         parsed = parse_schedule(schedule, now.astimezone(self._zone))
         probe = _probe(probe, prompt, parsed)
+        executor = _executor(executor, prompt, bot)
         if prompt is not None:
             _scan(prompt)
         routine = Routine(
@@ -115,6 +120,7 @@ class Routines:
             model_effort=None if model is None else model[2],
             bot=bot,
             probe=probe,
+            executor=executor,
         )
         if routine.next_run_at is None:
             raise JobsError(f"{parsed.display} is in the past, so it would never run.")
@@ -131,10 +137,32 @@ class Routines:
         prompt: str | None = None,
         command: str | None = None,
         probe: str | None = None,
+        model: tuple[str, str, str | None] | None = None,
+        bot: str | None = None,
+        executor: RoutineExecutor | None = None,
     ) -> Routine:
-        """`probe` changes the probe of a routine that has one; empty, the routine has none."""
+        """`probe` changes the probe of a routine that has one; empty, the routine has none.
+        `model` pins its model, an empty provider following the settings again; `bot`, the bot a
+        prompt runs as, empty for the main agent; `executor`, the executor it runs in (step 25),
+        an empty name for Atlas's model."""
         routine = self.store.get(key)
         changes: dict[str, object] = {}
+        if model is not None:
+            pinned = bool(model[0])
+            changes["model_provider"] = model[0] if pinned else None
+            changes["model_name"] = model[1] if pinned else None
+            changes["model_effort"] = model[2] if pinned else None
+        if bot is not None:
+            if routine.command is not None and bot:
+                raise JobsError("A bot's routine runs a prompt: a command runs as nobody.")
+            changes["bot"] = bot or None
+        if executor is not None or bot is not None:
+            wanted = routine.executor if executor is None else (executor if executor.name else None)
+            changes["executor"] = _executor(
+                wanted,
+                routine.prompt,
+                changes.get("bot", routine.bot),  # type: ignore[arg-type]
+            )
         if name is not None:
             changes["name"] = _name(name)
         if prompt is not None:
@@ -356,6 +384,31 @@ def _name(name: str) -> str:
     if len(cleaned) > MAX_NAME_CHARS:
         raise JobsError(f"A routine's name has at most {MAX_NAME_CHARS} characters.")
     return cleaned
+
+
+def _executor(
+    executor: RoutineExecutor | None, prompt: str | None, bot: str | None
+) -> RoutineExecutor | None:
+    """An executor routine checked (step 25): a prompt, run as nobody's bot, in an absolute
+    folder; a draft pull request only of a workspace."""
+    if executor is None:
+        return None
+    if prompt is None:
+        raise JobsError("An executor runs a routine's prompt: give a prompt, not a command.")
+    if bot is not None:
+        raise JobsError(
+            "A bot's routine runs on Atlas's model: an executor's routine is the main agent's."
+        )
+    name, folder = executor.name.strip(), executor.folder.strip()
+    if not name:
+        raise JobsError("Name the executor the routine runs in.")
+    if not folder or not Path(folder).is_absolute():
+        raise JobsError("An executor's routine works in a folder: give its whole path.")
+    if executor.draft and not executor.workspace:
+        raise JobsError(
+            "A draft pull request is of a run's own workspace: turn on a new workspace each run."
+        )
+    return dataclasses.replace(executor, name=name, folder=folder)
 
 
 def _probe(probe: str | None, prompt: str | None, schedule: Schedule) -> str | None:

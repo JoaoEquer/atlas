@@ -119,7 +119,7 @@ def test_a_flagged_command_is_refused_without_asking_anyone(
 
     run = _run(assistant, _routine())
 
-    assert run.status is RunStatus.OK
+    assert run.status is RunStatus.NEEDED, "an approval nobody gave: it needed the user (step 25)"
     assert victim.exists()
     refused = fake.bodies(CHAT)[1]["messages"][-1]["content"]
     assert "nobody" in refused.lower() or "unattended" in refused.lower()

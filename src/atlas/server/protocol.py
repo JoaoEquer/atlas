@@ -585,6 +585,21 @@ class ProviderConnected:
 
 
 @dataclass(frozen=True, slots=True)
+class RoutineExecutorRow:
+    """Where a routine's prompt runs when an outside executor runs it (step 25)."""
+
+    name: str
+    #: The folder it works in, whole.
+    folder: str
+    #: In the executor's automatic mode; otherwise its first question stops a run for the user.
+    auto: bool
+    #: Each run in a new workspace of the folder, archived when it changed nothing.
+    workspace: bool
+    #: A run that changed something opens a draft pull request (the GitHub plugin's).
+    draft: bool
+
+
+@dataclass(frozen=True, slots=True)
 class RoutineRow:
     """A routine, as the screen lists it. Times are UTC text."""
 
@@ -607,6 +622,8 @@ class RoutineRow:
     bot: str | None = None
     #: The command whose new output wakes its prompt (step 23); `null`, its schedule does.
     probe: str | None = None
+    #: The executor its prompt runs in (step 25); `null`, Atlas's model.
+    executor: RoutineExecutorRow | None = None
 
 
 @dataclass(frozen=True, slots=True)

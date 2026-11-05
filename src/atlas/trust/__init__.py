@@ -9,6 +9,7 @@ from atlas.trust.detection import (
 from atlas.trust.model import (
     DENIAL_BREAKER,
     GUARDIAN_SYSTEM,
+    NOBODY_TO_APPROVE,
     UNTRUSTED_MIN_CHARS,
     ApprovalAnswer,
     ApprovalRequest,
@@ -30,6 +31,7 @@ __all__ = [
     "DENIAL_BREAKER",
     "GUARDIAN_PURPOSE",
     "GUARDIAN_SYSTEM",
+    "NOBODY_TO_APPROVE",
     "SCHEMA",
     "UNTRUSTED_MIN_CHARS",
     "ApprovalAnswer",

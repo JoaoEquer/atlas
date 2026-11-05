@@ -461,3 +461,20 @@ def test_the_guardian_asks_a_reasoning_model_not_to_reason() -> None:
     # One that cannot stop reasoning gets its lowest effort and room to think.
     assert guardian_effort(info(reasoning=True, efforts=("low", "medium", "high"))) == ("low", 2048)
     assert guardian_effort(info(reasoning=True)) == (None, 2048)
+
+
+def test_a_routine_an_executor_runs_is_shown_to_the_user_once_and_waits_for_a_yes() -> None:
+    user = _User(_yes())
+    gate = ApprovalGate(approver=user)
+    asked = {"action": "create", "schedule": "every 1d", "prompt": "Sweep.", "folder": "/work"}
+
+    allowed = _run(gate, ROUTINE, **asked, executor="claude-code", workspace=True)
+    plain = _run(gate, ROUTINE, **asked)
+    nobody = _run(ApprovalGate(), ROUTINE, **asked, executor="codex", auto=True)
+
+    assert allowed is None
+    assert plain is None
+    [request] = user.asked
+    assert request.target == "claude-code in /work, in its own mode, a new workspace each run"
+    assert nobody is not None
+    assert "nobody is here to approve it" in nobody

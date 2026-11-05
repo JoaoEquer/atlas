@@ -349,6 +349,7 @@ from atlas.server.protocol import (
     RenameParams,
     RequestCancel,
     ReviewSummary,
+    RoutineExecutorRow,
     RoutineFinished,
     RoutineList,
     RoutineRef,
@@ -2140,6 +2141,47 @@ class Gateway:
             return ""
         return await asyncio.to_thread(self.workspaces.changes, found.id)
 
+    async def task_workspace_finish(self, folder: Path, title: str, *, draft: bool) -> str:
+        """A routine's run's workspace once the run ended (step 25): archived when it changed
+        nothing; otherwise kept and, with `draft`, committed, sent and opened as a draft pull
+        request by the GitHub plugin. What became of it, in a line."""
+        found = await asyncio.to_thread(self.workspaces.found_at, folder)
+        if found is None:
+            return ""
+        changes = await asyncio.to_thread(self.workspaces.changes, found.id)
+        uncommitted, ahead = await asyncio.to_thread(self.workspaces.status, found.id)
+        try:
+            if not uncommitted and not ahead:
+                await asyncio.to_thread(self.workspaces.archive, found.id)
+                return f"Its workspace {found.branch} changed nothing, and was archived."
+            if not draft:
+                return f"Its changes are in the workspace {found.branch}: {changes}"
+            call = self._calls.get(("github", "open_pull_request"))
+            if call is None:
+                return (
+                    f"Its changes are in the workspace {found.branch}: {changes} No draft pull "
+                    "request was opened: the GitHub plugin is not on."
+                )
+            if uncommitted:
+                await asyncio.to_thread(self.workspaces.commit, found.id, title)
+            await asyncio.to_thread(self.workspaces.push, found.id)
+            opened = await call.run(
+                {
+                    "folder": found.folder,
+                    "branch": found.branch,
+                    "base": found.base,
+                    "title": title,
+                    "draft": True,
+                }
+            )
+        except Exception as error:  # noqa: BLE001 - git's or the plugin's failure, said in the run
+            return f"Its changes are in the workspace {found.branch}, but {error}"
+        finally:
+            self._workspaces_changed()
+        said = cast("dict[str, object]", opened) if isinstance(opened, dict) else {}
+        url = str(said.get("url") or "")
+        return f"Its changes went to a draft pull request: {url}".strip()
+
     async def _new_workspace(self, folder: Path, name: str, base: str) -> Workspace:
         """A workspace made, and its setup script run in the background, every client told."""
         made = await self._workspaces(self.workspaces.create, folder, name, base or None)
@@ -3727,6 +3769,7 @@ def _routine_row(routine: Routine, running: bool) -> RoutineRow:
         running,
         routine.bot,
         routine.probe,
+        None if routine.executor is None else RoutineExecutorRow(**dump(routine.executor)),
     )
 
 
@@ -3819,6 +3862,9 @@ class _TaskWorkspaces:
 
     async def changes(self, folder: Path) -> str:
         return await self._gateway.task_workspace_changes(folder)
+
+    async def finish(self, folder: Path, title: str, *, draft: bool) -> str:
+        return await self._gateway.task_workspace_finish(folder, title, draft=draft)
 
 
 class _Desk:
