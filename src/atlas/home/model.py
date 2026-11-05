@@ -487,6 +487,13 @@ class TimeSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class RelaySettings:
+    #: The relay the home waits at, so the app reaches it from anywhere with no open port (step
+    #: 20): a `wss://` address. Unset, none: the tailnet and SSH reach it.
+    url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class BrowserSettings:
     #: The program that runs Chrome, Edge or Chromium, and the arguments before its own (step 14).
     #: Unset, the first one found where they install.
@@ -557,6 +564,7 @@ class Settings:
     time: TimeSettings = field(default_factory=TimeSettings)
     browser: BrowserSettings = field(default_factory=BrowserSettings)
     marketplace: MarketplaceSettings = field(default_factory=MarketplaceSettings)
+    relay: RelaySettings = field(default_factory=RelaySettings)
     voice: VoiceSettings = field(default_factory=VoiceSettings)
 
 

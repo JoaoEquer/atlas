@@ -1,0 +1,147 @@
+"""Reaching a home through a relay (step 20): the tunnel's cipher, the connection code that carries
+it, and a real server reached from an app through a relay over real WebSockets, the relay never
+reading what crosses it.
+
+The relay is tests/fake_relay.py, which does what Atlas Cloud's does; the server is a real one
+(tests/server_support.py), its model the fake model server.
+"""
+
+import asyncio
+import json
+import secrets
+from collections.abc import Iterator
+from typing import Any
+
+import pytest
+
+from atlas.instances import (
+    CodeError,
+    ConnectionCode,
+    RelayAddress,
+    RelayRoom,
+    Transport,
+    TunnelError,
+    decode_code,
+    encode_code,
+    new_key,
+    relay_client,
+)
+from atlas.instances.tunnel import Tunnel, read_key
+from fake_model import FakeModelServer
+from fake_relay import FakeRelay
+from server_support import Serve
+
+# -- the tunnel ------------------------------------------------------------------------------------
+
+
+def _pair(key: str, other: str | None = None) -> tuple[Tunnel, Tunnel]:
+    app_nonce, home_nonce = secrets.token_bytes(16), secrets.token_bytes(16)
+    app = Tunnel(read_key(key), app_nonce, home_nonce, "app")
+    home = Tunnel(read_key(other or key), app_nonce, home_nonce, "home")
+    return app, home
+
+
+def test_what_one_end_seals_only_the_other_opens_in_order() -> None:
+    app, home = _pair(new_key())
+    first, second = app.seal(b'{"method": "routine.list"}'), app.seal(b"two")
+
+    assert b"routine.list" not in first
+    assert home.open(first) == b'{"method": "routine.list"}'
+    assert home.open(second) == b"two"
+    assert app.open(home.seal(b"back")) == b"back"
+    with pytest.raises(TunnelError, match="did not open"):
+        home.open(second)  # played again
+
+
+def test_a_frame_sealed_with_another_key_or_changed_on_the_way_does_not_open() -> None:
+    app, stranger = _pair(new_key(), new_key())
+    with pytest.raises(TunnelError):
+        stranger.open(app.seal(b"hello"))
+    app, home = _pair(new_key())
+    sealed = bytearray(app.seal(b"hello"))
+    sealed[0] ^= 1
+    with pytest.raises(TunnelError):
+        home.open(bytes(sealed))
+
+
+def test_a_connection_code_carries_its_relay_and_refuses_a_damaged_one() -> None:
+    relay = RelayAddress("wss://relay.example.com", "room-1", new_key())
+    code = ConnectionCode("work", 18791, "t" * 32, relay=relay)
+
+    read = decode_code(encode_code(code))
+
+    assert read.relay == relay
+    assert read.transports == (Transport.SSH, Transport.RELAY)
+    short = RelayAddress(relay.url, relay.room, "too-short")
+    damaged = encode_code(ConnectionCode("work", 18791, "t" * 32, relay=short))
+    with pytest.raises(CodeError, match="damaged"):
+        decode_code(damaged)
+
+
+# -- through a relay ------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def relay() -> Iterator[FakeRelay]:
+    with FakeRelay() as running:
+        yield running
+
+
+def _request(method: str, request_id: int = 1) -> str:
+    return json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": {}})
+
+
+async def _answer(client: Any, request_id: int) -> dict[str, Any]:
+    while True:
+        frame = json.loads(await client.recv())
+        if frame.get("id") == request_id:
+            return frame
+
+
+async def _waiting(relay: FakeRelay, room: str) -> None:
+    async with asyncio.timeout(20):
+        while relay.waiting(room) == 0:
+            await asyncio.sleep(0.02)
+
+
+def test_an_app_reaches_the_home_through_the_relay_which_reads_nothing(
+    serve: Serve, fake: FakeModelServer, relay: FakeRelay
+) -> None:
+    room = RelayRoom(relay.url, "room-1", new_key())
+    server = serve(relay=room)
+    server.gateway.assistant.routines.create("news", "every day at 9am", prompt="Read the news.")
+
+    async def scenario() -> tuple[dict[str, Any], dict[str, Any]]:
+        await _waiting(relay, room.room)
+        async with relay_client(room, _request("routine.list", 1)) as first:
+            listed = await _answer(first, 1)
+            await _waiting(relay, room.room)
+            async with relay_client(room, _request("routine.list", 7)) as second:
+                again = await _answer(second, 7)
+        return listed, again
+
+    listed, again = asyncio.run(scenario())
+
+    assert [r["name"] for r in listed["result"]["routines"]] == ["news"]
+    assert again["result"]["routines"] == listed["result"]["routines"], "a second app at once"
+    carried = b"".join(relay.carried)
+    assert relay.carried
+    assert b"routine.list" not in carried
+    assert b"news" not in carried
+    assert b"Read the news" not in carried
+
+
+def test_an_app_with_another_key_is_refused_and_learns_nothing(
+    serve: Serve, fake: FakeModelServer, relay: FakeRelay
+) -> None:
+    room = RelayRoom(relay.url, "room-2", new_key())
+    serve(relay=room)
+    wrong = RelayRoom(relay.url, room.room, new_key())
+
+    async def scenario() -> None:
+        await _waiting(relay, room.room)
+        async with relay_client(wrong, _request("routine.list")):
+            pass
+
+    with pytest.raises(TunnelError, match="did not open"):
+        asyncio.run(scenario())

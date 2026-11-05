@@ -39,6 +39,10 @@ dependencies = [
     # The WebSocket the clients talk over (atlas.server): uvicorn speaks it through this package,
     # and scripts use its client. Pure Python with an optional C speedup, no dependencies.
     "websockets==15.0.1",
+    # The tunnel through the relay (atlas.instances.tunnel, step 20): HKDF and ChaCha20-Poly1305,
+    # so only the app and the home read what crosses it. Already brought by the OpenAI SDK's
+    # dependencies; declared because Atlas imports it.
+    "cryptography==50.0.2",
     # Documents to Markdown for read_file and web_fetch (atlas.tools.documents): PDF, Word,
     # PowerPoint, Excel, OpenDocument, RTF, EPUB. In the core, since reading a PDF is a common
     # first thing to ask. Rust, prebuilt for every system, no

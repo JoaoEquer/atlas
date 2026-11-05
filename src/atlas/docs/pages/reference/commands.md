@@ -69,11 +69,12 @@ atlas server token [--new]
 Print the connection code another machine's app opens this home with. A secret: it holds the token.
 
 ```
-atlas server code [--port PORT]
+atlas server code [--relay] [--port PORT]
 ```
 
 | Argument | What it does |
 |---|---|
+| `--relay` | Also through the relay set as [relay] url (step 20): the app reaches the home from anywhere, with no port open, and only it and the home read what crosses. |
 | `--port PORT` | The port clients reach, when the home is not always on (a container: default 18790, or ATLAS_SERVER_PORT). |
 
 ## `atlas always-on`

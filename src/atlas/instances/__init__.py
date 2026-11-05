@@ -1,12 +1,13 @@
 """Talking to more than one machine: a home always on and open to the user's machines, its
 connection code, and who may come in over the tailnet."""
 
-from atlas.instances.errors import CodeError, InstancesError
+from atlas.instances.errors import CodeError, InstancesError, RelayGoneError, TunnelError
 from atlas.instances.model import (
     CODE_PREFIX,
     TAILNET_NETWORKS,
     AlwaysOn,
     ConnectionCode,
+    RelayAddress,
     ServiceCommand,
     Tailnet,
     Transport,
@@ -20,6 +21,15 @@ from atlas.instances.model import (
     systemd_unit,
     task_xml,
     windows_command_line,
+)
+from atlas.instances.relay import (
+    PAIRED,
+    RelayClient,
+    RelayLink,
+    RelayRoom,
+    RelaySession,
+    new_room,
+    relay_client,
 )
 from atlas.instances.service import (
     START_SECONDS,
@@ -39,9 +49,11 @@ from atlas.instances.store import (
     tailnet,
     tailscale_program,
 )
+from atlas.instances.tunnel import new_key
 
 __all__ = [
     "CODE_PREFIX",
+    "PAIRED",
     "START_SECONDS",
     "TAILNET_NETWORKS",
     "AlwaysOn",
@@ -51,6 +63,12 @@ __all__ = [
     "ConnectionCode",
     "InstancesError",
     "LaunchAgents",
+    "RelayAddress",
+    "RelayClient",
+    "RelayGoneError",
+    "RelayLink",
+    "RelayRoom",
+    "RelaySession",
     "ScheduledTasks",
     "ServiceCommand",
     "ServiceManager",
@@ -58,14 +76,18 @@ __all__ = [
     "SystemdUser",
     "Tailnet",
     "Transport",
+    "TunnelError",
     "answers",
     "decode_code",
     "encode_code",
     "is_tailnet",
     "launchd_plist",
+    "new_key",
+    "new_room",
     "parse_always_on",
     "parse_tailscale_status",
     "read_always_on",
+    "relay_client",
     "serve_command",
     "service_label",
     "service_manager",

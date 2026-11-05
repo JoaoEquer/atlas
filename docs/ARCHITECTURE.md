@@ -4187,7 +4187,25 @@ never the server itself.
 - **One agent acting on another machine is left out** (the user's decision): crossing a server's
   boundary changes filesystem, credentials, tools and trust.
 - **Transports** (`atlas.instances`): `tailscale` for all three cases, `ssh` for a server, and
-  `relay` later, with Atlas Cloud (step 20) and the Android app.
+  `relay` (step 20), for Atlas Cloud, the phone, and any home reached from anywhere.
+  - **`relay`** (decided by the user on 03/11/2026: on Cloudflare, ciphered end to end from the
+    first version): the home and the app each dial out to a relay (`[relay] url`), so neither
+    opens a port. The home waits at `{relay}/{room}/home` with one connection, the app comes in at
+    `{relay}/{room}/app`, the relay joins them, says `paired` to the home, and carries every frame
+    of one to the other, closing both when one closes; the home then waits again with a new one
+    (`RelayLink`, run by the server's lifespan), so several apps come in at once. The relay sees
+    only sealed bytes (`atlas.instances.tunnel`): the connection code carries a 32-byte key the
+    relay never sees; each connection agrees its own keys from it with HKDF-SHA256, salted with a
+    fresh nonce from each side, one per direction, and seals each frame with ChaCha20-Poly1305
+    numbered in its direction, so a frame read, changed, dropped, reordered or replayed stops the
+    other end. The home proves it holds the key in its answer (a sealed `ready`), the app with its
+    first frame, which the home opens before anything is served; then the connection is one more
+    client of the server's protocol (`_RelayPeer`), the key standing for the token. The room and
+    the key are made once and kept in the vault (`ATLAS_RELAY_ROOM`, `ATLAS_RELAY_KEY`), so every
+    code given stays valid; `atlas server code --relay` adds them to the code. A relay that cannot
+    be reached is tried again, up to a minute apart. Proved against a relay of the tests' own over
+    real WebSockets (two apps at once, a wrong key refused, nothing readable carried). Atlas
+    Cloud's relay, a Worker, and the app's side wait for the stop of step 20.
   - **`tailscale`**: an open home's server listens on the machine's tailnet address too. The
     address and the machine's MagicDNS name come from
     the `tailscale` command (`tailscale ip`, `tailscale status --json`); WireGuard encrypts, so no

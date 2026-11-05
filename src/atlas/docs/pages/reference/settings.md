@@ -89,6 +89,12 @@ An unknown key in `config.toml` stops Atlas with an error, so a typo never passe
 | `github_api_url` | text | `"https://api.github.com"` | `ATLAS_MARKETPLACE_GITHUB_API_URL` | Where GitHub's API is reached, to pin an outside item to its repository's commit. |
 | `claude_plugins` | text | `"anthropics/claude-plugins-official"` | `ATLAS_MARKETPLACE_CLAUDE_PLUGINS` | Claude Code's plugin directory on GitHub, `owner/name`, whose catalog is read at its branch. |
 
+## [relay]
+
+| Key | Value | Default | Variable | What it does |
+|---|---|---|---|---|
+| `url` | text | unset | `ATLAS_RELAY_URL` | The relay the home waits at, so the app reaches it from anywhere with no open port (step 20): a `wss://` address. Unset, none: the tailnet and SSH reach it. |
+
 ## [voice]
 
 | Key | Value | Default | Variable | What it does |

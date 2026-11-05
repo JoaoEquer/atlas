@@ -18,6 +18,7 @@ from websockets.sync.client import ClientConnection, connect
 
 from atlas.__main__ import SCHEMAS
 from atlas.home import Home, Settings
+from atlas.instances import RelayRoom
 from atlas.models import Models
 from atlas.secrets import Vault
 from atlas.server import PROTOCOL, TOKEN_PREFIX, Gateway, create_app
@@ -35,10 +36,11 @@ class AtlasServer:
         settings: Settings,
         models: Models,
         vault: Vault,
+        relay: RelayRoom | None = None,
         **gateway: Any,
     ) -> None:
         self.gateway = Gateway(home, settings, models, vault, schemas=SCHEMAS, **gateway)
-        app = create_app(self.gateway, token=TOKEN, bound_host="127.0.0.1")
+        app = create_app(self.gateway, token=TOKEN, bound_host="127.0.0.1", relay=relay)
         config = uvicorn.Config(
             app, host="127.0.0.1", port=0, log_config=None, log_level=None, access_log=False
         )

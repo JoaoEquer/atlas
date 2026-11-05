@@ -55,6 +55,7 @@ from atlas.home.model import (
     MarketplaceSettings,
     MemorySettings,
     ModelSettings,
+    RelaySettings,
     SecretText,
     ServerSettings,
     Settings,
@@ -158,6 +159,7 @@ def _settings(home: Path, source: "_Source") -> LoadedSettings:
         workspace=WorkspaceSettings(folder=source.path("workspace", "folder")),
         time=TimeSettings(zone=source.zone("time", "zone")),
         browser=BrowserSettings(chrome=source.text_list("browser", "chrome")),
+        relay=RelaySettings(url=source.optional_text("relay", "url")),
         marketplace=MarketplaceSettings(
             repository=source.text("marketplace", "repository", MARKETPLACE_REPOSITORY),
             branch=source.text("marketplace", "branch", "main"),

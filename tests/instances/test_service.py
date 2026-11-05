@@ -201,10 +201,10 @@ def test_status_of_a_home_never_turned_on(tmp_path: Path) -> None:
     assert (status.on, status.open, status.port, status.served) == (False, False, None, False)
 
 
-def _run(argv: list[str], home: Path) -> str:
+def _run(argv: list[str], home: Path, **environ: str) -> str:
     out = io.StringIO()
     with redirect_stdout(out):
-        assert main(argv, environ={"ATLAS_HOME": str(home)}) == 0
+        assert main(argv, environ={"ATLAS_HOME": str(home), **environ}) == 0
     return out.getvalue()
 
 
@@ -216,6 +216,22 @@ def test_a_new_token_replaces_the_one_every_code_carried(tmp_path: Path) -> None
     assert second != first
     code = decode_code(_run(["server", "code"], home.root))
     assert (code.token, code.port, code.home, code.tailnet) == (second, 18790, "default", None)
+
+
+def test_a_code_through_the_relay_keeps_its_room_and_key(tmp_path: Path) -> None:
+    """Step 20: the home's room and key are made once, so every code given stays valid."""
+    home = _home(tmp_path)
+    url = "wss://relay.example.com/relay"
+    first = decode_code(_run(["server", "code", "--relay"], home.root, ATLAS_RELAY_URL=url))
+    again = decode_code(_run(["server", "code", "--relay"], home.root, ATLAS_RELAY_URL=url))
+    plain = decode_code(_run(["server", "code"], home.root, ATLAS_RELAY_URL=url))
+
+    assert first.relay is not None
+    assert first.relay.url == url
+    assert again.relay == first.relay
+    assert plain.relay is None
+    with redirect_stdout(io.StringIO()):
+        assert main(["server", "code", "--relay"], environ={"ATLAS_HOME": str(home.root)}) == 1
 
 
 def _systemd_user_runs() -> bool:

@@ -1,5 +1,6 @@
 """The ASGI application and its routes: `/health`, and the clients' WebSocket at `/ws`."""
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator, Set
 from contextlib import asynccontextmanager, suppress
@@ -12,6 +13,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from atlas import __version__
 from atlas.home import DEFAULT_HOST
+from atlas.instances import RelayGoneError, RelayLink, RelayRoom, RelaySession
 from atlas.server.access import refusal
 from atlas.server.connection import PeerGoneError
 from atlas.server.protocol import PROTOCOL
@@ -69,12 +71,33 @@ class _Socket:
             await self._websocket.close(code)
 
 
+class _RelayPeer:
+    """A connection through the relay (step 20) as the gateway's `Peer`: one more client."""
+
+    def __init__(self, session: RelaySession) -> None:
+        self._session = session
+
+    async def send(self, text: str) -> None:
+        try:
+            await self._session.send(text)
+        except RelayGoneError as error:
+            raise PeerGoneError(str(error)) from error
+
+    async def receive(self) -> str | None:
+        return await self._session.receive()
+
+    async def close(self, code: int) -> None:
+        with suppress(RuntimeError, OSError):
+            await self._session.close(code)
+
+
 def create_app(
     gateway: Gateway | None = None,
     *,
     token: str = "",
     bound_host: str = DEFAULT_HOST,
     tailnet_names: Set[str] = frozenset(),
+    relay: RelayRoom | None = None,
 ) -> Starlette:
     """The application. Without a gateway it only answers `/health`. `token` is what clients
     present; `bound_host` is where the server listens, which decides who may come in;
@@ -108,9 +131,20 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncGenerator[None]:
         await served.start()
+        # The relay's apps come in as clients too, having proved they hold its key (step 20).
+        waiting = (
+            None
+            if relay is None
+            else asyncio.create_task(
+                RelayLink(relay, lambda session: served.serve(_RelayPeer(session))).run()
+            )
+        )
         try:
             yield
         finally:
+            if waiting is not None:
+                waiting.cancel()
+                await asyncio.gather(waiting, return_exceptions=True)
             await served.close()
 
     routes.append(WebSocketRoute("/ws", clients))

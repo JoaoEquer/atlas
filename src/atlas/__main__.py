@@ -9,6 +9,7 @@ the settings to whoever needs them.
 
 import argparse
 import asyncio
+import dataclasses
 import getpass
 import importlib
 import importlib.util
@@ -112,6 +113,7 @@ from atlas.instances import (
     AlwaysOnHome,
     AlwaysOnServices,
     InstancesError,
+    RelayAddress,
     Tailnet,
     encode_code,
     read_always_on,
@@ -163,11 +165,13 @@ from atlas.server import (
     KEPT_TOKEN,
     POLL_SECONDS,
     READY_LINE,
+    RELAY_KEY,
     Gateway,
     Parent,
     create_app,
     is_loopback,
     kept_token,
+    relay_room,
 )
 from atlas.skills import SCHEMA as SKILLS_SCHEMA
 from atlas.skills import (
@@ -279,6 +283,12 @@ def build_parser() -> argparse.ArgumentParser:
         "code",
         help="Print the connection code another machine's app opens this home with. A secret: it "
         "holds the token.",
+    )
+    code.add_argument(
+        "--relay",
+        action="store_true",
+        help="Also through the relay set as [relay] url (step 20): the app reaches the home from "
+        "anywhere, with no port open, and only it and the home read what crosses.",
     )
     code.add_argument(
         "--port",
@@ -923,6 +933,16 @@ def _server(args: argparse.Namespace, home: Home, settings: Settings, vault: Vau
         return 0
     port: int = settings.server.port if args.port is None else args.port
     code = AlwaysOnHome(home).code(kept_token(vault), port)
+    if args.relay:
+        url = settings.relay.url
+        if url is None:
+            sys.stderr.write(
+                "atlas: no relay is set: give its address as [relay] url in config.toml, or "
+                "ATLAS_RELAY_URL.\n"
+            )
+            return 1
+        room = relay_room(vault, url)
+        code = dataclasses.replace(code, relay=RelayAddress(room.url, room.room, room.key))
     sys.stdout.write(f"{encode_code(code)}\n")
     return 0
 
@@ -1086,7 +1106,14 @@ def _serve_held(
         },
     )
     tailnet_names: set[str] = set()
-    app = create_app(gateway, token=token, bound_host=host, tailnet_names=tailnet_names)
+    relay = (
+        None
+        if settings.relay.url is None or vault.get(RELAY_KEY) is None
+        else relay_room(vault, settings.relay.url)
+    )
+    app = create_app(
+        gateway, token=token, bound_host=host, tailnet_names=tailnet_names, relay=relay
+    )
     opening = (
         None if always_on is None or not always_on.open else _Tailnet(app, port, tailnet_names)
     )
