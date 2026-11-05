@@ -1112,7 +1112,9 @@ def test_a_task_asking_for_a_new_workspace_works_there_and_says_its_branch_and_c
 def test_a_task_in_a_folder_another_agent_works_in_is_warned_of(
     make: Make, fake: FakeModelServer, claude: Callable[..., None], tmp_path: Path
 ) -> None:
-    claude({"sleep": 1.0}, {"result": "Done."})
+    # The user's session works long enough to still be working when the task is delegated, on a
+    # slow machine too (CI's Windows took over a second, 05/11/2026).
+    claude({"sleep": 5.0}, {"result": "Done."})
     fake.reply(
         _delegate(),
         FakeReply(text="Claude Code is on it.", when=PARENT),
