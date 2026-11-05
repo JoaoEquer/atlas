@@ -1358,6 +1358,7 @@ export const en = {
     thisMachine: (home: string) => `This machine · home ${home}`,
     title: 'Machines',
     transport: 'Reached by',
+    viaRelay: 'Relay, from anywhere',
     viaSsh: 'SSH tunnel',
     viaTailscale: 'Tailscale',
     working: 'Working…'

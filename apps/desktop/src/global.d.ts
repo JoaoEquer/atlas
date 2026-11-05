@@ -53,7 +53,7 @@ interface TabsBridge {
 type Answer<T> = { error: string; ok: false } | { ok: true; value: T }
 
 /** How the app reaches a machine. */
-type Transport = 'ssh' | 'tailscale'
+type Transport = 'relay' | 'ssh' | 'tailscale'
 
 /** A machine of the list, as the window sees it: never its token. */
 interface MachineRow {
@@ -64,6 +64,8 @@ interface MachineRow {
   port: number
   sshHost: null | string
   transport: Transport
+  /** The relay and the home's room there, for a `relay` machine (step 20). */
+  relay?: null | { room: string; url: string }
 }
 
 interface MachinesBridge {

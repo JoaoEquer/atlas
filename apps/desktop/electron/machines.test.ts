@@ -46,6 +46,7 @@ describe('the connection code', () => {
     expect(decodeCode(`  ${SHOP}\n`)).toEqual({
       home: 'default',
       port: 18800,
+      relay: null,
       tailnet: '100.101.102.103',
       token: TOKEN
     })
@@ -107,6 +108,32 @@ describe('the machine list', () => {
     machines.remove(shop.id)
     expect(machines.list()).toEqual([])
     expect(() => machines.token(shop.id)).toThrow(/no token kept/)
+  })
+
+  it('adds a machine through a relay, its key kept sealed with the token (step 20)', () => {
+    const at = folder()
+    const machines = new Machines(at, cipher())
+    const key = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8'
+    const relay = { key, room: 'room-1', url: 'wss://relay.example.com' }
+    const shop = machines.add({
+      code: code({ home: 'default', port: 18800, relay, token: TOKEN }),
+      name: 'Shop',
+      transport: 'relay'
+    })
+
+    expect(shop).toMatchObject({ relay: { room: 'room-1', url: 'wss://relay.example.com' }, transport: 'relay' })
+    expect(machines.relayKey(shop.id)).toBe(key)
+    expect(readFileSync(path.join(at, 'machines.json'), 'utf8')).not.toContain(key)
+    expect(() => machines.add({ code: SHOP, name: 'Other', transport: 'relay' })).toThrow(/has no relay/)
+    expect(() =>
+      machines.add({
+        code: code({ home: 'x', port: 1, relay: { ...relay, key: 'short' }, token: TOKEN }),
+        name: 'Bad',
+        transport: 'relay'
+      })
+    ).toThrow(/damaged/)
+    machines.remove(shop.id)
+    expect(() => machines.relayKey(shop.id)).toThrow(/no token kept/)
   })
 
   it('keeps the token plain, for the user alone, where the system cannot seal it', () => {

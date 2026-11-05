@@ -113,10 +113,12 @@ def test_an_app_reaches_the_home_through_the_relay_which_reads_nothing(
 
     async def scenario() -> tuple[dict[str, Any], dict[str, Any]]:
         await _waiting(relay, room.room)
-        async with relay_client(room, _request("routine.list", 1)) as first:
+        async with relay_client(room) as first:
+            await first.send(_request("routine.list", 1))
             listed = await _answer(first, 1)
             await _waiting(relay, room.room)
-            async with relay_client(room, _request("routine.list", 7)) as second:
+            async with relay_client(room) as second:
+                await second.send(_request("routine.list", 7))
                 again = await _answer(second, 7)
         return listed, again
 
@@ -140,7 +142,7 @@ def test_an_app_with_another_key_is_refused_and_learns_nothing(
 
     async def scenario() -> None:
         await _waiting(relay, room.room)
-        async with relay_client(wrong, _request("routine.list")):
+        async with relay_client(wrong):
             pass
 
     with pytest.raises(TunnelError, match="did not open"):

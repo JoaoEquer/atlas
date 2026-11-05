@@ -157,7 +157,13 @@ function remoteMachine(id: string): RemoteMachine {
       throw new MachineError('That machine is no longer in the list.')
     }
 
-    found = new RemoteMachine(machine, () => machines.token(id), log)
+    found = new RemoteMachine(
+      machine,
+      () => machines.token(id),
+      log,
+      {},
+      () => machines.relayKey(id)
+    )
     reached.set(id, found)
   }
 
@@ -412,7 +418,8 @@ ipcMain.handle('atlas:machines:list', () => machines.list())
 ipcMain.handle('atlas:machines:add', (_event, given: unknown) =>
   answer(() => {
     const fields = (typeof given === 'object' && given !== null ? given : {}) as Record<string, unknown>
-    const transport: Transport = fields.transport === 'ssh' ? 'ssh' : 'tailscale'
+    const transport: Transport =
+      fields.transport === 'ssh' ? 'ssh' : fields.transport === 'relay' ? 'relay' : 'tailscale'
 
     return machines.add({ code: text(fields.code), name: text(fields.name), sshHost: text(fields.sshHost), transport })
   })
@@ -436,7 +443,13 @@ ipcMain.handle('atlas:machines:test', (_event, id: unknown) =>
       throw new MachineError('That machine is no longer in the list.')
     }
 
-    const testing = new RemoteMachine(machine, () => machines.token(machine.id), log)
+    const testing = new RemoteMachine(
+      machine,
+      () => machines.token(machine.id),
+      log,
+      {},
+      () => machines.relayKey(machine.id)
+    )
 
     try {
       await testing.endpoint()

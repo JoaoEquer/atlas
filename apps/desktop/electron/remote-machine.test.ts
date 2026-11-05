@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { PROTOCOL } from '../src/protocol/protocol.generated'
+import { readRelayUrl } from '../src/protocol/relay-address'
 
 import { localAddress, RemoteMachine, sameProtocol } from './remote-machine'
 
@@ -84,5 +85,33 @@ describe('a site up on the other machine, for the preview', () => {
     const said = await shop('tailscale').reach('http://localhost:3000/')
 
     expect('error' in said && said.error).toMatch(/is on Shop: open it there, or add Shop by SSH/)
+  })
+})
+
+describe('a machine through a relay (step 20)', () => {
+  it("is reached at the relay, its key in the address the window's client reads, nothing probed", async () => {
+    const key = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8'
+    const shop = new RemoteMachine(
+      {
+        home: 'default',
+        host: null,
+        id: 'm1',
+        name: 'Shop',
+        port: 18800,
+        relay: { room: 'room-1', url: 'wss://relay.example.com' },
+        sshHost: null,
+        transport: 'relay'
+      },
+      () => 'token',
+      () => undefined,
+      {},
+      () => key
+    )
+
+    const endpoint = await shop.endpoint()
+
+    expect(endpoint.token).toBe('token')
+    expect(readRelayUrl(endpoint.url)).toEqual({ key, room: 'room-1', url: 'wss://relay.example.com' })
+    expect(await shop.reach('http://localhost:3000')).toHaveProperty('error')
   })
 })

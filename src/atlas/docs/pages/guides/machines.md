@@ -37,8 +37,9 @@ url = "wss://relay.example.com"
 atlas server code --relay
 ```
 
-The home waits at the relay as long as its server runs; keep it always on (below) so it is there
-when you are away.
+In the app on the other machine, **Settings → Machines → Add**, paste the code and choose **Relay,
+from anywhere**. The home waits at the relay as long as its server runs; keep it always on (below)
+so it is there when you are away.
 
 ## Always on
 

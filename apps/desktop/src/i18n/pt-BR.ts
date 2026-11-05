@@ -1334,6 +1334,7 @@ export const ptBR: Override<Messages> = {
     thisMachine: (home: string) => `Esta máquina · casa ${home}`,
     title: 'Máquinas',
     transport: 'Caminho',
+    viaRelay: 'Relé, de qualquer lugar',
     viaSsh: 'Túnel SSH',
     viaTailscale: 'Tailscale',
     working: 'Aplicando…'

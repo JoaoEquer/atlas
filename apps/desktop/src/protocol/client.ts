@@ -21,6 +21,7 @@
 import { backoffDelayMs, isStableOpen } from './backoff'
 import { Channel, type EventParams, frameText, type ServerRequestHandler } from './channel'
 import { PROTOCOL, type RpcMethod, type RpcMethods, TOKEN_PREFIX } from './protocol.generated'
+import { readRelayUrl, RELAY_SCHEME, RelaySocket } from './relay'
 
 export type ConnectionState = 'closed' | 'connecting' | 'idle' | 'open'
 
@@ -179,7 +180,12 @@ export class AtlasClient {
 
   private open(endpoint: Endpoint): Promise<void> {
     const protocols = [PROTOCOL, TOKEN_PREFIX + endpoint.token]
-    const socket = this.options.socketFactory?.(endpoint.url, protocols) ?? new WebSocket(endpoint.url, protocols)
+    const socket =
+      this.options.socketFactory?.(endpoint.url, protocols) ??
+      (endpoint.url.startsWith(RELAY_SCHEME)
+        ? // Through a relay (step 20): the token rides inside the tunnel's key, never past the relay.
+          (new RelaySocket(readRelayUrl(endpoint.url)) as unknown as WebSocket)
+        : new WebSocket(endpoint.url, protocols))
     this.socket = socket
 
     socket.addEventListener('message', ({ data }) => {

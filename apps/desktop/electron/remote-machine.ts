@@ -12,6 +12,7 @@
  * listens on its loopback.
  */
 import { PROTOCOL } from '../src/protocol/protocol.generated'
+import { relayUrl } from '../src/protocol/relay-address'
 
 import type { Machine } from './machines'
 import { type Endpoint, probe } from './server'
@@ -28,11 +29,20 @@ export class RemoteMachine {
     readonly machine: Machine,
     private readonly token: () => string,
     private readonly log: (line: string) => void,
-    private readonly tunnel: Pick<TunnelOptions, 'configFile'> = {}
+    private readonly tunnel: Pick<TunnelOptions, 'configFile'> = {},
+    private readonly relayKey: () => string = () => ''
   ) {}
 
-  /** Its address and token, the tunnel opened first for an `ssh` machine, both legs probed. */
+  /** Its address and token, the tunnel opened first for an `ssh` machine, both legs probed. A
+   * `relay` machine's is the relay, its key in the address the window's client reads (step 20);
+   * the tunnel proves the far end is the home when the window connects. */
   async endpoint(): Promise<Endpoint> {
+    const { relay, transport } = this.machine
+
+    if (transport === 'relay' && relay) {
+      return { token: this.token(), url: relayUrl({ key: this.relayKey(), room: relay.room, url: relay.url }) }
+    }
+
     const base = await this.base()
     const endpoint = { token: this.token(), url: `${base.replace(/^http/, 'ws')}/ws` }
     await sameProtocol(base, this.machine.name)
@@ -58,6 +68,12 @@ export class RemoteMachine {
 
     if (!address) {
       return { url }
+    }
+
+    if (this.machine.transport === 'relay') {
+      return {
+        error: `${url} is on ${this.machine.name}: open it there, or add ${this.machine.name} by SSH to see it here.`
+      }
     }
 
     if (this.machine.transport !== 'ssh') {

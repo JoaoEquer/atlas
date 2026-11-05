@@ -4196,16 +4196,24 @@ never the server itself.
     (`RelayLink`, run by the server's lifespan), so several apps come in at once. The relay sees
     only sealed bytes (`atlas.instances.tunnel`): the connection code carries a 32-byte key the
     relay never sees; each connection agrees its own keys from it with HKDF-SHA256, salted with a
-    fresh nonce from each side, one per direction, and seals each frame with ChaCha20-Poly1305
+    fresh nonce from each side, one per direction, and seals each frame with AES-256-GCM (the
+    app's window has WebCrypto, which has no ChaCha20)
     numbered in its direction, so a frame read, changed, dropped, reordered or replayed stops the
-    other end. The home proves it holds the key in its answer (a sealed `ready`), the app with its
-    first frame, which the home opens before anything is served; then the connection is one more
+    other end. Each end proves it holds the key with a sealed `ready`, the home in its answer and
+    the app in the frame after, before the server hears anything; then the connection is one more
     client of the server's protocol (`_RelayPeer`), the key standing for the token. The room and
     the key are made once and kept in the vault (`ATLAS_RELAY_ROOM`, `ATLAS_RELAY_KEY`), so every
     code given stays valid; `atlas server code --relay` adds them to the code. A relay that cannot
     be reached is tried again, up to a minute apart. Proved against a relay of the tests' own over
-    real WebSockets (two apps at once, a wrong key refused, nothing readable carried). Atlas
-    Cloud's relay, a Worker, and the app's side wait for the stop of step 20.
+    real WebSockets (two apps at once, a wrong key refused, nothing readable carried).
+  - **The app's end** (`src/protocol/relay.ts`): a machine added with the `relay` transport keeps
+    the relay and its room in `machines.json` and the tunnel's key sealed with its token; its
+    endpoint is an `atlas-relay:` address carrying them, which the window's client opens as a
+    `RelaySocket`, a WebSocket to the client, the same tunnel in WebCrypto (HKDF, AES-256-GCM,
+    which is why the tunnel is AES-GCM and not ChaCha20). Nothing is probed before: the tunnel
+    proves the far end is the home. A preview of that machine's local site is not reached through
+    a relay. Fixed vectors printed by the Python tunnel prove both ends seal the same bytes. Atlas
+    Cloud's relay, a Worker, waits for the stop of step 20.
   - **`tailscale`**: an open home's server listens on the machine's tailnet address too. The
     address and the machine's MagicDNS name come from
     the `tailscale` command (`tailscale ip`, `tailscale status --json`); WireGuard encrypts, so no

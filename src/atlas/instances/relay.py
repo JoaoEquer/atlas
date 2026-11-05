@@ -61,10 +61,9 @@ class RelaySession:
     """One app's connection through the relay, from the home's end, its keys agreed: the frames of
     the server's protocol, opened as they come and sealed as they go."""
 
-    def __init__(self, socket: ClientConnection, tunnel: Tunnel, first: str) -> None:
+    def __init__(self, socket: ClientConnection, tunnel: Tunnel) -> None:
         self._socket = socket
         self._tunnel = tunnel
-        self._first: str | None = first
 
     async def send(self, text: str) -> None:
         """Raises `RelayGoneError` once the connection closed."""
@@ -76,9 +75,6 @@ class RelaySession:
     async def receive(self) -> str | None:
         """The next frame, or `None` once the connection closed or carried a frame that does not
         open, which closes it."""
-        if self._first is not None:
-            first, self._first = self._first, None
-            return first
         try:
             return self._tunnel.open(_binary(await self._socket.recv())).decode("utf-8")
         except ConnectionClosed:
@@ -143,8 +139,9 @@ class RelayLink:
                 home_nonce = secrets.token_bytes(NONCE_BYTES)
                 tunnel = Tunnel(self._key, app_nonce, home_nonce, "home")
                 await app.send(hello(home_nonce) + tunnel.seal(READY))
-                first = tunnel.open(_binary(await app.recv())).decode("utf-8")
-            await self._serve(RelaySession(app, tunnel, first))
+                if tunnel.open(_binary(await app.recv())) != READY:
+                    raise TunnelError("The app did not prove it holds the key.")
+            await self._serve(RelaySession(app, tunnel))
         except (TunnelError, TimeoutError, ConnectionClosed, UnicodeDecodeError) as error:
             _logger.warning("A connection through the relay ended: %s", error)
         finally:
@@ -166,9 +163,9 @@ class RelayClient:
 
 
 @contextlib.asynccontextmanager
-async def relay_client(room: RelayRoom, first: str) -> AsyncGenerator[RelayClient]:
-    """A connection to the home through the relay, its keys agreed and `first` (the protocol's
-    first frame) sent. Raises `TunnelError` when the far end cannot prove it holds the key."""
+async def relay_client(room: RelayRoom) -> AsyncGenerator[RelayClient]:
+    """A connection to the home through the relay, its keys agreed, each end having proved it
+    holds the key with a sealed `ready`. Raises `TunnelError` when the far end cannot."""
     key = read_key(room.key)
     async with connect(room.side("app"), max_size=None) as socket:
         app_nonce = secrets.token_bytes(NONCE_BYTES)
@@ -178,9 +175,8 @@ async def relay_client(room: RelayRoom, first: str) -> AsyncGenerator[RelayClien
         tunnel = Tunnel(key, app_nonce, home_nonce, "app")
         if tunnel.open(sealed) != READY:
             raise TunnelError("The far end of the relay is not your home.")
-        client = RelayClient(socket, tunnel)
-        await client.send(first)
-        yield client
+        await socket.send(tunnel.seal(READY))
+        yield RelayClient(socket, tunnel)
 
 
 def _binary(frame: str | bytes) -> bytes:

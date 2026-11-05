@@ -6,11 +6,13 @@ crosses it; the relay sees bytes it cannot read.
 - **Each connection agrees its own keys:** the app sends a fresh nonce, the home answers with its
   own, and HKDF-SHA256 over the code's key, salted with both, gives one key for each direction. A
   connection recorded and played again finds other keys, and fails.
-- **Each frame is sealed** with ChaCha20-Poly1305, its nonce the frame's number in its direction:
+- **Each frame is sealed** with AES-256-GCM, a key per direction and per connection, its nonce the
+  frame's number in its direction (the app's window seals the same with WebCrypto, which has no
+  ChaCha20):
   the relay can neither read, change, drop, reorder nor replay a frame without the other end
   stopping at once (`TunnelError`).
-- **The home proves it holds the key first** (its answer carries a sealed `ready`), and the app
-  proves it with its first frame, which the home opens before it forwards anything.
+- **Each end proves it holds the key** with a sealed `ready`: the home in its answer, the app in
+  the frame after, which the home opens before its server hears anything.
 
 Pure: bytes in, bytes out.
 """
@@ -22,7 +24,7 @@ from typing import Literal
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from atlas.instances.errors import TunnelError
@@ -69,7 +71,7 @@ def read_hello(frame: bytes) -> tuple[bytes, bytes]:
 
 @dataclass
 class _Direction:
-    cipher: ChaCha20Poly1305
+    cipher: AESGCM
     count: int = 0
 
     def nonce(self) -> bytes:
@@ -86,8 +88,8 @@ class Tunnel:
         sending = _derive(key, app_nonce + home_nonce, f"atlas relay {side}")
         other: Side = "home" if side == "app" else "app"
         receiving = _derive(key, app_nonce + home_nonce, f"atlas relay {other}")
-        self._out = _Direction(ChaCha20Poly1305(sending))
-        self._in = _Direction(ChaCha20Poly1305(receiving))
+        self._out = _Direction(AESGCM(sending))
+        self._in = _Direction(AESGCM(receiving))
 
     def seal(self, data: bytes) -> bytes:
         return self._out.cipher.encrypt(self._out.nonce(), data, None)

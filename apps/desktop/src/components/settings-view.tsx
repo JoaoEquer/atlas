@@ -344,7 +344,9 @@ function MachineItem({ machine }: { machine: MachineRow }) {
   const where =
     machine.transport === 'tailscale'
       ? `${t.machines.viaTailscale} · ${machine.host ?? ''}`
-      : `${t.machines.viaSsh} · ${machine.sshHost ?? ''}`
+      : machine.transport === 'relay'
+        ? `${t.machines.viaRelay} · ${machine.relay?.url ?? ''}`
+        : `${t.machines.viaSsh} · ${machine.sshHost ?? ''}`
 
   return (
     <li className="space-y-1 rounded-md bg-subtle px-2 py-1.5" data-machine={machine.name} data-testid="machine-row">
@@ -529,7 +531,7 @@ function AddMachine({ onDone }: { onDone: () => void }) {
       <fieldset className="space-y-1 text-xs">
         <legend>{t.machines.transport}</legend>
         <div className="flex gap-4">
-          {(['tailscale', 'ssh'] as const).map(each => (
+          {(['tailscale', 'ssh', 'relay'] as const).map(each => (
             <label className="flex items-center gap-1.5" key={each}>
               <input
                 checked={transport === each}
@@ -540,7 +542,11 @@ function AddMachine({ onDone }: { onDone: () => void }) {
                 }}
                 type="radio"
               />
-              {each === 'tailscale' ? t.machines.viaTailscale : t.machines.viaSsh}
+              {each === 'tailscale'
+                ? t.machines.viaTailscale
+                : each === 'ssh'
+                  ? t.machines.viaSsh
+                  : t.machines.viaRelay}
             </label>
           ))}
         </div>
