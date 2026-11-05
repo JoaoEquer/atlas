@@ -600,6 +600,42 @@ export const en = {
     tab: 'Templates',
     tiers: { essential: 'Essential', recommended: 'Recommended', useful: 'Useful' },
     words: {
+      bills: {
+        name: 'bills',
+        prompt:
+          'Read my email of the last week for bills and payment reminders, and list what is due this week, each with the amount and the date. If nothing is due, answer [SILENT].',
+        title: 'Bills due this week'
+      },
+      dependencyUpdates: {
+        name: 'dependencies',
+        prompt:
+          "Update this project's dependencies that have a new minor or patch version, run the tests after each, and keep only what passes. List what you updated, and what you left and why.",
+        title: 'Dependency updates'
+      },
+      failingChecks: {
+        name: 'failing-checks',
+        prompt:
+          "With gh, list this project's pull requests and main branch runs whose checks failed in the last day: each with the failing check and the first line of its error. If none failed, answer [SILENT].",
+        title: 'Checks that failed'
+      },
+      newsDigest: {
+        name: 'news',
+        prompt:
+          "Search the web for today's news on the subjects my memory says I follow, and give me five headlines, each with one line and its link.",
+        title: 'Morning news'
+      },
+      releaseNotes: {
+        name: 'release-notes',
+        prompt:
+          "Read the commits merged this week and write release notes for this project's users: what is new, what changed and what was fixed, in plain words. Change no file.",
+        title: 'Release notes draft'
+      },
+      weeklyReview: {
+        name: 'week',
+        prompt:
+          "Look back at my week, my calendar and the routines' results, and write me a short review: what got done, what slipped, and what to start Monday with.",
+        title: 'Weekly review'
+      },
       agenda: {
         name: 'tomorrow',
         prompt:

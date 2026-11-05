@@ -23,7 +23,19 @@ export interface RoutineTemplate {
   plugin?: string
 }
 
-export type TemplateId = 'agenda' | 'backup' | 'mailSummary' | 'missingTests' | 'securitySweep' | 'stalePullRequests'
+export type TemplateId =
+  | 'agenda'
+  | 'backup'
+  | 'bills'
+  | 'dependencyUpdates'
+  | 'failingChecks'
+  | 'mailSummary'
+  | 'missingTests'
+  | 'newsDigest'
+  | 'releaseNotes'
+  | 'securitySweep'
+  | 'stalePullRequests'
+  | 'weeklyReview'
 
 export const TEMPLATES: RoutineTemplate[] = [
   { effort: 'high', group: 'project', id: 'securitySweep', schedule: 'every monday at 9am', tier: 'essential' },
@@ -59,7 +71,34 @@ export const TEMPLATES: RoutineTemplate[] = [
     schedule: 'every day at 8pm',
     tier: 'recommended'
   },
-  { effort: 'low', group: 'personal', id: 'backup', schedule: 'every day at 3am', tier: 'useful' }
+  { effort: 'low', group: 'personal', id: 'backup', schedule: 'every day at 3am', tier: 'useful' },
+  {
+    effort: 'low',
+    group: 'project',
+    id: 'failingChecks',
+    plugin: 'github',
+    schedule: 'weekdays at 9am',
+    tier: 'essential'
+  },
+  {
+    effort: 'medium',
+    group: 'project',
+    id: 'dependencyUpdates',
+    schedule: 'every monday at 10am',
+    tier: 'recommended',
+    workspace: true
+  },
+  { effort: 'low', group: 'project', id: 'releaseNotes', schedule: 'every friday at 5pm', tier: 'useful' },
+  {
+    effort: 'medium',
+    group: 'personal',
+    id: 'weeklyReview',
+    plugin: 'google',
+    schedule: 'every friday at 6pm',
+    tier: 'recommended'
+  },
+  { effort: 'low', group: 'personal', id: 'bills', plugin: 'google', schedule: 'every monday at 9am', tier: 'useful' },
+  { effort: 'low', group: 'personal', id: 'newsDigest', schedule: 'every day at 7am', tier: 'useful' }
 ]
 
 const TIERS: TemplateTier[] = ['essential', 'recommended', 'useful']

@@ -202,13 +202,19 @@ describe('the templates (step 25)', () => {
     const cards = screen.getAllByTestId('routine-template')
     expect(cards.map(card => card.dataset.template)).toEqual([
       'securitySweep',
+      'failingChecks',
       'stalePullRequests',
+      'dependencyUpdates',
       'missingTests',
+      'releaseNotes',
       'mailSummary',
       'agenda',
-      'backup'
+      'weeklyReview',
+      'backup',
+      'bills',
+      'newsDigest'
     ])
-    const stale = cards[1]
+    const stale = cards[2]
     expect(stale?.textContent).toContain(t.templates.needs('github'))
     fireEvent.click(within(stale as HTMLElement).getByTestId('routine-template-add'))
     expect(market).toHaveBeenCalledWith('github')

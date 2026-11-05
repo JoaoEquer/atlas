@@ -586,6 +586,42 @@ export const ptBR: Override<Messages> = {
     tab: 'Modelos',
     tiers: { essential: 'Essencial', recommended: 'Recomendado', useful: 'Útil' },
     words: {
+      bills: {
+        name: 'contas',
+        prompt:
+          'Leia meus e-mails da última semana atrás de contas e lembretes de pagamento, e liste o que vence nesta semana, cada um com o valor e a data. Se nada vencer, responda [SILENT].',
+        title: 'Contas da semana'
+      },
+      dependencyUpdates: {
+        name: 'dependencias',
+        prompt:
+          'Atualize as dependências deste projeto que têm versão nova menor ou de correção, rode os testes depois de cada uma e fique só com o que passar. Liste o que atualizou, e o que deixou e por quê.',
+        title: 'Atualizar dependências'
+      },
+      failingChecks: {
+        name: 'checks-falhando',
+        prompt:
+          'Com o gh, liste os pull requests e as execuções do branch principal deste projeto com checks que falharam no último dia: cada um com o check que falhou e a primeira linha do erro. Se nenhum falhou, responda [SILENT].',
+        title: 'Checks que falharam'
+      },
+      newsDigest: {
+        name: 'noticias',
+        prompt:
+          'Procure na web as notícias de hoje sobre os assuntos que a minha memória diz que eu acompanho, e me dê cinco manchetes, cada uma com uma linha e o link.',
+        title: 'Notícias da manhã'
+      },
+      releaseNotes: {
+        name: 'notas-da-versao',
+        prompt:
+          'Leia os commits juntados nesta semana e escreva as notas da versão para quem usa este projeto: o que é novo, o que mudou e o que foi corrigido, em palavras simples. Não mude nenhum arquivo.',
+        title: 'Rascunho das notas da versão'
+      },
+      weeklyReview: {
+        name: 'semana',
+        prompt:
+          'Olhe para a minha semana, a agenda e os resultados das rotinas, e me escreva uma revisão curta: o que foi feito, o que escorregou e com o que começar na segunda.',
+        title: 'Revisão da semana'
+      },
       agenda: {
         name: 'amanha',
         prompt:
