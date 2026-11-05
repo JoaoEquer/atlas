@@ -3081,6 +3081,18 @@ people made for Atlas, a tab per kind, the Atlas team's items marked, a page per
     has already refuses it, as for the marketplace's own. Installing reads its entry again from
     the registry, so what installs is its latest version, and works while Atlas's own repository
     cannot be read.
+  - **skills.sh** (`[marketplace] skills_url`), whose search says each skill's installs: opening
+    the tab searches for "skill" (its search needs two characters), the most installed first, and
+    each search is another. Its API is not documented, so the last opening list read is kept
+    (`marketplace/skills-sh.json`) and stands in, said, when the search breaks. A skill installs
+    from its GitHub repository at the commit its default branch is on then, which GitHub's API says
+    (`[marketplace] github_api_url`), with the skill's folder (the one named after it holding a
+    `SKILL.md`, the shortest path first; the root when the repository is the skill); Update shows
+    once the branch moved, GitHub asked at most once an hour per repository, the 60 questions an
+    hour it answers a computer that does not sign in. Its text files pass the scan the memory
+    passes (step 7) before anything lands, since the model reads them and nobody reviewed them for
+    Atlas; the rest is the marketplace's own skill install (`read_skill`, the limits, the versions
+    kept). It takes the skill's own name in the library.
   - **The search** goes to the server once the typing stops (`marketplace.list`'s `query`); a
     source that cannot be read is said beside the list (`source_problems`), and the marketplace's
     own items are still listed. `[marketplace] outside = false` turns the outside sources off.

@@ -511,6 +511,9 @@ ARCHIVE_URL = "https://codeload.github.com/{repo}/tar.gz/{ref}"
 RAW_URL = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
 #: The official MCP Registry's list of servers (step 24), one of the marketplace's outside sources.
 REGISTRY_URL = "https://registry.modelcontextprotocol.io/v0/servers"
+#: skills.sh's search, and GitHub's API, which says a repository's newest commit and its files.
+SKILLS_URL = "https://skills.sh/api/search"
+GITHUB_API_URL = "https://api.github.com"
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,10 +527,15 @@ class MarketplaceSettings:
     archive_url: str = ARCHIVE_URL
     #: Where one file of a repository is read, with `{repo}`, `{ref}` and `{path}`.
     raw_url: str = RAW_URL
-    #: List what the outside catalogs offer beside the marketplace (step 24): the MCP Registry.
+    #: List what the outside catalogs offer beside the marketplace (step 24): the MCP Registry
+    #: and skills.sh.
     outside: bool = True
     #: Where the MCP Registry's list of servers is read.
     registry_url: str = REGISTRY_URL
+    #: Where skills.sh is searched.
+    skills_url: str = SKILLS_URL
+    #: Where GitHub's API is reached, to pin a skill of skills.sh to its repository's commit.
+    github_api_url: str = GITHUB_API_URL
 
 
 @dataclass(frozen=True, slots=True)

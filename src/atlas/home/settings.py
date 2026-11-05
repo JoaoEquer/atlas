@@ -40,10 +40,12 @@ from atlas.home.model import (
     CONFIG_FILE,
     DEFAULT_HOST,
     DEFAULT_PORT,
+    GITHUB_API_URL,
     LOG_LEVELS,
     MARKETPLACE_REPOSITORY,
     RAW_URL,
     REGISTRY_URL,
+    SKILLS_URL,
     TRANSCRIPTIONS,
     BrowserSettings,
     Home,
@@ -162,6 +164,8 @@ def _settings(home: Path, source: "_Source") -> LoadedSettings:
             raw_url=source.text("marketplace", "raw_url", RAW_URL),
             outside=source.boolean("marketplace", "outside", default=True),
             registry_url=source.text("marketplace", "registry_url", REGISTRY_URL),
+            skills_url=source.text("marketplace", "skills_url", SKILLS_URL),
+            github_api_url=source.text("marketplace", "github_api_url", GITHUB_API_URL),
         ),
         voice=VoiceSettings(
             transcription=source.one_of(

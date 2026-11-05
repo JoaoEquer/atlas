@@ -92,6 +92,8 @@ def test_the_app_installs_from_the_marketplace_and_every_client_hears_it(
                 archive_url=github.archive_url,
                 raw_url=github.raw_url,
                 registry_url=github.registry_url,
+                skills_url=github.skills_url,
+                github_api_url=github.github_api_url,
             ),
         )
         with (

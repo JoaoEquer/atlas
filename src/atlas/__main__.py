@@ -1914,7 +1914,7 @@ def _marketplace(args: argparse.Namespace, home: Home, settings: Settings, vault
         Plugins(home, database, vault),
         SkillLibrary(home.skills_folder, SkillUsage(database)),
         stored=vault.names,
-        sources=outside_sources(settings.marketplace, fetch),
+        sources=outside_sources(settings.marketplace, fetch, home.marketplace_folder),
     )
     if action == "list":
         listing = market.listing(refresh=args.refresh, query=args.search)

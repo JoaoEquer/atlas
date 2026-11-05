@@ -9,6 +9,11 @@ and no copy, beside its own repository.
   with why, and does not install. What a server asks for (an environment variable, a header, a
   part of its address) becomes a secret the vault holds; a remote one that signs in with OAuth
   gets the Sign in button as any other.
+- **skills.sh**, whose search gives each skill's installs. Opening the tab is one search (the most
+  installed for "skill"), and each search another; its API is not documented, so the last opening
+  list read is kept, and stands in, said, when the search breaks. A skill installs from its GitHub
+  repository at the commit its default branch is on then (GitHub's API says which, and where in the
+  repository the skill's folder is), and Update shows once the branch moved.
 
 An outside item is named `<source>:<its id>` (`mcp-registry:com.stripe/mcp`), never like an item
 of Atlas's own repository; in the home it takes a short name (`stripe`). Pure but for `Sources`,
@@ -19,14 +24,16 @@ import json
 import logging
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote, urlencode
 
-from atlas.home import MarketplaceSettings, format_utc
+from atlas.home import MarketplaceSettings, format_utc, replace_file
 from atlas.marketplace.errors import MarketplaceError
 from atlas.marketplace.model import (
+    COMMIT,
     NAME,
     SUMMARY_CHARS,
     TITLE_CHARS,
@@ -44,6 +51,16 @@ REGISTRY_LIMIT = 100
 REGISTRY_RECENT = timedelta(days=30)
 #: The most one read of a source may weigh.
 SOURCE_BYTES = 8 * 1024 * 1024
+#: What opening the tab searches skills.sh for, as it needs two characters at least, and the most
+#: skills one search lists.
+SKILLS_OPENING = "skill"
+SKILLS_LIMIT = 60
+#: How long a repository's newest commit, read from GitHub, is taken as still newest: GitHub
+#: answers 60 questions an hour to a computer that does not sign in.
+HEAD_STALE = timedelta(hours=1)
+#: Where the last opening list of skills.sh is kept, in the marketplace's folder.
+SKILLS_FILE = "skills-sh.json"
+_REPOSITORY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$")
 
 _REGISTRY_META = "io.modelcontextprotocol.registry/official"
 #: A namespace verified by a GitHub account rather than a domain.
@@ -58,9 +75,20 @@ _logger = logging.getLogger("atlas.marketplace")
 # -- the MCP Registry -----------------------------------------------------------------------------
 
 
-def outside_sources(settings: MarketplaceSettings, get: Fetch) -> "Sources | None":
-    """The outside sources the settings ask for; `None` when they are off."""
-    return Sources(get, registry_url=settings.registry_url) if settings.outside else None
+def outside_sources(
+    settings: MarketplaceSettings, get: Fetch, folder: Path | None = None
+) -> "Sources | None":
+    """The outside sources the settings ask for, keeping what they must in `folder`; `None`
+    when they are off."""
+    if not settings.outside:
+        return None
+    return Sources(
+        get,
+        registry_url=settings.registry_url,
+        skills_url=settings.skills_url,
+        github_api_url=settings.github_api_url,
+        folder=folder,
+    )
 
 
 def registry_items(data: bytes) -> list[Item]:
@@ -267,6 +295,82 @@ def _cut(text: str, chars: int) -> str:
     return text if len(text) <= chars else text[: chars - 1].rstrip() + "…"
 
 
+# -- skills.sh ------------------------------------------------------------------------------------
+
+
+def skills_items(data: bytes) -> list[Item]:
+    """The skills of one search of skills.sh, the most installed first. Raises
+    `MarketplaceError` when it is not its answer."""
+    try:
+        document: object = json.loads(data)
+    except ValueError as error:
+        raise MarketplaceError(f"skills.sh answered something else: {error}") from error
+    skills = (
+        cast("Mapping[str, Any]", document).get("skills") if isinstance(document, Mapping) else None
+    )
+    if not isinstance(skills, list):
+        raise MarketplaceError("skills.sh answered with no skills.")
+    found: list[Item] = []
+    for entry in cast("list[object]", skills):
+        item = skills_item(entry)
+        if item is not None:
+            found.append(item)
+    return sorted(found, key=lambda item: -(item.installs or 0))
+
+
+def skills_item(entry: object) -> Item | None:
+    """One skill of skills.sh's search as an item, its commit not read yet."""
+    if not isinstance(entry, Mapping):
+        return None
+    fields = cast("Mapping[str, Any]", entry)
+    repo, own = _text(fields.get("source")), _text(fields.get("skillId"))
+    if not _REPOSITORY.fullmatch(repo) or not own:
+        return None
+    installs = fields.get("installs")
+    target = own.lower()
+    return Item(
+        name=f"{Source.SKILLS_SH.value}:{repo}/{own}",
+        kind=Kind.SKILL,
+        title=_cut(_text(fields.get("name")) or own, TITLE_CHARS),
+        summary=f"A skill of {repo}, on GitHub.",
+        author=repo.split("/", 1)[0],
+        license="",
+        repo=repo,
+        source=Source.SKILLS_SH,
+        target=target,
+        installs=installs if isinstance(installs, int) else None,
+        problem=None
+        if NAME.fullmatch(target)
+        else f"Its name, {own}, cannot be a skill's name here.",
+    )
+
+
+def skill_folder(tree: bytes, own: str) -> str | None:
+    """Where in a repository's tree (GitHub's, read whole) the skill `own` is: the folder named
+    after it that holds a `SKILL.md`, the shortest path first; the root when the repository is
+    the skill. `None` when it holds none."""
+    try:
+        document: object = json.loads(tree)
+    except ValueError:
+        return None
+    entries = (
+        cast("Mapping[str, Any]", document).get("tree") if isinstance(document, Mapping) else None
+    )
+    paths = [
+        _text(cast("Mapping[str, Any]", e).get("path"))
+        for e in cast("list[object]", entries or [])
+        if isinstance(e, Mapping)
+    ]
+    wanted = own.lower()
+    found = sorted(
+        (path.rsplit("/", 1)[0] for path in paths if path.endswith("/SKILL.md")),
+        key=lambda folder: (folder.rsplit("/", 1)[-1].lower() != wanted, folder.count("/"), folder),
+    )
+    if found and found[0].rsplit("/", 1)[-1].lower() == wanted:
+        return found[0]
+    return "" if "SKILL.md" in paths else None
+
+
 # -- reading them ---------------------------------------------------------------------------------
 
 
@@ -281,12 +385,26 @@ class Found:
 class Sources:
     """The outside sources, read through `get` (the store's `Fetch`)."""
 
-    def __init__(self, get: Fetch, *, registry_url: str) -> None:
+    def __init__(
+        self,
+        get: Fetch,
+        *,
+        registry_url: str,
+        skills_url: str,
+        github_api_url: str,
+        folder: Path | None = None,
+    ) -> None:
         self._get = get
         self._registry = registry_url
+        self._skills = skills_url
+        self._github = github_api_url.rstrip("/")
+        self._folder = folder
+        #: Each repository's newest commit as last read, and when.
+        self._heads: dict[str, tuple[str, datetime]] = {}
 
     def search(self, query: str, now: datetime) -> Found:
-        """What the sources list for `query`; with none, the registry's servers updated lately."""
+        """What the sources list for `query`; with none, what each lists first: the registry's
+        servers updated lately, skills.sh's most installed."""
         problems: list[str] = []
         items: list[Item] = []
         try:
@@ -294,7 +412,31 @@ class Sources:
         except MarketplaceError as error:
             _logger.warning("The MCP Registry could not be read: %s", error)
             problems.append(f"The MCP Registry could not be read: {error}")
+        try:
+            items += self._skills_read(query, now)
+        except MarketplaceError as error:
+            _logger.warning("skills.sh could not be searched: %s", error)
+            kept = None if query.strip() else self._kept_skills()
+            if kept is None:
+                problems.append(f"skills.sh could not be searched: {error}")
+            else:
+                items += kept[0]
+                problems.append(
+                    f"skills.sh could not be searched ({error}); its list read on {kept[1]} "
+                    "stands in."
+                )
         return Found(items, problems)
+
+    def revision(self, item: Item, now: datetime) -> str | None:
+        """The commit an outside skill would install from now, read at most once an hour per
+        repository; `None` when GitHub cannot say."""
+        if item.source is not Source.SKILLS_SH:
+            return None
+        try:
+            return self._head(item.repo, now)
+        except MarketplaceError as error:
+            _logger.info("The newest commit of %s could not be read: %s", item.repo, error)
+            return None
 
     def item(self, name: str) -> Item | None:
         """One outside item, read again now. Raises `MarketplaceError` when its source cannot be
@@ -313,7 +455,63 @@ class Sources:
                     f"The MCP Registry answered something else: {error}"
                 ) from error
             return found if found is not None and found.name == name else None
+        if source == Source.SKILLS_SH.value and own.count("/") >= 2:
+            return self._skill(name, own)
         return None
+
+    def _skill(self, name: str, own: str) -> Item | None:
+        owner, repo_name, skill = own.split("/", 2)
+        repo = f"{owner}/{repo_name}"
+        listed = skills_item({"source": repo, "skillId": skill, "name": skill})
+        if listed is None:
+            return None
+        sha = self._head(repo, None)
+        tree = self._get(f"{self._github}/repos/{repo}/git/trees/{sha}?recursive=1", SOURCE_BYTES)
+        if tree is None:
+            raise MarketplaceError(f"GitHub has no {repo} at {sha}.")
+        path = skill_folder(tree, skill)
+        if path is None:
+            raise MarketplaceError(f"{repo} holds no skill {skill} at its newest commit.")
+        return replace(listed, name=name, sha=sha, path=path)
+
+    def _head(self, repo: str, now: datetime | None) -> str:
+        kept = self._heads.get(repo)
+        if now is not None and kept is not None and now - kept[1] < HEAD_STALE:
+            return kept[0]
+        data = self._get(f"{self._github}/repos/{repo}/commits/HEAD", SOURCE_BYTES)
+        if data is None:
+            raise MarketplaceError(f"GitHub has no repository {repo}.")
+        try:
+            sha = _text(cast("Mapping[str, Any]", json.loads(data)).get("sha"))
+        except (ValueError, AttributeError) as error:
+            raise MarketplaceError(f"GitHub answered something else: {error}") from error
+        if not COMMIT.fullmatch(sha):
+            raise MarketplaceError(f"GitHub did not say the newest commit of {repo}.")
+        if now is not None:
+            self._heads[repo] = (sha, now)
+        return sha
+
+    def _skills_read(self, query: str, now: datetime) -> list[Item]:
+        wanted = query.strip() if len(query.strip()) >= 2 else SKILLS_OPENING
+        params = {"q": wanted, "limit": str(SKILLS_LIMIT)}
+        data = self._get(f"{self._skills}?{urlencode(params)}", SOURCE_BYTES)
+        if data is None:
+            raise MarketplaceError("skills.sh's search is not there.")
+        items = skills_items(data)
+        if not query.strip() and self._folder is not None:
+            self._folder.mkdir(parents=True, exist_ok=True)
+            kept = {"read_at": format_utc(now), "data": data.decode("utf-8", "replace")}
+            replace_file(self._folder / SKILLS_FILE, json.dumps(kept).encode("utf-8"))
+        return items
+
+    def _kept_skills(self) -> tuple[list[Item], str] | None:
+        if self._folder is None:
+            return None
+        try:
+            kept = json.loads((self._folder / SKILLS_FILE).read_text(encoding="utf-8"))
+            return skills_items(str(kept["data"]).encode("utf-8")), str(kept["read_at"])[:10]
+        except (OSError, ValueError, KeyError, TypeError, MarketplaceError):
+            return None
 
     def _registry_read(self, query: str, now: datetime) -> list[Item]:
         params = {"version": "latest", "limit": str(REGISTRY_LIMIT)}

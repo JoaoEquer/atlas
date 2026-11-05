@@ -32,7 +32,7 @@ import logging
 import shutil
 import sys
 import threading
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -97,6 +97,7 @@ from atlas.skills import (
     reset_bundled,
     skill_files,
 )
+from atlas.trust import Scope, scan_for_threats
 
 #: A read older than this is read again when the listing is asked for.
 STALE = timedelta(hours=1)
@@ -106,6 +107,9 @@ SKILL_BYTES = 20 * 1024 * 1024
 #: Who the items Atlas ships are by.
 TEAM = "Atlas"
 _SYSTEM = {"win32": "windows", "darwin": "macos"}
+
+#: The files of an outside skill read for what the memory refuses: what the model may read.
+_TEXT_SUFFIXES = frozenset({".md", ".txt", ".markdown", ".json", ".yaml", ".yml"})
 
 _logger = logging.getLogger("atlas.marketplace")
 
@@ -492,16 +496,19 @@ class Marketplace:
         return self._put_plugin(item, replacing=replacing)
 
     def _put_skill(self, index: Index | None, item: Item, *, replacing: bool) -> list[str]:
+        home = item.home_name
         with self.store.archive(item.repo, item.sha) as root:
             folder = subfolder(root, item.path)
-            needs = read_skill(folder, item.name).needs
+            needs = read_skill(folder, home).needs
             files = skill_files(folder)
+        if item.source is not Source.ATLAS:
+            _refuse_threats(item.name, files)
         if needs.systems and self.system not in needs.systems:
             raise MarketplaceError(
                 f"{item.name} works on {', '.join(needs.systems)}, not on {self.system}."
             )
-        if not replacing and (self.library.folder / item.name).exists():
-            raise MarketplaceError(f"You have a skill named {item.name} already.")
+        if not replacing and (self.library.folder / home).exists():
+            raise MarketplaceError(f"You have a skill named {home} already.")
         servers = self.mcp.servers()
         brought: list[Item] = []
         for server in needs.servers:
@@ -518,16 +525,16 @@ class Marketplace:
         for dependency in brought:
             changed += self._put_server(dependency, needed_by=item.name, replacing=False)
         try:
-            self.library.put(item.name, files)
+            self.library.put(home, files)
         except SkillChangeError as error:
             raise MarketplaceError(str(error)) from error
         if not replacing and self.library.usage is not None:
             # The user's, as a skill they wrote: a row the review left under this name would
             # otherwise let the curator archive it.
-            self.library.usage.created(item.name, Origin.USER, self._clock())
+            self.library.usage.created(home, Origin.USER, self._clock())
         for server in needs.servers:
             self._needed(server, item.name)
-        digest = files_digest(skill_files(self.library.folder / item.name))
+        digest = files_digest(skill_files(self.library.folder / home))
         self._record(item, digest)
         return [*changed, item.name]
 
@@ -600,9 +607,9 @@ class Marketplace:
 
     def _stop(self, record: Record) -> None:
         if record.kind is Kind.SKILL:
-            if (self.library.folder / record.name).is_dir():
+            if (self.library.folder / record.home_name).is_dir():
                 try:
-                    self.library.archive(record.name)
+                    self.library.archive(record.home_name)
                 except SkillChangeError as error:
                     raise MarketplaceError(str(error)) from error
         elif record.kind is Kind.MCP:
@@ -615,14 +622,15 @@ class Marketplace:
 
     def _present(self, record: Record) -> bool:
         if record.kind is Kind.SKILL:
-            return (self.library.folder / record.name).is_dir()
+            return (self.library.folder / record.home_name).is_dir()
         if record.kind is Kind.MCP:
             return record.home_name in self.mcp.servers()
         return (self.plugins.folder / record.name).is_dir()
 
     def _changed_here(self, record: Record) -> bool:
         if record.kind is Kind.SKILL:
-            return files_digest(skill_files(self.library.folder / record.name)) != record.digest
+            folder = self.library.folder / record.home_name
+            return files_digest(skill_files(folder)) != record.digest
         if record.kind is Kind.MCP:
             entry = self.mcp.servers().get(record.home_name)
             return entry is not None and entry_digest(entry) != record.digest
@@ -659,7 +667,7 @@ class Marketplace:
             state=state,
             update=record is not None
             and state not in (State.AVAILABLE, State.RETIRED)
-            and record.revision != item.revision,
+            and self._revision(item) not in (None, record.revision),
             image=item.image,
             source_url=item.source_url,
             problem=problem,
@@ -667,6 +675,13 @@ class Marketplace:
             updated=item.updated,
             installs=item.installs,
         )
+
+    def _revision(self, item: Item) -> str | None:
+        """What installing `item` would take now: its revision, or for a skill of an outside
+        source listed with no commit, its repository's newest, when known."""
+        if item.revision or self.sources is None:
+            return item.revision
+        return self.sources.revision(item, self._clock())
 
     def _unlisted(
         self, record: Record, views: dict[str, PluginView], servers: Collection[str]
@@ -713,8 +728,8 @@ class Marketplace:
     def _taken(
         self, item: Item, views: dict[str, PluginView], servers: Collection[str]
     ) -> str | None:
-        if item.kind is Kind.SKILL and (self.library.folder / item.name).exists():
-            return f"You have a skill named {item.name} already."
+        if item.kind is Kind.SKILL and (self.library.folder / item.home_name).exists():
+            return f"You have a skill named {item.home_name} already."
         if item.kind is Kind.MCP and item.home_name in servers:
             return f"Your mcp.json has a server named {item.home_name} already."
         if item.kind.has_code and item.kind is not Kind.SKILL and item.name in views:
@@ -803,6 +818,17 @@ class Marketplace:
             met = self.system in needs.systems
             found.append(Need("system", ", ".join(needs.systems), "met" if met else "missing"))
         return found
+
+
+def _refuse_threats(name: str, files: Mapping[PurePosixPath, bytes]) -> None:
+    """Refuse an outside skill whose text carries what the memory refuses (step 7): it would
+    reach the model's context, and nobody reviewed it for Atlas."""
+    for path, data in files.items():
+        if path.suffix.lower() not in _TEXT_SUFFIXES:
+            continue
+        hits = scan_for_threats(data.decode("utf-8", "replace"), Scope.CONTEXT)
+        if hits:
+            raise MarketplaceError(f"{name} was refused: {path} holds {hits[0]}.")
 
 
 def _outside(name: str) -> bool:

@@ -645,7 +645,7 @@ class Gateway:
             SkillLibrary(home.skills_folder, SkillUsage(Database(home.database_file))),
             stored=self._stored_names,
             clock=clock,
-            sources=outside_sources(settings.marketplace, market_fetch),
+            sources=outside_sources(settings.marketplace, market_fetch, home.marketplace_folder),
         )
         #: `mcp.json` as last seen (step 16s): read again once it changes, by the marketplace or
         #: by hand.
