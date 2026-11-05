@@ -561,6 +561,33 @@ export const en = {
     waits: (code: string) => `waits with ${code}`,
     waiting: (count: number) => (count === 1 ? '1 waits' : `${count} wait`)
   },
+  routineForm: {
+    auto: 'Run it in its automatic mode, which asks nothing',
+    bot: 'Bot',
+    cancel: 'Cancel',
+    draft: 'Open a draft pull request of what it changed (GitHub plugin)',
+    editTitle: 'Change the routine',
+    effort: 'Effort',
+    effortOfHome: "The model's default",
+    efforts: { high: 'High', low: 'Low', medium: 'Medium' },
+    executor: 'Executor',
+    folder: 'Folder',
+    model: 'Model',
+    modelOfHome: "The home's model",
+    name: 'Name',
+    newTitle: 'New routine',
+    probe: 'Probe',
+    probeHint: 'optional: a command whose new output wakes it',
+    prompt: 'What to do',
+    runner: 'Who runs it',
+    runners: { atlas: 'Atlas', bot: 'A bot', executor: 'A coding agent, in a folder' },
+    save: 'Save',
+    saveAndRun: 'Save and run now',
+    schedule: 'When',
+    scheduleHint: 'every day at 9am, every 30m, weekdays at 8am',
+    unwatched: 'It runs with nobody watching: its first question stops the run, which then waits for you in Executors.',
+    workspace: 'Each run in a new workspace (for a routine that changes code)'
+  },
   routines: {
     confirmRemove: 'Remove it?',
     empty: 'No routines yet. Ask Atlas to schedule one, or use atlas routines create in the terminal.',
@@ -578,6 +605,8 @@ export const en = {
     paused: 'paused',
     executor: (name: string, folder: string, workspace: boolean) =>
       `Run by ${name} in ${folder}${workspace ? ', a new workspace each run' : ''}`,
+    edit: 'Change',
+    newRoutine: 'New routine',
     scoreboard: (alone: number, needed: number, failed: number) =>
       `This week: ${String(alone)} ran alone · ${String(needed)} needed you · ${String(failed)} failed`,
     probe: (command: string) => `Woken by its probe: $ ${command}`,

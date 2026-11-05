@@ -135,6 +135,7 @@ from atlas.jobs import (
     DelegationError,
     JobsError,
     Routine,
+    RoutineExecutor,
     Run,
     RunStatus,
     Scheduler,
@@ -355,6 +356,7 @@ from atlas.server.protocol import (
     RoutineRef,
     RoutineRemoved,
     RoutineRow,
+    RoutineSave,
     RoutinesChanged,
     RunList,
     RunRow,
@@ -781,6 +783,7 @@ class Gateway:
             "bot.delete": self._bot_delete,
             "bot.options": self._bot_options,
             "routine.list": self._routines,
+            "routine.save": self._routine_save,
             "routine.runs": self._routine_runs,
             "routine.run": self._routine_run,
             "routine.pause": self._routine_pause,
@@ -3528,6 +3531,43 @@ class Gateway:
             ScoreboardRow(format_utc(score.since), score.alone, score.needed, score.failed),
         )
 
+    async def _routine_save(self, connection: Connection, params: RoutineSave) -> RoutineRow:
+        """The user's own routine, made or changed from the app's form (step 25)."""
+        self._owner(connection)
+        routines = self.assistant.routines
+        provider, _, model = params.model.partition("/")
+        pinned = (provider, model, params.effort or None) if provider and model else None
+        executor = RoutineExecutor(**dump(params.executor)) if params.executor is not None else None
+
+        def save(key: str) -> Routine:
+            if not key:
+                return routines.create(
+                    params.name,
+                    params.schedule,
+                    prompt=params.prompt,
+                    model=pinned,
+                    bot=params.bot or None,
+                    probe=params.probe or None,
+                    executor=executor,
+                )
+            found = routines.store.get(key)
+            if found.prompt is None:
+                raise JobsError(f"{found.name} runs a command: change it from the terminal.")
+            return routines.update(
+                key,
+                name=params.name,
+                schedule=params.schedule if params.schedule != found.schedule.display else None,
+                prompt=params.prompt,
+                probe=params.probe,
+                model=pinned or ("", "", None),
+                bot=params.bot,
+                executor=executor or RoutineExecutor("", ""),
+            )
+
+        routine = await self._act(save, params.routine_id)
+        self._routines_changed()
+        return _routine_row(routine, routine.id in self.scheduler.running)
+
     async def _routine_runs(self, connection: Connection, params: RoutineRef) -> RunList:
         routine = await self._routine(params.routine_id)
         runs = await asyncio.to_thread(self.assistant.routines.store.runs, routine.id)
@@ -3776,6 +3816,10 @@ def _routine_row(routine: Routine, running: bool) -> RoutineRow:
         routine.bot,
         routine.probe,
         None if routine.executor is None else RoutineExecutorRow(**dump(routine.executor)),
+        f"{routine.model_provider}/{routine.model_name}"
+        if routine.model_provider and routine.model_name
+        else "",
+        routine.model_effort or "",
     )
 
 

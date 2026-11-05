@@ -61,6 +61,7 @@ import type {
   RequestCancel,
   RoutineFinished,
   RoutineRow,
+  RoutineSave,
   RunRow,
   ScoreboardRow,
   SearchHit,
@@ -2231,6 +2232,18 @@ export class HomeSession {
   }
 
   /** Run now, pause, resume or remove a routine; the list is read again after. */
+  /** Make or change a prompt routine from the Routines screen's form (step 25), and run it now when
+   * asked. */
+  async saveRoutine(draft: RoutineSave, runNow: boolean): Promise<void> {
+    const saved = await this.client.call('routine.save', draft)
+
+    if (runNow) {
+      await this.client.call('routine.run', { routine_id: saved.id })
+    }
+
+    await this.refreshRoutines()
+  }
+
   async actOnRoutine(action: 'pause' | 'remove' | 'resume' | 'run', routineId: string): Promise<void> {
     await this.client.call(`routine.${action}`, { routine_id: routineId })
     await this.refreshRoutines()
@@ -3637,6 +3650,37 @@ export function forgetPairing(channel: string, user: string): Promise<boolean> {
 
 export function readRuns(routineId: string): Promise<void> {
   return current().readRuns(routineId)
+}
+
+/** The routine the form shows (step 25): a new one, one to change, or a template's; `null`, closed. */
+export const $routineForm = atom<null | RoutineSave>(null)
+
+export function openRoutineForm(draft?: RoutineSave): void {
+  $routineForm.set(draft ?? { name: '', prompt: '', schedule: '' })
+}
+
+export function closeRoutineForm(): void {
+  $routineForm.set(null)
+}
+
+/** The form's start for a routine there is: what it is now. */
+export function routineDraft(routine: RoutineRow): RoutineSave {
+  return {
+    bot: routine.bot ?? '',
+    effort: routine.effort,
+    executor: routine.executor,
+    model: routine.model,
+    name: routine.name,
+    probe: routine.probe ?? '',
+    prompt: routine.prompt ?? '',
+    routine_id: routine.id,
+    schedule: routine.schedule
+  }
+}
+
+export async function saveRoutine(draft: RoutineSave, runNow: boolean): Promise<void> {
+  await current().saveRoutine(draft, runNow)
+  closeRoutineForm()
 }
 
 export function actOnRoutine(action: 'pause' | 'remove' | 'resume' | 'run', routineId: string): Promise<void> {

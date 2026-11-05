@@ -15,7 +15,10 @@ The simplest way is to ask, in a conversation:
 
 > Every weekday at 9am, read my unread emails and give me the five that need an answer.
 
-Atlas makes the routine and tells you its schedule. From a terminal:
+Atlas makes the routine and tells you its schedule. In the app, **New routine** on the Routines
+screen opens a form: what to do, when (and a probe, below), who runs it (Atlas, a bot or a coding
+agent in a folder), its model and effort, and **Save and run now**. **Change** on a prompt routine
+opens the same form. From a terminal:
 
 ```bash
 atlas routines create inbox --schedule "weekdays at 9am" --prompt "Read my unread emails and list the five that need an answer."

@@ -624,6 +624,30 @@ class RoutineRow:
     probe: str | None = None
     #: The executor its prompt runs in (step 25); `null`, Atlas's model.
     executor: RoutineExecutorRow | None = None
+    #: The model pinned on it, `provider/model`, and its effort; empty, the settings' (step 25).
+    model: str = ""
+    effort: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class RoutineSave:
+    """A prompt routine as the app's form writes it (step 25): made when `routine_id` is empty,
+    changed otherwise."""
+
+    name: str
+    #: As `atlas routines create --schedule` takes it: `every day at 9am`, `every 30m`.
+    schedule: str
+    prompt: str
+    routine_id: str = ""
+    #: A command whose new output wakes the prompt (step 23); empty, its schedule does.
+    probe: str = ""
+    #: The bot it runs as; empty, the main agent.
+    bot: str = ""
+    #: `provider/model` and its effort; empty, the settings'.
+    model: str = ""
+    effort: str = ""
+    #: The executor that runs it in a folder; `null`, Atlas's model.
+    executor: RoutineExecutorRow | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -2812,6 +2836,13 @@ METHODS: Mapping[str, Method] = {
             "only and applies from its next turn; a new conversation starts from config.toml.",
         ),
         Method("routine.list", Empty, RoutineList, "The home's routines, by name."),
+        Method(
+            "routine.save",
+            RoutineSave,
+            RoutineRow,
+            "Make a prompt routine, or change one (step 25): its name, its schedule or its probe, "
+            "who runs it (Atlas, a bot or an executor in a folder), and its model.",
+        ),
         Method(
             "routine.runs", RoutineRef, RunList, "A routine's runs, the newest first, at most 50."
         ),

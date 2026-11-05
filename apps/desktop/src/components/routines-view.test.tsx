@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { t } from '@/i18n'
+import type { ExecutorRow } from '@/protocol/protocol.generated'
 import * as app from '@/store/app'
 
 import { RoutinesView } from './routines-view'
@@ -21,11 +22,13 @@ describe('a routine woken by its probe (step 23)', () => {
         bot: null,
         command: null,
         created_by: 'agent',
+        effort: '',
         enabled: true,
         executor: null,
         id: 'r1',
         last_run_at: null,
         last_status: 'ok',
+        model: '',
         name: 'mail',
         next_run_at: null,
         probe: 'python unread.py',
@@ -76,11 +79,13 @@ describe('a routine an executor runs (step 25)', () => {
         bot: null,
         command: null,
         created_by: 'user',
+        effort: '',
         enabled: true,
         executor: { auto: false, draft: false, folder: '/work/shop', name: 'claude-code', workspace: true },
         id: 'r2',
         last_run_at: null,
         last_status: 'needed',
+        model: '',
         name: 'sweep',
         next_run_at: null,
         probe: null,
@@ -105,5 +110,79 @@ describe("this week's scoreboard (step 25)", () => {
 
     expect(screen.getByTestId('routines-scoreboard').textContent).toBe(t.routines.scoreboard(12, 2, 1))
     app.$scoreboard.set(null)
+  })
+})
+
+describe('a routine made and changed in the form (step 25)', () => {
+  it('makes one an executor runs in a folder, in a new workspace each run', async () => {
+    const saved = vi.spyOn(app, 'saveRoutine').mockResolvedValue(undefined)
+    app.$workbench.set({
+      executors: [{ installed: true, name: 'claude-code', title: 'Claude Code' } as ExecutorRow],
+      instances: []
+    })
+    render(<RoutinesView />)
+
+    fireEvent.click(screen.getByTestId('routine-new'))
+    const type = (testId: string, value: string) => {
+      fireEvent.change(screen.getByTestId(testId), { target: { value } })
+    }
+    type('routine-form-name', 'sweep')
+    type('routine-form-prompt', 'Sweep the dependencies.')
+    type('routine-form-schedule', 'every monday 9am')
+    type('routine-form-runner', 'executor')
+    type('routine-form-executor', 'claude-code')
+    type('routine-form-folder', '/work/shop')
+    fireEvent.click(screen.getByTestId('routine-form-workspace'))
+    fireEvent.click(screen.getByTestId('routine-form-draft'))
+    fireEvent.click(screen.getByTestId('routine-form-run'))
+    await Promise.resolve()
+
+    expect(saved).toHaveBeenCalledWith(
+      {
+        bot: '',
+        effort: '',
+        executor: { auto: false, draft: true, folder: '/work/shop', name: 'claude-code', workspace: true },
+        model: '',
+        name: 'sweep',
+        probe: '',
+        prompt: 'Sweep the dependencies.',
+        routine_id: '',
+        schedule: 'every monday 9am'
+      },
+      true
+    )
+    app.$workbench.set({ executors: [], instances: [] })
+    app.closeRoutineForm()
+  })
+
+  it('opens a routine there is with what it is now', () => {
+    vi.spyOn(app, 'readRuns').mockResolvedValue(undefined)
+    app.$routines.set([
+      {
+        bot: null,
+        command: null,
+        created_by: 'user',
+        effort: 'high',
+        enabled: true,
+        executor: null,
+        id: 'r3',
+        last_run_at: null,
+        last_status: null,
+        model: 'openrouter/fake-model',
+        name: 'mail',
+        next_run_at: null,
+        probe: 'python unread.py',
+        prompt: 'Triage the new mail.',
+        running: false,
+        schedule: 'every 5m'
+      }
+    ])
+    render(<RoutinesView />)
+
+    fireEvent.click(screen.getByTestId('routine-edit'))
+
+    expect(screen.getByDisplayValue('Triage the new mail.').dataset.testid).toBe('routine-form-prompt')
+    expect(screen.getByDisplayValue('python unread.py').dataset.testid).toBe('routine-form-probe')
+    app.closeRoutineForm()
   })
 })

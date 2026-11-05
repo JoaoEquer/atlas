@@ -3,15 +3,27 @@ import { useState } from 'react'
 
 import { t } from '@/i18n'
 import type { RoutineRow, RunRow } from '@/protocol/protocol.generated'
-import { $readError, $routines, $runs, $scoreboard, actOnRoutine, readRuns, selectConversation } from '@/store/app'
+import {
+  $readError,
+  $routines,
+  $runs,
+  $scoreboard,
+  actOnRoutine,
+  openRoutineForm,
+  readRuns,
+  routineDraft,
+  selectConversation
+} from '@/store/app'
 
 import { PageHeader } from './page-header'
 import { ReadFailed } from './read-failed'
+import { RoutineFormHost } from './routine-form'
 
 /**
  * The routines, kept short (decided on 11/10/2026): the list, run now,
- * pause or resume, remove, and each routine's runs, a prompt's opening as its conversation.
- * Making one stays with the conversation (cronjob_manage) and the terminal (atlas routines).
+ * pause or resume, remove, and each routine's runs, a prompt's opening as its conversation. Since
+ * step 25 a prompt routine is made and changed here too, in a form, beside the conversation
+ * (cronjob_manage) and the terminal (atlas routines); a command routine stays the terminal's.
  */
 export function RoutinesView() {
   const routines = useStore($routines)
@@ -21,7 +33,23 @@ export function RoutinesView() {
   return (
     <div className="flex-1 overflow-y-auto" data-testid="routines-view">
       <div className="mx-auto max-w-3xl space-y-4 px-6 py-6">
-        <PageHeader intro={t.routines.intro} title={t.routines.title} />
+        <PageHeader
+          actions={
+            <button
+              className={BUTTON}
+              data-testid="routine-new"
+              onClick={() => {
+                openRoutineForm()
+              }}
+              type="button"
+            >
+              {t.routines.newRoutine}
+            </button>
+          }
+          intro={t.routines.intro}
+          title={t.routines.title}
+        />
+        <RoutineFormHost />
         {score && (score.alone > 0 || score.needed > 0 || score.failed > 0) ? (
           <p className="text-sm text-soft" data-testid="routines-scoreboard">
             {t.routines.scoreboard(score.alone, score.needed, score.failed)}
@@ -84,6 +112,18 @@ function Routine({ routine }: { routine: RoutineRow }) {
           >
             {t.routines.runNow}
           </button>
+          {routine.prompt !== null && (
+            <button
+              className={BUTTON}
+              data-testid="routine-edit"
+              onClick={() => {
+                openRoutineForm(routineDraft(routine))
+              }}
+              type="button"
+            >
+              {t.routines.edit}
+            </button>
+          )}
           <button
             className={BUTTON}
             onClick={() => {

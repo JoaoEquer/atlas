@@ -546,6 +546,34 @@ export const ptBR: Override<Messages> = {
     waits: (code: string) => `espera com ${code}`,
     waiting: (count: number) => (count === 1 ? '1 esperando' : `${count} esperando`)
   },
+  routineForm: {
+    auto: 'Rodar no modo automático dele, que não pergunta nada',
+    bot: 'Bot',
+    cancel: 'Cancelar',
+    draft: 'Abrir um PR em rascunho do que mudou (plugin do GitHub)',
+    editTitle: 'Mudar a rotina',
+    effort: 'Esforço',
+    effortOfHome: 'O padrão do modelo',
+    efforts: { high: 'Alto', low: 'Baixo', medium: 'Médio' },
+    executor: 'Executor',
+    folder: 'Pasta',
+    model: 'Modelo',
+    modelOfHome: 'O modelo da casa',
+    name: 'Nome',
+    newTitle: 'Nova rotina',
+    probe: 'Sonda',
+    probeHint: 'opcional: um comando cuja saída nova a acorda',
+    prompt: 'O que fazer',
+    runner: 'Quem roda',
+    runners: { atlas: 'O Atlas', bot: 'Um bot', executor: 'Um agente de código, numa pasta' },
+    save: 'Salvar',
+    saveAndRun: 'Salvar e rodar agora',
+    schedule: 'Quando',
+    scheduleHint: 'every day at 9am, every 30m, weekdays at 8am',
+    unwatched:
+      'Ela roda sem ninguém olhando: a primeira pergunta para a execução, que fica esperando você em Executores.',
+    workspace: 'Cada execução numa workspace nova (para rotina que muda código)'
+  },
   routines: {
     confirmRemove: 'Apagar?',
     empty: 'Nenhuma rotina ainda. Peça ao Atlas para agendar uma, ou use atlas routines create no terminal.',
@@ -563,6 +591,8 @@ export const ptBR: Override<Messages> = {
     paused: 'pausada',
     executor: (name: string, folder: string, workspace: boolean) =>
       `Rodada pelo ${name} em ${folder}${workspace ? ', numa workspace nova a cada vez' : ''}`,
+    edit: 'Mudar',
+    newRoutine: 'Nova rotina',
     scoreboard: (alone: number, needed: number, failed: number) =>
       `Esta semana: ${String(alone)} rodaram sozinhas · ${String(needed)} precisaram de você · ${String(failed)} falharam`,
     probe: (command: string) => `Acordada pela sonda: $ ${command}`,

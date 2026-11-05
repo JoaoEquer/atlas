@@ -2134,3 +2134,58 @@ def test_a_sessions_route_over_the_socket(
         (added["name"], "Claude Code", "work", True, "opus", "high"),
         ("claude-code", "Claude Code", "", True, None, None),
     ]
+
+
+def test_the_app_makes_and_changes_a_prompt_routine_and_every_client_hears_it(
+    serve: Serve, tmp_path: Path
+) -> None:
+    """Step 25: the Routines screen's form, `routine.save`."""
+    folder = str(tmp_path)
+    server = serve()
+    with server.client() as client, server.client() as other:
+        made = client.result(
+            "routine.save",
+            {
+                "name": "sweep",
+                "schedule": "every monday 9am",
+                "prompt": "Sweep the dependencies.",
+                "model": "openrouter/fake-model",
+                "effort": "high",
+                "executor": {
+                    "name": "claude-code",
+                    "folder": folder,
+                    "auto": False,
+                    "workspace": True,
+                    "draft": False,
+                },
+            },
+        )
+        heard = other.event("routines.changed")["payload"]
+        changed = client.result(
+            "routine.save",
+            {
+                "routine_id": made["id"],
+                "name": "sweep",
+                "schedule": "every day at 9am",
+                "prompt": "Sweep the dependencies, and list them.",
+                "probe": "python new-advisories.py",
+            },
+        )
+        refused = client.call(
+            "routine.save", {"name": "x", "schedule": "every 1h", "prompt": "", "bot": ""}
+        )
+
+    assert (made["model"], made["effort"], made["created_by"]) == (
+        "openrouter/fake-model",
+        "high",
+        "user",
+    )
+    assert made["executor"]["workspace"] is True
+    assert heard == {"count": 1}
+    assert (changed["schedule"], changed["probe"], changed["executor"], changed["model"]) == (
+        "every day at 9am",
+        "python new-advisories.py",
+        None,
+        "",
+    )
+    assert refused["error"]["code"] == -32602

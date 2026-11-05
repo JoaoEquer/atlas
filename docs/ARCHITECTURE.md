@@ -2096,6 +2096,12 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   from the terminal (`--executor`) or the app, is theirs already. A bot's routine stays a prompt on
   Atlas's model, never an executor's. A prompt routine whose run met a refusal for want of someone
   to approve (`NOBODY_TO_APPROVE`) ends `needed` too, so the scoreboard counts both.
+- **The form** (step 25, asked for by the user in the sequence's review on 03/11/2026, in place
+  of "making one stays with the conversation and the terminal" of 11/10/2026): the Routines
+  screen makes and changes a prompt routine (`routine.save`, the user's own, so no gate): its
+  prompt, its schedule and probe, who runs it (Atlas, a bot, or an executor in a folder with its
+  mode, workspace and draft), its model and effort, and Save and run now. A command routine stays
+  the terminal's.
 - **The scoreboard** (step 25): the top of the Routines screen counts this week's runs of every
   routine, since Monday at midnight in the user's time (`Routines.scoreboard`, in `routine.list`):
   the ones that ran alone (answered or silent), the ones that needed the user (`needed`), the ones

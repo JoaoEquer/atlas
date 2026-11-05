@@ -906,6 +906,9 @@ export interface RoutineRow {
   probe: string | null
   /** The executor its prompt runs in (step 25); `null`, Atlas's model. */
   executor: RoutineExecutorRow | null
+  /** The model pinned on it, `provider/model`, and its effort; empty, the settings' (step 25). */
+  model: string
+  effort: string
 }
 /** Where a routine's prompt runs when an outside executor runs it (step 25). */
 export interface RoutineExecutorRow {
@@ -927,6 +930,23 @@ export interface ScoreboardRow {
   /** Stopped at a question or an approval nobody gave. */
   needed: number
   failed: number
+}
+/** A prompt routine as the app's form writes it (step 25): made when `routine_id` is empty, changed otherwise. */
+export interface RoutineSave {
+  name: string
+  /** As `atlas routines create --schedule` takes it: `every day at 9am`, `every 30m`. */
+  schedule: string
+  prompt: string
+  routine_id?: string
+  /** A command whose new output wakes the prompt (step 23); empty, its schedule does. */
+  probe?: string
+  /** The bot it runs as; empty, the main agent. */
+  bot?: string
+  /** `provider/model` and its effort; empty, the settings'. */
+  model?: string
+  effort?: string
+  /** The executor that runs it in a folder; `null`, Atlas's model. */
+  executor?: RoutineExecutorRow | null
 }
 export interface RoutineRef {
   routine_id: string
@@ -2017,6 +2037,8 @@ export interface RpcMethods {
   'routine.run': { params: RoutineRef; result: RoutineRow }
   /** A routine's runs, the newest first, at most 50. */
   'routine.runs': { params: RoutineRef; result: RunList }
+  /** Make a prompt routine, or change one (step 25): its name, its schedule or its probe, who runs it (Atlas, a bot or an executor in a folder), and its model. */
+  'routine.save': { params: RoutineSave; result: RoutineRow }
   /** The editable settings of config.toml, for the settings screen (step 15b), each with the variable that wins over it. */
   'settings.read': { params: Empty; result: SettingsList }
   /** Write editable settings to config.toml, changing only their lines, and apply them without a restart; a refused value writes nothing. */
@@ -2213,6 +2235,7 @@ export const RPC_METHODS = [
   'routine.resume',
   'routine.run',
   'routine.runs',
+  'routine.save',
   'settings.read',
   'settings.write',
   'skill.list',
