@@ -19,7 +19,7 @@ import {
   storeMarketSecret,
   writePlugin
 } from '@/store/app'
-import { actionOf, categories, counts, organized, resolved, shown } from '@/store/marketplace'
+import { actionOf, categories, counts, organized, plainTitle, resolved, shown } from '@/store/marketplace'
 
 import { Badge, KindPicture, KindTabs } from './extension-card'
 import { PageHeader } from './page-header'
@@ -260,7 +260,7 @@ function Card({ row }: { row: MarketplaceRow }) {
       <div className="flex items-start gap-3">
         <Picture row={row} size={40} />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{row.title}</p>
+          <p className="truncate font-medium">{plainTitle(row)}</p>
           {row.author && <p className="truncate text-xs text-muted-foreground">{t.marketplace.by(row.author)}</p>}
         </div>
         {row.tier === 'official' && <Badge>{t.marketplace.officialBadge}</Badge>}
@@ -321,12 +321,13 @@ function Head({ homepage, row }: { homepage: string; row: MarketplaceRow }) {
       <Picture row={row} size={64} />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-semibold">{row.title}</h1>
+          <h1 className="text-lg font-semibold">{plainTitle(row)}</h1>
           {row.tier === 'official' && <Badge>{t.marketplace.officialBadge}</Badge>}
           <span className="text-xs text-muted-foreground">{t.marketplace.kinds[row.kind]}</span>
         </div>
         <p className="text-sm text-muted-foreground">
           {[
+            plainTitle(row) === row.title ? '' : row.title,
             row.author ? t.marketplace.by(row.author) : '',
             row.shipped ? t.marketplace.shipped : '',
             row.version ? t.marketplace.version(row.version) : '',

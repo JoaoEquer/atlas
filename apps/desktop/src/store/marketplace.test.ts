@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { MarketplaceList, MarketplacePage, MarketplaceRow } from '@/protocol/protocol.generated'
 
-import { actionOf, categories, counts, organized, resolved, shown, withRow } from './marketplace'
+import { actionOf, categories, counts, organized, plainTitle, resolved, shown, withRow } from './marketplace'
 
 function row(name: string, change: Partial<MarketplaceRow> = {}): MarketplaceRow {
   return {
@@ -143,6 +143,27 @@ describe('a catalog of hundreds opens organized', () => {
 
     expect(top.map(item => item.name)).not.toContain('broken')
     expect(unfiled.map(item => item.name)).toEqual(['u0', 'u1'])
+  })
+})
+
+describe("a plugin's identifier reads as words", () => {
+  const plugin = (title: string, author = '') =>
+    row(`claude-plugins:${title}`, { author, source: 'claude-plugins', title })
+
+  it('splits it, keeps initials as letters and the author as the author writes it', () => {
+    expect(plainTitle(plugin('frontend-design'))).toBe('Frontend Design')
+    expect(plainTitle(plugin('api-security_testing'))).toBe('API Security Testing')
+    expect(plainTitle(plugin('github', 'GitHub'))).toBe('GitHub')
+    expect(plainTitle(plugin('cloudflare', 'cloudflare'))).toBe('Cloudflare')
+    expect(plainTitle(plugin('deploy-on-aws'))).toBe('Deploy on AWS')
+    expect(plainTitle(plugin('typescript-lsp'))).toBe('TypeScript LSP')
+  })
+
+  it('leaves a name the directory gave, and every other source', () => {
+    const named = row('claude-plugins:gc-ai', { source: 'claude-plugins', title: 'GC AI' })
+
+    expect(plainTitle(named)).toBe('GC AI')
+    expect(plainTitle(row('notes-mcp'))).toBe('notes-mcp')
   })
 })
 

@@ -714,6 +714,7 @@ class Marketplace:
                 else "The marketplace no longer lists it."
             ),
             source=record.source,
+            image=self.sources.picture(record.name) if self.sources is not None else "",
         )
 
     def _state(

@@ -164,6 +164,63 @@ export function organized(rows: MarketplaceRow[]): {
   return { groups, top, unfiled: rest.filter(row => !row.category) }
 }
 
+/** Words a plugin's name holds that read as letters, not as a word. */
+const INITIALS = new Set('ai amd api aws cli crm css gcp html lsp mcp php pr qa sap sdk seo sql ui ui5 ux'.split(' '))
+
+/** Names a plugin's identifier lowers, as their owners write them. */
+const SPELLED: Record<string, string | undefined> = {
+  bigquery: 'BigQuery',
+  clickhouse: 'ClickHouse',
+  cockroachdb: 'CockroachDB',
+  duckdb: 'DuckDB',
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  mysql: 'MySQL',
+  pagerduty: 'PagerDuty',
+  paypal: 'PayPal',
+  postgresql: 'PostgreSQL',
+  posthog: 'PostHog',
+  sonarqube: 'SonarQube',
+  typescript: 'TypeScript',
+  wordpress: 'WordPress'
+}
+
+/** Words that stay small inside a name. */
+const LINKING = new Set('a and by for in of on the to with'.split(' '))
+
+/**
+ * What a card calls an item. A plugin of Claude Code's directory that gives no display name has only
+ * its identifier, which is written for a command line, so it reads as words here (`api-security`:
+ * `API Security`), a word of its author's name as the author writes it. Only the spelling changes:
+ * its page still shows the identifier.
+ */
+export function plainTitle(row: MarketplaceRow): string {
+  if (row.source !== 'claude-plugins' || row.name !== `${row.source}:${row.title}`) {
+    return row.title
+  }
+
+  // An account's lowercase login says nothing of how its owner spells the name.
+  const maker = row.author.split(/\s+/).filter(name => name !== name.toLowerCase())
+
+  return row.title
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word, place) => {
+      const spelled = maker.find(name => name.toLowerCase() === word.toLowerCase()) ?? SPELLED[word]
+
+      if (spelled) {
+        return spelled
+      }
+
+      if (INITIALS.has(word)) {
+        return word.toUpperCase()
+      }
+
+      return place > 0 && LINKING.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)
+    })
+    .join(' ')
+}
+
 /** How many items each tab holds, for its label. */
 export function counts(list: MarketplaceList | null): Record<MarketKind, number> {
   const found: Record<MarketKind, number> = { executor: 0, mcp: 0, plugin: 0, skill: 0 }

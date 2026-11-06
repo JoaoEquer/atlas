@@ -2,11 +2,16 @@
 
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from atlas.marketplace import MarketplaceError
+from atlas.marketplace.model import Item
 from atlas.marketplace.sources import (
+    FACTS_FILE,
     Sources,
+    manifest_facts,
+    organization_facts,
     plugins_installs,
     plugins_item,
     publisher_picture,
@@ -17,6 +22,9 @@ from atlas.marketplace.sources import (
 DIRECTORY = "example/plugins-directory"
 CATALOG = "https://example.com/catalog.json"
 INSTALLS = "https://example.com/installs.json"
+RAW = "https://example.com/raw/{repo}/{ref}/{path}"
+GITHUB = "https://example.com/github"
+COMMIT = "a" * 40
 NOW = datetime(2026, 11, 6, tzinfo=UTC)
 
 Get = Callable[[str, int], bytes | None]
@@ -172,6 +180,212 @@ def test_a_plugin_s_picture_is_its_publisher_s_only_when_the_catalog_says_who_th
     assert by_another.image == ""
     assert by_nobody is not None
     assert by_nobody.image == ""
+
+
+def _manifest_of(plugin: str) -> str:
+    return f"https://example.com/raw/{DIRECTORY}/HEAD/plugins/{plugin}/.claude-plugin/plugin.json"
+
+
+def _reading(get: Get, folder: Path | None = None) -> Sources:
+    return Sources(
+        get,
+        registry_url="https://example.com/registry",
+        skills_url="https://example.com/skills",
+        github_api_url=GITHUB,
+        plugins_raw_url=RAW,
+        plugins_url=CATALOG,
+        plugins_repository=DIRECTORY,
+        folder=folder,
+    )
+
+
+def _manifested(answers: dict[str, bytes | None], folder: Path | None = None) -> Sources:
+    return _reading(lambda url, _limit: answers.get(url), folder)
+
+
+def _one(sources: Sources) -> Item:
+    return sources.plugins()[0]
+
+
+def test_a_manifest_says_what_the_catalog_does_not() -> None:
+    answers: dict[str, bytes | None] = {
+        CATALOG: _catalog(_plugin("notes")),
+        _manifest_of("notes"): json.dumps(
+            {"displayName": "Notes", "author": {"name": "Someone"}, "icon": "./assets/icon.png"}
+        ).encode(),
+    }
+    item = _one(_manifested(answers))
+
+    assert (item.title, item.author) == ("Notes", "Someone")
+    assert item.image == f"https://example.com/raw/{DIRECTORY}/HEAD/plugins/notes/assets/icon.png"
+
+
+def test_what_the_catalog_says_stands_but_the_plugin_s_own_picture_comes_first() -> None:
+    plugin = {
+        "name": "notes",
+        "displayName": "Catalog Notes",
+        "author": {"name": "Catalog"},
+        "source": {"source": "url", "url": "https://github.com/someone/notes.git", "sha": COMMIT},
+    }
+    manifest = f"https://example.com/raw/someone/notes/{COMMIT}/.claude-plugin/plugin.json"
+    answers: dict[str, bytes | None] = {
+        CATALOG: _catalog(plugin),
+        manifest: json.dumps(
+            {"displayName": "Other", "author": {"name": "Other"}, "logo": "logo.svg"}
+        ).encode(),
+    }
+    item = _one(_manifested(answers))
+
+    assert (item.title, item.author) == ("Catalog Notes", "Catalog")
+    assert item.image == f"https://example.com/raw/someone/notes/{COMMIT}/logo.svg"
+
+
+def test_a_plugin_a_search_did_not_find_keeps_the_picture_it_was_listed_with() -> None:
+    answers: dict[str, bytes | None] = {
+        CATALOG: _catalog(_plugin("notes")),
+        _manifest_of("notes"): b'{"icon": "icon.png"}',
+    }
+    sources = _manifested(answers)
+
+    assert sources.picture("claude-plugins:notes") == ""
+
+    sources.search("something else", NOW)
+
+    assert sources.picture("claude-plugins:notes").endswith("/plugins/notes/icon.png")
+    assert sources.picture("claude-plugins:other") == ""
+
+
+def test_a_picture_outside_the_plugin_s_folder_or_not_a_picture_is_not_taken() -> None:
+    for icon in ("../secret.png", "a/../../b.png", "https://example.com/a.png", "run.sh", 7):
+        assert manifest_facts(json.dumps({"icon": icon}).encode())["picture"] == ""
+
+
+def test_what_is_not_a_manifest_says_nothing() -> None:
+    for data in (b"not json", b"[]"):
+        assert set(manifest_facts(data).values()) == {""}
+
+
+def test_an_author_s_avatar_needs_github_to_say_it_is_an_organization_of_that_name() -> None:
+    def account(kind: str, name: str) -> bytes:
+        return json.dumps({"login": "acme", "type": kind, "name": name}).encode()
+
+    avatar = "https://github.com/acme.png?size=96"
+
+    assert organization_facts(account("Organization", "Acme"), "Acme")["picture"] == avatar
+    assert organization_facts(account("Organization", "ACME AI"), "Acme")["picture"] == avatar
+    assert organization_facts(account("Organization", "Acme, Inc."), "Acme")["picture"] == avatar
+    assert organization_facts(account("Organization", "Acme"), "Acme Inc.")["picture"] == avatar
+    assert organization_facts(account("User", "Acme"), "Acme")["picture"] == ""
+    assert organization_facts(account("Organization", "Acmeware"), "Acme")["picture"] == ""
+    assert organization_facts(account("Organization", "Other"), "Acme")["picture"] == ""
+    assert organization_facts(b"not json", "Acme")["picture"] == ""
+
+
+def test_a_plugin_is_given_its_author_s_organization_only_as_github_confirms_it() -> None:
+    answers: dict[str, bytes | None] = {
+        CATALOG: _catalog(_plugin("notes")),
+        _manifest_of("notes"): json.dumps({"author": {"name": "Acme Labs"}}).encode(),
+        f"{GITHUB}/users/AcmeLabs": json.dumps(
+            {"login": "AcmeLabs", "type": "Organization", "name": "Acme Labs"}
+        ).encode(),
+    }
+
+    assert _one(_manifested(answers)).image == "https://github.com/AcmeLabs.png?size=96"
+
+    answers[f"{GITHUB}/users/AcmeLabs"] = None
+
+    assert _one(_manifested(answers)).image == ""
+
+
+def test_the_directory_s_own_maker_named_by_a_manifest_shows_the_directory_s_account() -> None:
+    catalog = json.dumps(
+        {"name": "plugins-directory", "owner": {"name": "Example"}, "plugins": [_plugin("notes")]}
+    ).encode()
+    answers: dict[str, bytes | None] = {
+        CATALOG: catalog,
+        _manifest_of("notes"): json.dumps({"author": {"name": "Example"}}).encode(),
+    }
+
+    assert _one(_manifested(answers)).image == "https://github.com/example.png?size=96"
+
+
+def test_a_manifest_that_cannot_be_read_leaves_the_card_as_the_catalog_has_it() -> None:
+    def refused(url: str, _limit: int) -> bytes | None:
+        if url == CATALOG:
+            return _catalog(_plugin("notes"))
+        raise MarketplaceError("GitHub answered HTTP 503.")
+
+    sources = _reading(refused)
+
+    assert _one(sources).title == "notes"
+
+
+def test_a_commit_s_manifest_is_read_once_and_kept_across_runs(tmp_path: Path) -> None:
+    reads: list[str] = []
+    plugin = {
+        "name": "notes",
+        "source": {"source": "url", "url": "https://github.com/someone/notes.git", "sha": COMMIT},
+    }
+    manifest = f"https://example.com/raw/someone/notes/{COMMIT}/.claude-plugin/plugin.json"
+
+    def get(url: str, _limit: int) -> bytes | None:
+        reads.append(url)
+        if url == CATALOG:
+            return _catalog(plugin)
+        return b'{"displayName": "Notes"}' if url == manifest else None
+
+    def sources() -> Sources:
+        return _reading(get, tmp_path)
+
+    first = sources()
+
+    assert _one(first).title == "Notes"
+    assert _one(first).title == "Notes"
+    assert _one(sources()).title == "Notes"
+    assert reads.count(manifest) == 1
+
+
+def test_a_manifest_at_no_commit_is_read_again_after_a_day(tmp_path: Path) -> None:
+    reads: list[str] = []
+
+    def get(url: str, _limit: int) -> bytes | None:
+        reads.append(url)
+        return _catalog(_plugin("notes")) if url == CATALOG else b"{}"
+
+    sources = _reading(get, tmp_path)
+    sources.plugins()
+    sources.plugins()
+
+    assert reads.count(_manifest_of("notes")) == 1
+
+    kept = json.loads((tmp_path / FACTS_FILE).read_text(encoding="utf-8"))
+    for row in kept.values():
+        row["read_at"] = (datetime.now(UTC) - timedelta(days=2)).isoformat()
+    (tmp_path / FACTS_FILE).write_text(json.dumps(kept), encoding="utf-8")
+    sources = _reading(get, tmp_path)
+    sources.plugins()
+
+    assert reads.count(_manifest_of("notes")) == 2
+
+
+def test_with_the_catalog_down_a_card_keeps_what_was_read_and_nothing_is_asked(
+    tmp_path: Path,
+) -> None:
+    answers: dict[str, bytes | None] = {
+        CATALOG: _catalog(_plugin("notes")),
+        _manifest_of("notes"): b'{"displayName": "Notes"}',
+    }
+    _manifested(answers, tmp_path).plugins()
+    asked: list[str] = []
+
+    def down(url: str, _limit: int) -> bytes | None:
+        asked.append(url)
+        raise MarketplaceError("GitHub could not be reached.")
+
+    sources = _reading(down, tmp_path)
+
+    assert _one(sources).title == "Notes"
+    assert asked == [CATALOG]
 
 
 def _server(**more: object) -> dict[str, object]:
