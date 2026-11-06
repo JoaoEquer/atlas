@@ -36,6 +36,42 @@ test('a turn arrives in pieces, is listed, and is still there when opened again'
   await expect(page.getByTestId('assistant-message')).toContainText('How can I help today?')
 })
 
+test('the box grows with its words and comes back, however it lost them or the room changed', async () => {
+  const { model, page } = desktop
+  const box = page.getByRole('textbox', { name: 'Message Atlas' })
+  const height = () => box.evaluate(element => element.getBoundingClientRect().height)
+  const lines = Array.from({ length: 6 }, (_, line) => `Line ${String(line)}`).join(String.fromCharCode(10))
+  const paragraph = 'words that wrap '.repeat(16)
+  await page.setViewportSize({ height: 820, width: 1200 })
+  const empty = await height()
+
+  // Sent: the box is empty again, through the hint of a running turn.
+  await box.fill(lines)
+  expect(await height()).toBeGreaterThan(empty)
+  await model.reply({ pause: 0.5, text: 'First answer, in no hurry at all.' })
+  await model.reply({ text: 'Second.' })
+  await box.press('Enter')
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible()
+  await expect.poll(height).toBe(empty)
+
+  // Sent while the turn runs.
+  await box.fill(lines)
+  expect(await height()).toBeGreaterThan(empty)
+  await box.press('Enter')
+  await expect.poll(height).toBe(empty)
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeHidden()
+  await expect.poll(height).toBe(empty)
+
+  // The room changes with the words still there: a wider window takes them in fewer lines.
+  await page.setViewportSize({ height: 820, width: 520 })
+  await box.fill(paragraph)
+  const narrow = await height()
+  await page.setViewportSize({ height: 820, width: 1200 })
+  await expect.poll(height).toBeLessThan(narrow)
+  await box.fill('')
+  await expect.poll(height).toBe(empty)
+})
+
 test('reasoning streamed at full speed leaves the window answering clicks', async () => {
   const { model, page } = desktop
   const errors: string[] = []
