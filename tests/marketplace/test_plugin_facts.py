@@ -107,9 +107,20 @@ def test_the_installs_are_read_only_from_a_count_of_this_directory() -> None:
         }
     ).encode()
 
-    assert plugins_installs(data, DIRECTORY) == {"notes": 12}
-    assert plugins_installs(b"not json", DIRECTORY) == {}
-    assert plugins_installs(b"[]", DIRECTORY) == {}
+    assert plugins_installs(data, "plugins-directory") == {"notes": 12}
+    assert plugins_installs(b"not json", "plugins-directory") == {}
+    assert plugins_installs(b"[]", "plugins-directory") == {}
+    assert plugins_installs(data, "") == {}
+
+
+def test_the_count_is_matched_by_the_name_the_catalog_gives_itself() -> None:
+    catalog = json.dumps({"name": "renamed-directory", "plugins": [_plugin("notes")]}).encode()
+    count = json.dumps(
+        {"plugins": [{"plugin": "notes@renamed-directory", "unique_installs": 3}]}
+    ).encode()
+    found = _sources(_serving(catalog, count)).search("", NOW)
+
+    assert [item.installs for item in found.items if item.target] == [3]
 
 
 def test_the_most_installed_come_first_and_one_with_no_count_shows_none() -> None:

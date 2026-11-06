@@ -468,9 +468,9 @@ def plugins_items(data: bytes, repository: str) -> list[Item]:
     return sorted((item for item in found if item is not None), key=lambda item: item.title.lower())
 
 
-def plugins_installs(data: bytes, repository: str) -> dict[str, int]:
-    """How many times the directory counts each plugin installed, by name; empty when what it
-    answered is not that count."""
+def plugins_installs(data: bytes, marketplace: str) -> dict[str, int]:
+    """How many times the directory counts each plugin installed, by name, from its rows written
+    `<plugin>@<marketplace>`; empty when what it answered is not that count."""
     try:
         document: object = json.loads(data)
     except ValueError:
@@ -480,7 +480,7 @@ def plugins_installs(data: bytes, repository: str) -> dict[str, int]:
     )
     rows = fields.get("plugins")
     found: dict[str, int] = {}
-    own = f"@{repository.rsplit('/', 1)[-1]}"
+    own = f"@{marketplace}"
     for row in cast("list[object]", rows) if isinstance(rows, list) else []:
         if not isinstance(row, Mapping):
             continue
@@ -490,6 +490,17 @@ def plugins_installs(data: bytes, repository: str) -> dict[str, int]:
         if plugin.endswith(own) and type(count) is int and count >= 0:
             found[plugin.removesuffix(own)] = count
     return found
+
+
+def _marketplace_name(catalog: bytes) -> str:
+    """The name the directory's catalog gives itself, which its install count is keyed by."""
+    try:
+        document: object = json.loads(catalog)
+    except ValueError:
+        return ""
+    if not isinstance(document, Mapping):
+        return ""
+    return _text(cast("Mapping[str, Any]", document).get("name"))
 
 
 def plugins_item(entry: object, repository: str, maker: str = "") -> Item | None:
@@ -679,12 +690,13 @@ class Sources:
             data = self._get(self._plugins_url, SOURCE_BYTES)
             if data is None:
                 raise MarketplaceError("The plugin directory's catalog is not there.")
-            items = self._counted(plugins_items(data, self._plugins_repository))
+            items = self._counted(plugins_items(data, self._plugins_repository), data)
         except MarketplaceError:
             kept = self._kept(PLUGINS_FILE)
             if kept is None:
                 raise
-            return self._counted(plugins_items(kept.encode("utf-8"), self._plugins_repository))
+            catalog = kept.encode("utf-8")
+            return self._counted(plugins_items(catalog, self._plugins_repository), catalog)
         if self._folder is not None:
             self._folder.mkdir(parents=True, exist_ok=True)
             replace_file(self._folder / PLUGINS_FILE, data)
@@ -692,7 +704,7 @@ class Sources:
             self._plugins = (items, now)
         return items
 
-    def _counted(self, items: list[Item]) -> list[Item]:
+    def _counted(self, items: list[Item], catalog: bytes) -> list[Item]:
         """The directory's plugins with the installs it counts, the most first, and as they came
         when that count cannot be read: it only ever adds to a card."""
         if not self._plugins_installs_url:
@@ -702,7 +714,7 @@ class Sources:
         except MarketplaceError as error:
             _logger.info("The plugin directory's installs could not be read: %s", error)
             return items
-        counts = plugins_installs(data or b"", self._plugins_repository)
+        counts = plugins_installs(data or b"", _marketplace_name(catalog))
         counted = [replace(item, installs=counts.get(item.target)) for item in items]
         return sorted(counted, key=lambda item: -(item.installs or 0))
 
