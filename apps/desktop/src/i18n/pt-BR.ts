@@ -696,7 +696,9 @@ export const ptBR: Override<Messages> = {
   marketplace: {
     back: 'Todos os itens',
     brought: (names: string) => `Também instalado, porque ele precisa: ${names}.`,
+    allCategories: 'Todas as categorias',
     by: (author: string) => `de ${author}`,
+    category: 'Categoria',
     cancel: 'Cancelar',
     community: 'Comunidade',
     confirmRemove: 'Remover?',

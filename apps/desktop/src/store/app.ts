@@ -3446,7 +3446,11 @@ export function refreshMarketplace(): void {
 }
 
 export function setMarketKind(kind: MarketKind): void {
-  current().market({ kind })
+  current().market({ category: '', kind })
+}
+
+export function setMarketCategory(category: string): void {
+  current().market({ category })
 }
 
 /** How long the search waits for the typing to stop before the outside catalogs are asked. */

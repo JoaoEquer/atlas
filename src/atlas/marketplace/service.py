@@ -139,11 +139,12 @@ class Row:
     source_url: str = ""
     #: What keeps it from installing or running, or why it was retired.
     problem: str | None = None
-    #: Where it comes from (step 24), when its source last published it, and the installs its
-    #: source counts.
+    #: Where it comes from (step 24), when its source last published it, the installs its source
+    #: counts, and the category it files it under.
     source: Source = Source.ATLAS
     updated: str = ""
     installs: int | None = None
+    category: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -681,6 +682,7 @@ class Marketplace:
             source=item.source,
             updated=item.updated,
             installs=item.installs,
+            category=item.category,
         )
 
     def _revision(self, item: Item) -> str | None:

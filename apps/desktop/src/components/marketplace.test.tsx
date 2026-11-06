@@ -11,6 +11,7 @@ import { MarketplaceView } from './marketplace-view'
 function row(name: string, change: Partial<MarketplaceRow> = {}): MarketplaceRow {
   return {
     author: 'someone',
+    category: '',
     image: '',
     installs: null,
     kind: 'skill',
@@ -136,6 +137,38 @@ describe('the marketplace lists each kind in its tab, the Atlas team first', () 
     await open(() => listing([row('pdf')], { problem: 'GitHub answered HTTP 503.' }))
 
     expect(screen.getByTestId('marketplace-notice').textContent).toContain('GitHub answered HTTP 503.')
+  })
+})
+
+describe('the plugin directory says what it gives', () => {
+  const plugin = (name: string, change: Partial<MarketplaceRow> = {}) =>
+    row(`claude-plugins:${name}`, { kind: 'plugin', source: 'claude-plugins', title: name, version: '', ...change })
+
+  it('filters by category, and a new tab starts with all of them', async () => {
+    await open(() =>
+      listing([
+        plugin('audit', { category: 'security', installs: 1200 }),
+        plugin('sketch', { category: 'design' }),
+        row('pdf')
+      ])
+    )
+
+    expect(cards()).toEqual(['claude-plugins:audit', 'claude-plugins:sketch'])
+    expect(screen.getAllByTestId('marketplace-card-meta')[0]?.textContent).toBe('1,200 installs')
+    fireEvent.change(screen.getByTestId('marketplace-category'), { target: { value: 'design' } })
+    expect(cards()).toEqual(['claude-plugins:sketch'])
+
+    fireEvent.click(screen.getByTestId('marketplace-tab-skill'))
+    expect(screen.queryByTestId('marketplace-category')).toBeNull()
+    fireEvent.click(screen.getByTestId('marketplace-tab-plugin'))
+    expect(cards()).toEqual(['claude-plugins:audit', 'claude-plugins:sketch'])
+  })
+
+  it('shows no author line when nobody is named, and no number it was not given', async () => {
+    await open(() => listing([plugin('notes', { author: '' })]))
+
+    expect(screen.getByTestId('marketplace-card').textContent).not.toContain('by ')
+    expect(screen.getByTestId('marketplace-card-meta').textContent).toBe('')
   })
 })
 

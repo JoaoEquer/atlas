@@ -12,13 +12,14 @@ import {
   openMarketItem,
   PLUGIN_GUIDE,
   refreshMarketplace,
+  setMarketCategory,
   setMarketKind,
   setMarketQuery,
   showExtensions,
   storeMarketSecret,
   writePlugin
 } from '@/store/app'
-import { actionOf, counts, resolved, shown } from '@/store/marketplace'
+import { actionOf, categories, counts, resolved, shown } from '@/store/marketplace'
 
 import { Badge, KindPicture, KindTabs } from './extension-card'
 import { PageHeader } from './page-header'
@@ -43,8 +44,9 @@ export function MarketplaceView() {
 
 function Listing() {
   const market = useStore($market)
-  const { community, official, outside } = shown(market.list, market.kind, market.query)
+  const { community, official, outside } = shown(market.list, market.kind, market.query, market.category)
   const total = counts(market.list)
+  const filed = categories(market.list, market.kind)
   const nothing = official.length + community.length + outside.length === 0
 
   return (
@@ -96,12 +98,30 @@ function Listing() {
       </PageHeader>
       <Notice />
       <KindTabs counts={total} current={market.kind} onPick={setMarketKind} testId="marketplace-tab" />
+      {filed.length > 0 && (
+        <select
+          aria-label={t.marketplace.category}
+          className="rounded-md border border-border-strong bg-raised px-2 py-1 text-sm"
+          data-testid="marketplace-category"
+          onChange={event => {
+            setMarketCategory(event.target.value)
+          }}
+          value={market.category}
+        >
+          <option value="">{t.marketplace.allCategories}</option>
+          {filed.map(category => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
+      )}
       {market.failed && <Failed text={market.failed} />}
       {nothing && (
         <p className="text-sm text-muted-foreground">
           {market.list === null && market.reading
             ? t.marketplace.reading
-            : market.query
+            : market.query || market.category
               ? t.marketplace.noMatch
               : t.marketplace.empty}
         </p>
@@ -181,7 +201,7 @@ function Card({ row }: { row: MarketplaceRow }) {
         <Picture row={row} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{row.title}</p>
-          <p className="truncate text-xs text-muted-foreground">{t.marketplace.by(row.author)}</p>
+          {row.author && <p className="truncate text-xs text-muted-foreground">{t.marketplace.by(row.author)}</p>}
         </div>
         {row.tier === 'official' && <Badge>{t.marketplace.officialBadge}</Badge>}
       </div>
@@ -247,7 +267,7 @@ function Head({ row }: { row: MarketplaceRow }) {
         </div>
         <p className="text-sm text-muted-foreground">
           {[
-            t.marketplace.by(row.author),
+            row.author ? t.marketplace.by(row.author) : '',
             row.shipped ? t.marketplace.shipped : '',
             row.version ? t.marketplace.version(row.version) : '',
             row.license ? t.marketplace.license(row.license) : ''

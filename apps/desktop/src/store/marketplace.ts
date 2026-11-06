@@ -22,6 +22,8 @@ export interface Market {
   error: null | string
   kind: MarketKind
   query: string
+  /** The category the tab is filtered by, as its source writes it; empty for all of them. */
+  category: string
   /** The item whose page is open, and its page once read. */
   open: null | string
   page: MarketplacePage | null
@@ -39,6 +41,7 @@ export interface Market {
 export const EMPTY_MARKET: Market = {
   brought: [],
   busy: null,
+  category: '',
   confirming: null,
   error: null,
   failed: null,
@@ -77,18 +80,20 @@ export function actionOf(row: MarketplaceRow): MarketAction {
 /**
  * The rows a tab shows for a search: the Atlas team's first, then the community's, each by title;
  * then each outside catalog's (step 24), as the server found them for the search, in its order.
+ * A category keeps only the rows filed under it.
  */
 export function shown(
   list: MarketplaceList | null,
   kind: MarketKind,
-  query: string
+  query: string,
+  category = ''
 ): {
   community: MarketplaceRow[]
   official: MarketplaceRow[]
   outside: { rows: MarketplaceRow[]; source: Exclude<MarketSource, 'atlas'> }[]
 } {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-  const ofKind = (list?.items ?? []).filter(row => row.kind === kind)
+  const ofKind = (list?.items ?? []).filter(row => row.kind === kind && (!category || row.category === category))
   const outside = OUTSIDE.map(source => ({ rows: ofKind.filter(row => row.source === source), source })).filter(
     shelf => shelf.rows.length > 0
   )
@@ -106,6 +111,13 @@ export function shown(
     official: rows.filter(row => row.tier === 'official'),
     outside
   }
+}
+
+/** The categories a tab's items are filed under, as their sources write them. */
+export function categories(list: MarketplaceList | null, kind: MarketKind): string[] {
+  const found = (list?.items ?? []).filter(row => row.kind === kind && row.category).map(row => row.category)
+
+  return [...new Set(found)].sort((a, b) => a.localeCompare(b))
 }
 
 /** How many items each tab holds, for its label. */

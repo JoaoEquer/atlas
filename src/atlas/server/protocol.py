@@ -967,6 +967,8 @@ class MarketplaceRow:
     updated: str = ""
     #: The installs its source counts; `null` when it counts none.
     installs: int | None = None
+    #: The category its source files it under, as the source writes it; empty when it says none.
+    category: str = ""
 
 
 @dataclass(frozen=True, slots=True)

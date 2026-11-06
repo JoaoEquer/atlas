@@ -14,7 +14,9 @@ and no copy, beside its own repository.
   at most once an hour, and searched here; a plugin installs from its repository at the commit the
   catalog pins, or, when it pins none, at the one its branch is on then, and arrives off, as every
   plugin. Atlas's marketplace marks the ones that do not work in Atlas (`outside.yaml`), which do
-  not install.
+  not install. A card says what the directory says: its name, its display name when it gives one,
+  its category, and the installs a branch of its repository counts, the most first. That count is
+  not documented, so when it cannot be read a plugin shows no number; nothing is guessed.
 - **skills.sh**, whose search gives each skill's installs. Opening the tab is one search (the most
   installed for "skill"), and each search another; its API is not documented, so the last opening
   list read is kept, and stands in, said, when the search breaks. A skill installs from its GitHub
@@ -71,6 +73,9 @@ CLAUDE_PLUGINS_FILE = ".claude-plugin/marketplace.json"
 #: Where the last catalog of Claude Code's plugin directory read is kept, and how long it stands.
 PLUGINS_FILE = "claude-plugins.json"
 PLUGINS_STALE = timedelta(hours=1)
+#: Where the directory's repository counts its plugins' installs.
+PLUGINS_INSTALLS_REF = "stats"
+PLUGINS_INSTALLS_FILE = "stats/plugin-installs.json"
 _GITHUB_URL = re.compile(
     r"^https://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}?)(?:\.git)?/?$"
 )
@@ -105,6 +110,9 @@ def outside_sources(
             repo=settings.claude_plugins, ref="main", path=CLAUDE_PLUGINS_FILE
         ),
         plugins_repository=settings.claude_plugins,
+        plugins_installs_url=settings.raw_url.format(
+            repo=settings.claude_plugins, ref=PLUGINS_INSTALLS_REF, path=PLUGINS_INSTALLS_FILE
+        ),
         folder=folder,
     )
 
@@ -422,6 +430,30 @@ def plugins_items(data: bytes, repository: str) -> list[Item]:
     return sorted((item for item in found if item is not None), key=lambda item: item.title.lower())
 
 
+def plugins_installs(data: bytes, repository: str) -> dict[str, int]:
+    """How many times the directory counts each plugin installed, by name; empty when what it
+    answered is not that count."""
+    try:
+        document: object = json.loads(data)
+    except ValueError:
+        return {}
+    fields: Mapping[str, Any] = (
+        cast("Mapping[str, Any]", document) if isinstance(document, Mapping) else {}
+    )
+    rows = fields.get("plugins")
+    found: dict[str, int] = {}
+    own = f"@{repository.rsplit('/', 1)[-1]}"
+    for row in cast("list[object]", rows) if isinstance(rows, list) else []:
+        if not isinstance(row, Mapping):
+            continue
+        entry = cast("Mapping[str, Any]", row)
+        plugin = _text(entry.get("plugin"))
+        count = entry.get("unique_installs")
+        if plugin.endswith(own) and type(count) is int and count >= 0:
+            found[plugin.removesuffix(own)] = count
+    return found
+
+
 def plugins_item(entry: object, repository: str) -> Item | None:
     """One plugin of the directory as an item: its repository, its folder in it, and the commit
     the catalog pins (none when it pins none)."""
@@ -452,14 +484,17 @@ def plugins_item(entry: object, repository: str) -> Item | None:
         problem = f"Its name, {name}, cannot be a plugin's name here."
     author: object = fields.get("author")
     homepage = _text(fields.get("homepage"))
+    # A plugin in the directory's own folders is not by whoever owns the directory, so only a
+    # repository of its own says whose it is when the catalog does not.
+    owner = repo.split("/", 1)[0] if repo != repository else ""
     return Item(
         name=f"{Source.CLAUDE_PLUGINS.value}:{name}",
         kind=Kind.PLUGIN,
-        title=name[:TITLE_CHARS],
+        title=(_text(fields.get("displayName")) or name)[:TITLE_CHARS],
         summary=_cut(" ".join(_text(fields.get("description")).split()), SUMMARY_CHARS),
-        author=_text(cast("Mapping[str, Any]", author).get("name"))
+        author=(_text(cast("Mapping[str, Any]", author).get("name")) or owner)
         if isinstance(author, Mapping)
-        else "",
+        else owner,
         license="",
         version=_text(fields.get("version")),
         repo=repo,
@@ -469,6 +504,7 @@ def plugins_item(entry: object, repository: str) -> Item | None:
         source=Source.CLAUDE_PLUGINS,
         target=name,
         problem=problem,
+        category=_text(fields.get("category")),
     )
 
 
@@ -495,6 +531,7 @@ class Sources:
         github_api_url: str,
         plugins_url: str = "",
         plugins_repository: str = "",
+        plugins_installs_url: str = "",
         folder: Path | None = None,
     ) -> None:
         self._get = get
@@ -503,6 +540,7 @@ class Sources:
         self._github = github_api_url.rstrip("/")
         self._plugins_url = plugins_url
         self._plugins_repository = plugins_repository
+        self._plugins_installs_url = plugins_installs_url
         self._folder = folder
         #: The directory's catalog as last read, and when.
         self._plugins: tuple[list[Item], datetime] | None = None
@@ -599,18 +637,32 @@ class Sources:
             data = self._get(self._plugins_url, SOURCE_BYTES)
             if data is None:
                 raise MarketplaceError("The plugin directory's catalog is not there.")
-            items = plugins_items(data, self._plugins_repository)
+            items = self._counted(plugins_items(data, self._plugins_repository))
         except MarketplaceError:
             kept = self._kept(PLUGINS_FILE)
             if kept is None:
                 raise
-            return plugins_items(kept.encode("utf-8"), self._plugins_repository)
+            return self._counted(plugins_items(kept.encode("utf-8"), self._plugins_repository))
         if self._folder is not None:
             self._folder.mkdir(parents=True, exist_ok=True)
             replace_file(self._folder / PLUGINS_FILE, data)
         if now is not None:
             self._plugins = (items, now)
         return items
+
+    def _counted(self, items: list[Item]) -> list[Item]:
+        """The directory's plugins with the installs it counts, the most first, and as they came
+        when that count cannot be read: it only ever adds to a card."""
+        if not self._plugins_installs_url:
+            return items
+        try:
+            data = self._get(self._plugins_installs_url, SOURCE_BYTES)
+        except MarketplaceError as error:
+            _logger.info("The plugin directory's installs could not be read: %s", error)
+            return items
+        counts = plugins_installs(data or b"", self._plugins_repository)
+        counted = [replace(item, installs=counts.get(item.target)) for item in items]
+        return sorted(counted, key=lambda item: -(item.installs or 0))
 
     def _kept(self, file: str) -> str | None:
         if self._folder is None:

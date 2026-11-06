@@ -710,7 +710,9 @@ export const en = {
   marketplace: {
     back: 'All items',
     brought: (names: string) => `Also installed, since it needs them: ${names}.`,
+    allCategories: 'All categories',
     by: (author: string) => `by ${author}`,
+    category: 'Category',
     cancel: 'Cancel',
     community: 'Community',
     confirmRemove: 'Remove it?',

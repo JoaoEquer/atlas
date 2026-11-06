@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import type { MarketplaceList, MarketplacePage, MarketplaceRow } from '@/protocol/protocol.generated'
 
-import { actionOf, counts, resolved, shown, withRow } from './marketplace'
+import { actionOf, categories, counts, resolved, shown, withRow } from './marketplace'
 
 function row(name: string, change: Partial<MarketplaceRow> = {}): MarketplaceRow {
   return {
     author: 'someone',
     image: '',
+    category: '',
     installs: null,
     kind: 'skill',
     license: 'MIT',
@@ -74,6 +75,38 @@ describe('a tab shows its kind, the Atlas team first', () => {
   it('counts each kind for its tab', () => {
     expect(counts(listing)).toEqual({ executor: 0, mcp: 1, plugin: 0, skill: 3 })
     expect(counts(null)).toEqual({ executor: 0, mcp: 0, plugin: 0, skill: 0 })
+  })
+})
+
+describe('a category filters a tab by what its source files', () => {
+  const filed = (name: string, category: string) => row(name, { category, kind: 'plugin', source: 'claude-plugins' })
+  const list = (items: MarketplaceRow[]): MarketplaceList => ({
+    description: '',
+    items,
+    name: '',
+    problem: null,
+    read_at: null,
+    source_problems: []
+  })
+
+  it('lists the categories of the tab alone, each once, as the source writes them', () => {
+    const found = list([filed('a', 'security'), filed('b', 'design'), filed('c', 'design'), filed('d', ''), row('e')])
+
+    expect(categories(found, 'plugin')).toEqual(['design', 'security'])
+    expect(categories(found, 'skill')).toEqual([])
+  })
+
+  it('keeps only the rows filed under it, and all of them with none', () => {
+    const found = list([filed('a', 'security'), filed('b', 'design'), row('own', { kind: 'plugin' })])
+    const names = (category: string) =>
+      shown(found, 'plugin', '', category)
+        .outside.flatMap(shelf => shelf.rows)
+        .map(item => item.name)
+
+    expect(names('design')).toEqual(['b'])
+    expect(names('')).toEqual(['a', 'b'])
+    expect(shown(found, 'plugin', '', 'design').community).toEqual([])
+    expect(shown(found, 'plugin', '').community.map(item => item.name)).toEqual(['own'])
   })
 })
 

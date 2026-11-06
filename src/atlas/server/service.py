@@ -4168,6 +4168,7 @@ def _market_row(row: MarketRow) -> MarketplaceRow:
         source=row.source.value,
         updated=row.updated,
         installs=row.installs,
+        category=row.category,
     )
 
 
