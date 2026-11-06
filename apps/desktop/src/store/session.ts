@@ -134,6 +134,13 @@ export function applyActivity(
       // `note`: what the screen says of a switch, such as the model it went on with.
       return { ...thread, items: [...thread.items, { key, kind: 'status', text: activity.text }] }
 
+    case 'resume': {
+      // Its plan's limit stopped it: it goes on by itself when the plan resets, or waits.
+      const text = activity.failed ? t.executor.noReset : t.executor.resumesAt(resumeTime(activity.text))
+
+      return { ...thread, items: [...thread.items, { key, kind: 'status', text }] }
+    }
+
     case 'account':
     case 'route': {
       // Its plan's limit was reached, and it went on elsewhere, or says why it could not.
@@ -146,6 +153,18 @@ export function applyActivity(
       // A kind this app does not know, from a newer server: shown, not dropped (ACP v2).
       return { ...thread, items: [...thread.items, { key, kind: 'other', payload: activity, type: activity.kind }] }
   }
+}
+
+/** When a session goes on, as the user reads a time: the hour, and the day when it is not today. */
+export function resumeTime(at: string, now = new Date()): string {
+  const when = new Date(at)
+  const today = when.toDateString() === now.toDateString()
+
+  return when.toLocaleString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(today ? {} : { day: 'numeric', weekday: 'short' })
+  })
 }
 
 /** A line the screen said in a session, where it said it: `at` items were above it. */

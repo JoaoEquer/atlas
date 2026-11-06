@@ -4,9 +4,10 @@ the model to keep them. Pure, no I/O.
 The built-in memory (docs/ARCHITECTURE.md, Memory):
 
 - **Two small files, always in the prompt.** `USER.md`, who the user is (1,375 characters), and
-  `MEMORY.md`, facts about the environment (2,200). Limits are in characters, not tokens, because
-  characters do not depend on the model. Everything else is recalled from past conversations, and
-  what is learned doing a kind of task belongs in that task's skill.
+  `MEMORY.md`, facts about the environment (2,200), by default: the home's `[memory]` changes
+  them. Limits are in characters, not tokens, because characters do not depend on the model.
+  Everything else is recalled from past conversations, and what is learned doing a kind of task
+  belongs in that task's skill.
 - **Entries separated by a line holding `§`**, each written whole by the model.
 - **One call, several changes, checked once.** Operations apply in order to a copy and the limit is
   checked on the result only, so a single call can free room and add. One that fails leaves
@@ -53,7 +54,7 @@ class Target(StrEnum):
 
 
 FILES = {Target.USER: "USER.md", Target.MEMORY: "MEMORY.md"}
-#: The limits, in characters.
+#: The limits, in characters, when the home's `[memory]` sets none.
 LIMITS = {Target.USER: 1_375, Target.MEMORY: 2_200}
 HEADERS = {
     Target.USER: "USER PROFILE (who the user is)",

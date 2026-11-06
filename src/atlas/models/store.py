@@ -147,6 +147,14 @@ class _MessagesSDK(Protocol):
     async def close(self) -> None: ...
 
 
+def load_sdks() -> None:
+    """Import the Messages wire's SDK, when it is installed, for a thread to run as the server
+    starts. Its first import takes a second or two, more on a busy machine; met by the first turn
+    on that wire, it held the event loop, and every conversation of the server, until it ended."""
+    if importlib.util.find_spec("anthropic") is not None:
+        importlib.import_module("atlas.models.messages_store")
+
+
 class Connection:
     """One provider's address and key, through its official SDK: OpenAI's for the chat and
     responses wires, Anthropic's for the messages wire (step 3b)."""

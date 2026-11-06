@@ -7,8 +7,8 @@
  * The output is held until the view attaches. The terminal knows a command's end from the marks
  * its shells write (shell-marks.ts):
  *
- * - **A command waits for the terminal to be ready** (the first prompt's mark, 15 seconds at most),
- *   so one clicked too early is not lost.
+ * - **A command waits for the terminal to be ready** (the first prompt's mark, 30 seconds at most:
+ *   PowerShell on a busy Windows took more than 15), so one clicked too early is not lost.
  * - **It must start within 2 seconds** (its start mark), else it is interrupted and said so.
  * - **It ends with its end mark and exit code**; after 30 seconds it is "still running", its
  *   output so far given, and its end, when it comes, is told later.
@@ -65,7 +65,7 @@ export interface Timing {
   quietMs: number
 }
 
-export const TIMING: Timing = { endMs: 30_000, quietMs: 1_000, readyMs: 15_000, startMs: 2_000 }
+export const TIMING: Timing = { endMs: 30_000, quietMs: 1_000, readyMs: 30_000, startMs: 2_000 }
 /** What a command's output keeps at most: its end, 102,400 characters. */
 export const OUTPUT_CHARS = 102_400
 

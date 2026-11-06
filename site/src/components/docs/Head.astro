@@ -6,9 +6,11 @@ import Default from '@astrojs/starlight/components/Head.astro'
 import martianLatin from '@fontsource-variable/martian-mono/files/martian-mono-latin-wdth-normal.woff2?url'
 import monaLatin from '@fontsource-variable/mona-sans/files/mona-sans-latin-wdth-normal.woff2?url'
 
+import { WORDS } from '../../lib/i18n'
 import { application, docPage, jsonLd, organization, website } from '../../lib/seo'
 
-const { entry, id, lastUpdated } = Astro.locals.starlightRoute
+// A page not translated yet shows the English entry; its twin is the English one.
+const { entry, lang, lastUpdated } = Astro.locals.starlightRoute
 const site = Astro.site ?? new URL(Astro.url.origin)
 const image = new URL('/og.jpg', site)
 const graph = jsonLd([
@@ -17,6 +19,7 @@ const graph = jsonLd([
   application(site),
   ...docPage(site, {
     path: Astro.url.pathname,
+    lang,
     title: entry.data.title,
     description: entry.data.description ?? '',
     modified: lastUpdated
@@ -27,12 +30,12 @@ const graph = jsonLd([
 <Default />
 <link rel="preload" href={monaLatin} as="font" type="font/woff2" crossorigin />
 <link rel="preload" href={martianLatin} as="font" type="font/woff2" crossorigin />
-{id && <link rel="alternate" type="text/markdown" href={`/${id}.md`} />}
+<link rel="alternate" type="text/markdown" href={`/${entry.id}.md`} />
 <meta name="theme-color" content="#000000" />
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
 <meta property="og:image" content={image} />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="Atlas: every coding agent, every account, one window." />
+<meta property="og:image:alt" content={WORDS[lang === 'pt-BR' ? 'pt-br' : 'en'].imageAlt} />
 <meta name="twitter:image" content={image} />
 <script type="application/ld+json" is:inline set:html={graph} />

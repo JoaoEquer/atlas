@@ -153,6 +153,16 @@ for (const path of all.filter(p => p.endsWith('.html'))) {
   }
 }
 
+// The browser's scripts carry no Node: a module that reads the disk or the environment, imported
+// by a page's script, throws as it loads and takes the page's other scripts with it.
+for (const path of all.filter(p => p.startsWith('_astro/') && p.endsWith('.js'))) {
+  const code = readFileSync(join(dist, path), 'utf8')
+  const node = /\bprocess\.(cwd|env)\b|\b(readdirSync|readFileSync|execFileSync)\b/.exec(code)
+  if (node) {
+    problems.push(`${path}, a script for the browser, uses ${node[0]}, which only Node has`)
+  }
+}
+
 if (problems.length > 0) {
   console.error(`The built site has ${problems.length} problem(s):\n${problems.map(p => `  - ${p}`).join('\n')}`)
   process.exit(1)

@@ -1,5 +1,6 @@
 ---
 // Commands to install Atlas, one tab per system, the visitor's own system chosen first.
+import { type Lang, WORDS } from '../lib/i18n'
 import type { InstallWay } from '../lib/install'
 
 interface Props {
@@ -7,13 +8,21 @@ interface Props {
   /** A short id, unique on the page, for the tabs' ids. */
   id: string
   compact?: boolean
+  lang?: Lang
 }
 
-const { ways, id, compact = false } = Astro.props
+const { ways, id, compact = false, lang = 'en' } = Astro.props
+const words = WORDS[lang].install
 ---
 
-<div class:list={['install-tabs', { compact }]} data-install-tabs>
-  <div class="tablist" role="tablist" aria-label="Your system">
+<div
+  class:list={['install-tabs', { compact }]}
+  data-install-tabs
+  data-copy-label={words.copy}
+  data-copied-label={words.copied}
+  data-copied-status={words.copiedStatus}
+>
+  <div class="tablist" role="tablist" aria-label={words.system}>
     {ways.map((way, k) => (
       <button
         type="button"
@@ -40,11 +49,22 @@ const { ways, id, compact = false } = Astro.props
       <div class="command">
         <pre tabindex="0"><code>{way.lines.join('\n')}</code></pre>
         <button type="button" class="copy" data-copy={way.lines.join('\n')}>
-          Copy
+          {words.copy}
         </button>
       </div>
       <p class="where">{way.where}</p>
       {way.after && <p class="after">{way.after}</p>}
+      {way.downloads && (
+        <p class="downloads">
+          {words.noTerminal}{' '}
+          {way.downloads.map((download, k) => (
+            <>
+              {k > 0 && ' · '}
+              <a href={download.href}>{download.label}</a>
+            </>
+          ))}
+        </p>
+      )}
     </div>
   ))}
   <span class="visually-hidden" aria-live="polite" data-copy-status></span>
@@ -109,13 +129,13 @@ const { ways, id, compact = false } = Astro.props
     for (const button of root.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
       button.addEventListener('click', () => {
         void navigator.clipboard.writeText(button.dataset['copy'] ?? '').then(() => {
-          button.textContent = 'Copied'
+          button.textContent = root.dataset['copiedLabel'] ?? 'Copied'
           button.dataset['done'] = ''
           if (status) {
-            status.textContent = 'Copied to the clipboard.'
+            status.textContent = root.dataset['copiedStatus'] ?? 'Copied to the clipboard.'
           }
           window.setTimeout(() => {
-            button.textContent = 'Copy'
+            button.textContent = root.dataset['copyLabel'] ?? 'Copy'
             delete button.dataset['done']
           }, 1800)
         })
@@ -230,6 +250,17 @@ const { ways, id, compact = false } = Astro.props
     color: var(--haze);
     font-size: var(--step--1);
     line-height: 1.55;
+  }
+
+  .downloads {
+    color: var(--haze);
+    font-size: var(--step--2);
+  }
+
+  .downloads a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
 
   .compact .where {

@@ -78,9 +78,8 @@ test('what comes onto the thread rises into place, and a conversation that opens
   await watchArrivals(page)
   await page.getByTestId('conversation-row').filter({ hasText: 'A first conversation' }).click()
   await expect(page.getByTestId('assistant-message').last()).toContainText('The second answer.')
-  const opened = await arrivals(page)
-  expect(opened.length).toBeGreaterThan(0)
-  expect(opened.filter(Boolean)).toEqual([])
+  // Its tab kept it drawn: shown again, nothing on it rises.
+  expect((await arrivals(page)).filter(Boolean)).toEqual([])
 })
 
 test('with "reduce motion" on in the system, nothing moves', async () => {
@@ -94,6 +93,10 @@ test('with "reduce motion" on in the system, nothing moves', async () => {
   await expect(page.getByTestId('assistant-message').last()).toContainText('The first answer.', { timeout: 15_000 })
 
   await page.emulateMedia({ reducedMotion: 'reduce' })
+  // The window takes the emulated setting a moment later: measured before it did, on a busy
+  // runner, two of the first turn's animations still ran (the CI's Windows, 03/11/2026).
+  await expect.poll(() => page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true)
+  await expect.poll(() => moving(page)).toBe(0)
   await say(page, 'Another turn at work')
   await expect(page.getByRole('status', { name: 'Working' })).toBeVisible()
   expect(await moving(page)).toBe(0)

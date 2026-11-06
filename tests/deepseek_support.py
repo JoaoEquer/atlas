@@ -9,13 +9,13 @@ from types import ModuleType
 
 import httpx2
 
-from atlas.plugins import BUNDLED_FOLDER, Executor
+from atlas.plugins import OFFICIAL_FOLDER, Executor
 from atlas.plugins.store import import_plugin
 
 #: The fake `dsh`, as the plugin's `program` setting names a program and its arguments.
 FAKE = [sys.executable, str(Path(__file__).parent / "fake_dsh.py")]
 #: Where the plugin sits.
-FOLDER = BUNDLED_FOLDER / "deepseek"
+FOLDER = OFFICIAL_FOLDER / "deepseek"
 
 
 def plugin_module(name: str) -> ModuleType:

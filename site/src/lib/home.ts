@@ -25,7 +25,7 @@ export const proof = [
 ]
 
 /** The statement set large between the story and the details; its words light up as it is read. */
-export const tagline =
+export const tagline: string =
   'When one plan hits its limit, the task moves on to the next. What Atlas learns stays on your machine, and nothing of yours reaches a server of ours.'
 
 export interface Chapter {
@@ -88,15 +88,23 @@ export const route = {
     'Across coding agents, the next one starts with a handoff: the task, your latest instruction, the steps not done, the files changed and what happened so far. Built from the session itself, with no model call.'
 }
 
+export type MemoryKind = 'profile' | 'notes' | 'skill' | 'proposal'
+
 /** What the memory chapter shows the review keeping. */
-export const memory = {
+export const memory: {
+  entries: { kind: MemoryKind; mark: string; text: string }[]
+  caption: string
+  kinds: Record<MemoryKind, string>
+} = {
   entries: [
     { kind: 'profile', mark: '+', text: 'Prefers short answers, in Portuguese' },
     { kind: 'notes', mark: '+', text: 'The tests run with uv run pytest' },
     { kind: 'skill', mark: '~', text: 'release-notes: list breaking changes first' },
     { kind: 'proposal', mark: '?', text: 'Replace “deploys on Fridays” with “deploys on Thursdays”' }
   ],
-  caption: 'Anything that would replace or remove a memory waits for your approval.'
+  caption: 'Anything that would replace or remove a memory waits for your approval.',
+  /** What each kind is called on screen; the kind itself is the page's key. */
+  kinds: { profile: 'profile', notes: 'notes', skill: 'skill', proposal: 'proposal' }
 }
 
 /** The comparison: the same day of work, with the coding agents on their own and inside Atlas. */
@@ -134,24 +142,39 @@ export const compare = {
   ]
 }
 
-export const gate = {
+/** How the gate treats a command: the page colors each verdict by it. */
+export type Tone = 'runs' | 'reviewed' | 'asks-you' | 'never-runs'
+
+export const gate: {
+  title: string
+  body: string
+  link: { href: string; label: string }
+  commands: { command: string; tone: Tone; verdict: string; detail: string }[]
+} = {
   title: 'Every command passes the approval gate',
   body: 'Atlas runs commands on your machine, so each one is checked before it runs. Some never run, whatever the mode, and anything that acts outside your machine on your behalf asks you first.',
   link: { href: '/docs/guides/approval-gate/', label: 'How the approval gate decides' },
   commands: [
-    { command: 'npm test', verdict: 'Runs', detail: 'An ordinary command goes straight through.' },
+    { command: 'npm test', tone: 'runs', verdict: 'Runs', detail: 'An ordinary command goes straight through.' },
     {
       command: 'git push --force',
+      tone: 'reviewed',
       verdict: 'Reviewed',
       detail:
         'A dangerous pattern. Unless auto mode is on, a reviewer model reads it first, and what it is unsure of comes to you.'
     },
     {
       command: 'gh pr merge 42',
+      tone: 'asks-you',
       verdict: 'Asks you',
       detail: 'It acts outside your machine, so it asks every time, even in auto mode.'
     },
-    { command: 'rm -rf ~', verdict: 'Never runs', detail: 'Blocked in every mode, whatever was approved before.' }
+    {
+      command: 'rm -rf ~',
+      tone: 'never-runs',
+      verdict: 'Never runs',
+      detail: 'Blocked in every mode, whatever was approved before.'
+    }
   ]
 }
 

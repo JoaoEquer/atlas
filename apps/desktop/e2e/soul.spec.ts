@@ -55,7 +55,8 @@ test('the soul is edited on the settings screen and is who Atlas is from the nex
   await page.getByRole('button', { name: 'New conversation' }).click()
   await model.reply({ text: 'Kestrel.' })
   await say(page, 'Who are you?')
-  await expect(page.getByTestId('assistant-message')).toHaveText('Kestrel.')
+  // The conversation before stays drawn in its tab, hidden.
+  await expect(page.getByTestId('assistant-message').filter({ visible: true })).toHaveText('Kestrel.')
   const [first, second, third] = await instructions()
   expect(first).toContain('You are Atlas, a personal agent.')
   expect(second).toContain('You are Atlas, a personal agent.')

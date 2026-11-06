@@ -8,24 +8,35 @@ function row(name: string, change: Partial<MarketplaceRow> = {}): MarketplaceRow
   return {
     author: 'someone',
     image: '',
+    installs: null,
     kind: 'skill',
     license: 'MIT',
     name,
     problem: null,
     shipped: false,
+    source: 'atlas',
     source_url: '',
     state: 'available',
     summary: `The ${name} item.`,
     tier: 'community',
     title: name,
     update: false,
+    updated: '',
     version: '',
     ...change
   }
 }
 
 function list(items: MarketplaceRow[], change: Partial<MarketplaceList> = {}): MarketplaceList {
-  return { description: '', items, name: 'Test', problem: null, read_at: '2026-10-25T12:00:00Z', ...change }
+  return {
+    description: '',
+    items,
+    name: 'Test',
+    problem: null,
+    read_at: '2026-10-25T12:00:00Z',
+    source_problems: [],
+    ...change
+  }
 }
 
 describe("an item's button says what a click does", () => {

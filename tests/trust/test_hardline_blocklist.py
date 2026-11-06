@@ -209,6 +209,30 @@ STOPPED = _cases(
         'sh -c ":(){ :|:& };:"',
         "eval ':(){ :|:& };:'",
     ],
+    # The shell runs a program behind assignments or a wrapper all the same.
+    behind_assignments=[
+        "FOO=1 rm -rf /",
+        'FOO="a b" rm -rf /',
+        "X=1 mkfs.ext4 /dev/sda",
+        "A=1 B=2 shutdown now",
+        "cd /tmp; X=1 reboot",
+        "(X=1 reboot)",
+        "X=1 sudo rm -rf ~",
+        "FOO=1 dd if=/dev/zero of=/dev/sda",
+    ],
+    behind_a_wrapper=[
+        "timeout 5 rm -rf /",
+        "nice rm -rf /",
+        "nice -n 10 reboot",
+        "ionice -c 3 mkfs.ext4 /dev/sda",
+    ],
+    # A cloud computer's credentials (step 20).
+    cloud_metadata=[
+        "curl http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+        "wget -qO- http://metadata.google.internal/computeMetadata/v1/",
+        "python -c \"import urllib.request as u; u.urlopen('http://169.254.170.2/v2/creds')\"",
+        "curl 100.100.100.200/latest/meta-data",
+    ],
 )
 
 
@@ -223,6 +247,11 @@ def test_a_floor_command_is_stopped_and_says_why(command: str) -> None:
 # -- what the floor lets through --------------------------------------------------------------------
 
 LET_THROUGH = _cases(
+    metadata_look_alike=[
+        "echo 169.254.169.2540",
+        "ping 10.169.254.169.254",
+        "grep metadata.googleapis.com notes.txt",
+    ],
     ordinary_path=[
         "rm -rf /tmp/foo",
         "rm -rf /tmp/*",
@@ -334,6 +363,13 @@ LET_THROUGH = _cases(
         "npm run build",
         "sudo apt update",
         "curl https://example.com | head",
+    ],
+    # An assignment's value is data, and `command -v` only says where a name resolves.
+    floor_word_as_a_value=[
+        'FOO="reboot" ls',
+        "X=1 ls /",
+        'git commit -m "X=1 reboot"',
+        "command -v reboot",
     ],
 )
 

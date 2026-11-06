@@ -23,6 +23,7 @@
  * machine's. This machine's switches run the terminal's own commands (`atlas always-on`), and its
  * connection code goes to the clipboard from here: the window never holds a token.
  */
+import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,6 +36,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  nativeTheme,
   protocol,
   safeStorage,
   screen,
@@ -46,7 +48,7 @@ import { messagesFor, pickLocale } from '../src/i18n'
 import { activeHome, AttachedServer, cliRunner, failure, homeFolder, readAlwaysOn } from './always-on'
 import { BackupDownloads } from './backup-down'
 import { Bar, e2ePowers, registerDesktopPowers, systemKeys } from './desktop-powers'
-import { openInEditor } from './editor'
+import { openFolder, openInEditor } from './editor'
 import { backupName, homesRoot, lastHome, rememberHome } from './homes'
 import { closesTab } from './keys'
 import { type Machine, MachineError, Machines, type Transport } from './machines'
@@ -155,7 +157,13 @@ function remoteMachine(id: string): RemoteMachine {
       throw new MachineError('That machine is no longer in the list.')
     }
 
-    found = new RemoteMachine(machine, () => machines.token(id), log)
+    found = new RemoteMachine(
+      machine,
+      () => machines.token(id),
+      log,
+      {},
+      () => machines.relayKey(id)
+    )
     reached.set(id, found)
   }
 
@@ -249,6 +257,42 @@ if (process.platform === 'win32') {
   app.setAppUserModelId(APP_ID)
 }
 
+/** The taskbar draws a window by the Start Menu shortcut that carries its id, whatever opened it.
+ * The one `atlas desktop` writes (`atlas.installation.store`) carries none, so it is given the id;
+ * and a shortcut named after Electron that carries the id with Electron's own icon, left there by
+ * runs from the checkout, is removed, or the taskbar would take its icon. */
+function claimStartMenu(): void {
+  const programs = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+  const own = path.join(programs, 'Atlas.lnk')
+  const stray = path.join(programs, 'Electron.lnk')
+
+  try {
+    const details = shell.readShortcutLink(own)
+
+    if (details.appUserModelId !== APP_ID) {
+      shell.writeShortcutLink(own, 'update', { ...details, appUserModelId: APP_ID })
+    }
+  } catch {
+    // No shortcut: the app was not installed by `atlas desktop`.
+  }
+
+  try {
+    if (shell.readShortcutLink(stray).appUserModelId === APP_ID) {
+      void fs.rm(stray, { force: true })
+    }
+  } catch {
+    // No such shortcut, or another program's.
+  }
+}
+
+// No title bar on Windows (asked for by the user on 01/11/2026): the tab strip's row is the top of
+// the window and moves it, and the system draws its minimize, maximize and close buttons over the
+// row's right end, in the colors the page sends (store/theme.ts). One pixel shorter than the row, so
+// the row's bottom line runs under them.
+const OWN_TITLE_BAR = process.platform === 'win32'
+const TITLE_BAR_HEIGHT = 35
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
 /** Only the system browser opens links, and only web ones. */
 function openOutside(url: string): void {
   try {
@@ -270,6 +314,12 @@ function createWindow(): void {
     minWidth: 720,
     show: false,
     title: 'Atlas',
+    ...(OWN_TITLE_BAR && {
+      titleBarOverlay: nativeTheme.shouldUseDarkColors
+        ? { color: '#171717', height: TITLE_BAR_HEIGHT, symbolColor: '#fafafa' }
+        : { color: '#fafafa', height: TITLE_BAR_HEIGHT, symbolColor: '#171717' },
+      titleBarStyle: 'hidden' as const
+    }),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -368,7 +418,8 @@ ipcMain.handle('atlas:machines:list', () => machines.list())
 ipcMain.handle('atlas:machines:add', (_event, given: unknown) =>
   answer(() => {
     const fields = (typeof given === 'object' && given !== null ? given : {}) as Record<string, unknown>
-    const transport: Transport = fields.transport === 'ssh' ? 'ssh' : 'tailscale'
+    const transport: Transport =
+      fields.transport === 'ssh' ? 'ssh' : fields.transport === 'relay' ? 'relay' : 'tailscale'
 
     return machines.add({ code: text(fields.code), name: text(fields.name), sshHost: text(fields.sshHost), transport })
   })
@@ -392,7 +443,13 @@ ipcMain.handle('atlas:machines:test', (_event, id: unknown) =>
       throw new MachineError('That machine is no longer in the list.')
     }
 
-    const testing = new RemoteMachine(machine, () => machines.token(machine.id), log)
+    const testing = new RemoteMachine(
+      machine,
+      () => machines.token(machine.id),
+      log,
+      {},
+      () => machines.relayKey(machine.id)
+    )
 
     try {
       await testing.endpoint()
@@ -522,6 +579,10 @@ ipcMain.handle('atlas:choose-folder', async () => {
 ipcMain.handle('atlas:open-in-editor', (_event, folder: unknown) =>
   remote === null ? openInEditor(folder, link => shell.openExternal(link)) : 'The folder is on another machine.'
 )
+/** A session's folder in the system's file manager, the same folders as VS Code's. */
+ipcMain.handle('atlas:open-folder', (_event, folder: unknown) =>
+  remote === null ? openFolder(folder, found => shell.openPath(found)) : 'The folder is on another machine.'
+)
 /** The previews' pages are served from a protocol of their own (step 16f), declared before the app
  * is ready, as Electron asks. */
 protocol.registerSchemesAsPrivileged([{ privileges: { secure: true, standard: true }, scheme: PREVIEW_SCHEME }])
@@ -543,6 +604,13 @@ if (e2e) {
   Object.defineProperty(globalThis, 'atlasServer', { get: () => owned.get(null) ?? null })
   Object.defineProperty(globalThis, 'atlasServers', { get: () => owned })
 }
+ipcMain.on('atlas:title-bar', (_event, color: unknown, symbolColor: unknown) => {
+  if (OWN_TITLE_BAR && window && typeof color === 'string' && typeof symbolColor === 'string') {
+    if (HEX_COLOR.test(color) && HEX_COLOR.test(symbolColor)) {
+      window.setTitleBarOverlay({ color, height: TITLE_BAR_HEIGHT, symbolColor })
+    }
+  }
+})
 ipcMain.on('atlas:focus', () => {
   if (window) {
     if (window.isMinimized()) {
@@ -603,6 +671,10 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(() => {
     // Opened from the checkout, macOS shows Electron's own icon in the Dock until told otherwise.
     app.dock?.setIcon(icon)
+
+    if (process.platform === 'win32' && !e2e) {
+      claimStartMenu()
+    }
 
     if (updateRunning(updates)) {
       // The update replaces what this app runs from: it starts no server, and waits it out.

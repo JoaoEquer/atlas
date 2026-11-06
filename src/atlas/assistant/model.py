@@ -200,6 +200,9 @@ class InstanceChanged:
     #: Its extra account's id (step 16h); empty, the main account.
     account_id: str = ""
     effort: str = ""
+    #: Its harness's permission modes, and the one it runs in (SDK version 28); empty, none.
+    mode: str = ""
+    modes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,9 +212,11 @@ class InstanceActivity:
     `steered` (a prompt that entered the turn running), `answered` (Atlas answered one of its
     requests for the user), `compacted` (it compacted its session), `account` (its account
     reached its plan's limit and it went on on the account `text` names or, `failed`, why it
-    could not), `route` (it went on, by its session's route, in a new session of the executor
-    and account `text` names or, `failed`, why none could) or `note` (what the screen says of
-    such a switch: the model it went on with, a compaction that failed)."""
+    could not go on anywhere, by a route or not), `route` (it went on, by its session's route,
+    in a new session of the executor and account `text` names, or, `failed`, why that failed),
+    `note` (what the screen says of such a switch: the model it went on with, a compaction that
+    failed) or `resume` (it stopped at its plan's limit and goes on by itself at the UTC time
+    `text` says or, `failed`, the limit said no reset and it waits for the user)."""
 
     instance_id: str
     kind: str

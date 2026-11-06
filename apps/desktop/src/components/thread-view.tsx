@@ -13,6 +13,8 @@ import type { Waiting } from '@/store/waiting'
 
 import { ARTIFACT_LANGUAGES, ArtifactBlock } from './artifact-block'
 import { AttachmentChip, useThumbnail } from './attachment-chip'
+import { ConnectionOffer } from './connection-offer'
+import { $modelMenu } from './model-picker'
 import { ReviewRow } from './review-row'
 import { AnswerStreaming, SHELL_RENDERERS } from './shell-block'
 import { ToolRow } from './tool-row'
@@ -20,6 +22,7 @@ import { ArrowDown } from './ui/icons'
 import { InlineError } from './ui/inline-error'
 import { SkeletonThread } from './ui/skeleton'
 import { elapsed, useNow } from './use-now'
+import { Wordmark } from './wordmark'
 
 // A code block in a reply only copies: saving a command as `file.ps1` is no use.
 const CONTROLS = { code: { copy: true, download: false } } as const
@@ -40,8 +43,8 @@ const NONE_SENDING: readonly Sending[] = []
 const PLACES = new Map<string, { following: boolean; top: number }>()
 
 /**
- * A conversation's thread. `empty` is what an empty thread shows in place of the invitation (a
- * bot's face and name); `loading`, that it is being read, which shows a skeleton and never the
+ * A conversation's thread. `empty` is what an empty thread shows in place of the invitation, Atlas's
+ * name set in characters as on the website (a bot's face and name); `loading`, that it is being read, which shows a skeleton and never the
  * invitation; `place`, whose thread it is, for where the user was in it; `sending`, the user's
  * messages on their way; `waiting`, the calls the open cards hold, by call id (store/waiting.ts).
  */
@@ -74,8 +77,11 @@ export function ThreadView({
   const size = last ? growth(last) : 0
   const sent = last?.kind === 'user' || sending.length > 0
 
-  // Another thread on screen: the user's place in it, or its end the first time.
+  // Another thread on screen, or this one shown again (app.tsx keeps a tab's thread hidden): the
+  // user's place in it, or its end the first time. Its parts, shown again, are already in place and
+  // do not rise.
   useLayoutEffect(() => {
+    setSettled(null)
     const kept = place === undefined ? undefined : PLACES.get(place)
     following.current = kept?.following ?? true
     lastTop.current = kept?.top ?? 0
@@ -113,7 +119,8 @@ export function ThreadView({
 
   function onScroll() {
     const element = scroller.current
-    if (!element) {
+    // Hidden, it has no size: that is not the user scrolling.
+    if (!element || element.clientHeight === 0) {
       return
     }
     const near = element.scrollHeight - element.scrollTop - element.clientHeight <= NEAR_END
@@ -150,11 +157,7 @@ export function ThreadView({
           <div className="mx-auto max-w-3xl space-y-4 px-6 py-6">
             {thread.items.length === 0 &&
               sending.length === 0 &&
-              (loading ? (
-                <SkeletonThread label={t.thread.reading} />
-              ) : (
-                (empty ?? <p className="pt-24 text-center text-muted-foreground">{t.thread.empty}</p>)
-              ))}
+              (loading ? <SkeletonThread label={t.thread.reading} /> : (empty ?? <Invitation />))}
             {segments(thread.items).map(segment =>
               Array.isArray(segment) ? (
                 <Trail key={segment[0]?.key} parts={segment} waiting={waiting} />
@@ -335,7 +338,12 @@ function PartView({ part, waiting }: { part: Part; waiting: ReadonlyMap<string, 
       )
 
     case 'tool':
-      return <ToolRow tool={part} waiting={waiting.get(part.toolId)} />
+      // A connection Atlas offered (05/11/2026) is a card the user acts on, not a tool's row.
+      return part.name === 'offer_connection' ? (
+        <ConnectionOffer tool={part} />
+      ) : (
+        <ToolRow tool={part} waiting={waiting.get(part.toolId)} />
+      )
 
     case 'other':
       // ACP v2: what the app does not know is kept raw and shown generically.
@@ -513,14 +521,7 @@ function TurnFailed({
           <TurnAction
             label={t.thread.changeModel}
             onClick={() => {
-              const select = document.querySelector<HTMLSelectElement>('[data-testid="model-select"]')
-              select?.focus()
-
-              try {
-                select?.showPicker()
-              } catch {
-                // A list that does not open on demand stays focused: the arrows choose.
-              }
+              $modelMenu.set(true)
             }}
             testId="turn-change-model"
           />
@@ -653,6 +654,17 @@ function Working() {
       <span className="h-2 w-2 rounded-full bg-working/70 motion-safe:animate-pulse" />
       <span className="h-2 w-2 rounded-full bg-working/70 motion-safe:animate-pulse motion-safe:[animation-delay:150ms]" />
       <span className="h-2 w-2 rounded-full bg-working/70 motion-safe:animate-pulse motion-safe:[animation-delay:300ms]" />
+    </div>
+  )
+}
+
+/** What a conversation with Atlas opens on: its name set in characters, as the website's, and the
+ * invitation in words (asked for by the user on 01/11/2026). */
+function Invitation() {
+  return (
+    <div className="pt-16 text-center" data-testid="invitation">
+      <Wordmark className="mx-auto max-w-xl" ratio={0.3} word="Atlas" />
+      <p className="mt-4 text-muted-foreground">{t.thread.empty}</p>
     </div>
   )
 }

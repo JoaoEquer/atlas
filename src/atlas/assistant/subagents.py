@@ -31,13 +31,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from atlas.agent import ToolFinished, ToolStarted, TurnOutcome
 from atlas.assistant.executors import (
     ExecutorRun,
     account_name,
     default_executor_effort,
+    other_accounts,
     split_account,
 )
 from atlas.assistant.model import (
@@ -46,6 +47,7 @@ from atlas.assistant.model import (
     Decides,
     ExecutorUsage,
     InstanceActivity,
+    InstanceState,
     Owner,
     SubagentChanged,
 )
@@ -62,8 +64,7 @@ from atlas.jobs import (
     STEER_OPEN,
     WAITED_NOTES,
     AgentDefinition,
-    RouteTarget,
-    SessionRoute,
+    DelegationError,
     Subagent,
     SubagentStatus,
     Task,
@@ -88,6 +89,7 @@ from atlas.plugins import (
     ExecutorSpec,
     Finished,
     LimitReached,
+    NextStop,
     Returned,
 )
 
@@ -120,6 +122,26 @@ MAIN_TARGET = "main"
 AUTO_EXECUTORS = frozenset({"claude-code", "codex", "deepseek", "gemini-cli"})
 
 
+class TaskWorkspaces(Protocol):
+    """The workspaces a delegated task may ask for (step 21), as the server makes them: a
+    worktree of a project's on a branch of its own, prepared before the task starts in it."""
+
+    async def make(self, folder: Path, name: str) -> tuple[Path, str]:
+        """A new workspace of `folder`'s project named `name`, once its setup script ended: its
+        folder and its branch. Raises `DelegationError` with what the model is told."""
+        ...
+
+    async def changes(self, folder: Path) -> str:
+        """What the workspace at `folder` changed since it was made, in a line."""
+        ...
+
+    async def finish(self, folder: Path, title: str, *, draft: bool) -> str:
+        """A routine's run's workspace once the run ended (step 25): archived when it changed
+        nothing; otherwise kept for the user and, with `draft`, its changes committed, sent and
+        opened as a draft pull request by the GitHub plugin. What became of it, in a line."""
+        ...
+
+
 @dataclass
 class _Child:
     """A running child and what its dock shows."""
@@ -140,6 +162,8 @@ class _Child:
     in_tool: int = 0
     #: Its parent, or the user, asked it to stop.
     stopping: bool = False
+    #: The branch of the new workspace it works in (step 21); empty, it works in its folder.
+    workspace: str = ""
 
 
 class Subagents:
@@ -187,10 +211,10 @@ class Subagents:
             found = assistant.executor(name)
             if found is None or not found.capabilities().account_folders:
                 continue
-            kept = assistant.account_store.accounts(name)
+            kept = other_accounts(assistant.accounts, name)
             if kept:
                 names.append(target_name(name, ""))
-                names.extend(target_name(name, account.name) for account in kept)
+                names.extend(target_name(name, account.nickname) for account in kept)
         return names
 
     def _resolve(self, name: str) -> tuple[str, str | None] | str:
@@ -209,34 +233,45 @@ class Subagents:
         if wanted.lower() == MAIN_TARGET:
             return base, MAIN_ACCOUNT
         kept = (
-            assistant.account_store.accounts(base) if found.capabilities().account_folders else []
+            other_accounts(assistant.accounts, base) if found.capabilities().account_folders else []
         )
         for account in kept:
-            if wanted.lower() in (account.name.lower(), account.id):
+            if wanted.lower() in (account.nickname.lower(), account.id):
                 return base, account.id
-        names = ", ".join([MAIN_TARGET, *(account.name for account in kept)])
+        names = ", ".join([MAIN_TARGET, *(account.nickname for account in kept)])
         return (
             f"[Atlas: {found.title} has no account {wanted!r}. Its accounts: {names}; "
             "executor_accounts shows each.]"
         )
 
-    def _route(self, names: Sequence[str]) -> tuple[RouteTarget, ...] | str:
-        """A delegation's route from the target names the model gave, a bare executor being its
-        main account; or what the model is told about one Atlas does not know."""
-        targets: list[RouteTarget] = []
+    def _route(self, names: Sequence[str]) -> tuple[str, ...] | str:
+        """A delegation's route from the target names the model gave, each as its executor on
+        its account (`claude-code@1a2b3c4d`, a bare executor being its own login); or what the
+        model is told about one Atlas does not know, or when no plugin keeps routes."""
+        if names and self._assistant.accounts is None:
+            return (
+                "[Atlas: A route needs the accounts plugin, which is not on here. Delegate "
+                "without a route, or ask the user to turn the plugin on.]"
+            )
+        targets: list[str] = []
         for name in names:
             resolved = self._resolve(name)
             if isinstance(resolved, str):
                 return resolved
             base, account = resolved
-            targets.append(RouteTarget(base, account or MAIN_ACCOUNT))
+            targets.append(account_name(base, account or MAIN_ACCOUNT))
         return tuple(dict.fromkeys(targets))
 
-    def _keep_route(self, conversation_id: str, route: Sequence[RouteTarget]) -> None:
-        """A delegated task's route, kept by its stored conversation as a card's is, so it holds
-        when the task is resumed."""
-        if route:
-            self._assistant.account_store.set_route(SessionRoute(conversation_id, tuple(route)))
+    def _keep_route(self, conversation_id: str, route: Sequence[str]) -> None:
+        """A delegated task's route, kept by the accounts plugin for its stored conversation as a
+        card's is, so it holds when the task is resumed."""
+        accounts = self._assistant.accounts
+        if not route or accounts is None:
+            return
+        try:
+            accounts.keep_route(conversation_id, route)
+        except Exception:  # a plugin's own code: the task goes without its route, logged
+            _logger.exception("The accounts plugin could not keep a delegated task's route.")
 
     async def spawn(
         self,
@@ -254,7 +289,7 @@ class Subagents:
         where each task goes on at a plan's limit, in order, in place of the executor's own
         order of its accounts."""
         assistant = self._assistant
-        targets: tuple[RouteTarget, ...] = ()
+        targets: tuple[str, ...] = ()
         account: str | None = None
         if executor is not None:
             resolved = self._resolve(executor)
@@ -267,6 +302,11 @@ class Subagents:
             targets = routed
         elif route:
             return "[Atlas: A route is for an outside executor's tasks. Nothing was delegated.]"
+        elif any(task.workspace for task in tasks):
+            return (
+                "[Atlas: A new workspace is for an outside executor's tasks: give `executor`. "
+                "Nothing was delegated.]"
+            )
         #: Each task's predefined subagent, a plugin's agent (step 16k), or `None`.
         agents: list[AgentDefinition | None] = []
         for task in tasks:
@@ -287,6 +327,8 @@ class Subagents:
             agents.append(agent)
         found: Executor | None = None
         folders: list[Path] = []
+        #: The branch of the new workspace each task asked for (step 21), empty for none.
+        branches: list[str] = [""] * len(tasks)
         #: Each task's executor on its folder's account (step 16h), its name and its login.
         accounts: list[tuple[Executor, str, Account]] = []
         if executor is not None:
@@ -311,6 +353,10 @@ class Subagents:
                         "Give each task the project folder it works in.]"
                     )
                 folders.append(folder)
+            made = await self._workspaces(tasks, folders)
+            if isinstance(made, str):
+                return made
+            folders, branches = made
             on = await self._accounts(executor, folders, account)
             if isinstance(on, str):
                 return on
@@ -359,7 +405,16 @@ class Subagents:
                     on_account, name, spec, parent, record, atlas_answers=answers
                 )
                 prompt = f"{task.goal}\n\n{task.context}".strip()
-                children.append(_Child(record, parent, run=run, prompt=prompt, last_activity=now))
+                children.append(
+                    _Child(
+                        record,
+                        parent,
+                        run=run,
+                        prompt=prompt,
+                        last_activity=now,
+                        workspace=branches[index],
+                    )
+                )
                 continue
             agent = agents[index]
             model = choice if agent is None else agent_model(agent) or choice
@@ -386,7 +441,54 @@ class Subagents:
                 tools=None if agent is None else agent_tools(agent),
             )
             children.append(_Child(record, parent, conversation=conversation))
-        return await self._launch(parent, delegation_id, children)
+        shared = self._shared_folders(children)
+        return await self._launch(parent, delegation_id, children, shared)
+
+    async def _workspaces(
+        self, tasks: Sequence[Task], folders: list[Path]
+    ) -> tuple[list[Path], list[str]] | str:
+        """Each task's folder, a new workspace's where it asked for one, and that workspace's
+        branch (empty for the others); or what the model is told when one cannot be made, the
+        ones made already left for the user, listed in the app."""
+        maker = self._assistant.task_workspaces
+        branches = [""] * len(tasks)
+        if not any(task.workspace for task in tasks):
+            return folders, branches
+        if maker is None:
+            return "[Atlas: Workspaces are not available here. Nothing was delegated.]"
+        made = list(folders)
+        for index, task in enumerate(tasks):
+            if not task.workspace:
+                continue
+            name = f"{title_from(task.goal)[:40]}-{secrets.token_hex(2)}"
+            try:
+                made[index], branches[index] = await maker.make(folders[index], name)
+            except DelegationError as error:
+                return f"[Atlas: {error} Nothing was delegated.]"
+        return made, branches
+
+    def _shared_folders(self, children: Sequence[_Child]) -> list[str]:
+        """The folders of a batch's tasks where another agent works now: a session of the
+        user's, or another delegated task (decided with the user on 03/11/2026, in place of a
+        lock on the folder)."""
+        busy = {
+            run.spec.folder.resolve()
+            for run in self._assistant.workbench.runs()
+            if run.state in (InstanceState.STARTING, InstanceState.WORKING)
+        }
+        mine = {child.record.id for child in children}
+        busy |= {
+            Path(other.record.folder).resolve()
+            for other in self._live.values()
+            if other.record.folder and other.record.id not in mine and other.run is not None
+        }
+        return sorted(
+            {
+                child.record.folder
+                for child in children
+                if child.record.folder and Path(child.record.folder).resolve() in busy
+            }
+        )
 
     async def resume(
         self,
@@ -419,7 +521,7 @@ class Subagents:
             await asyncio.to_thread(self._keep_route, record.conversation_id, routed)
         workbench = assistant.workbench
         base, current = split_account(record.executor)
-        target: RouteTarget | None = None
+        target: str | None = None
         if executor is not None:
             resolved = self._resolve(executor)
             if isinstance(resolved, str):
@@ -434,11 +536,11 @@ class Subagents:
                         workbench.folder_account, chosen_base, record.folder
                     )
                 )
-            target = RouteTarget(chosen_base, chosen)
+            target = account_name(chosen_base, chosen)
         elif workbench.limited(record.executor):
             found_next = await self._next(record.executor, record.conversation_id, None)
-            target = None if found_next is None else found_next[0]
-        name = record.executor if target is None else account_name(target.executor, target.account)
+            target = None if found_next is None else found_next.executor
+        name = record.executor if target is None else target
         crossing = split_account(name)[0] != base
         resume_from = None
         if not crossing and name != record.executor:
@@ -558,7 +660,6 @@ class Subagents:
             subagent_id=record.id,
             record=assistant.instance_store,
             clock=assistant.clock,
-            on_copied=workbench.copy_kept,
         )
         run.atlas_answers = atlas_answers
         return run
@@ -671,11 +772,6 @@ class Subagents:
             accounts = await workbench.accounts(name)
         except ExecutorError as error:
             return {"executor": name, "error": str(error)}
-        folders = (
-            await asyncio.to_thread(assistant.account_store.folder_accounts, name)
-            if accounts.can_add
-            else {}
-        )
         alone = len(accounts.accounts) == 1
 
         async def row(view: AccountView) -> dict[str, object]:
@@ -692,9 +788,6 @@ class Subagents:
                 else:
                     entry |= _usage_entry(usage)
             entry["at_limit"] = workbench.limited(view.name)
-            starts = [folder for folder, kept in folders.items() if kept == view.account_id]
-            if starts:
-                entry["folders"] = starts
             return entry
 
         found = assistant.executor(name)
@@ -708,9 +801,14 @@ class Subagents:
         return entry
 
     async def _launch(
-        self, parent: "OpenConversation", delegation_id: str, children: list[_Child]
+        self,
+        parent: "OpenConversation",
+        delegation_id: str,
+        children: list[_Child],
+        shared: Sequence[str] = (),
     ) -> str:
-        """Start a batch's children: in the background, or waited for (a routine, a full pool)."""
+        """Start a batch's children: in the background, or waited for (a routine, a full pool).
+        `shared`: the folders another agent works in, which the answer warns of."""
         assistant = self._assistant
         assistant.subagent_store.add([child.record for child in children])
         waits = None
@@ -748,15 +846,17 @@ class Subagents:
                 raise
             records = self._trimmed(parent, [child.record for child in children])
             assistant.subagent_store.delivered(delegation_id)
-            return json.dumps(
-                {"results": [_entry(record) for record in records], "note": WAITED_NOTES[waits]},
-                ensure_ascii=False,
-            )
+            waited: dict[str, object] = {
+                "results": [_entry(record) for record in records],
+                "note": WAITED_NOTES[waits],
+            }
+            return json.dumps(_warned(waited, shared), ensure_ascii=False)
         self._background += 1
         batch = asyncio.create_task(self._deliver(parent.id, children))
         self._batches.add(batch)
         batch.add_done_callback(self._batches.discard)
-        return json.dumps(dispatched([child.record for child in children]), ensure_ascii=False)
+        sent = dispatched([child.record for child in children])
+        return json.dumps(_warned(sent, shared), ensure_ascii=False)
 
     async def _deliver(self, parent_id: str, children: Sequence[_Child]) -> None:
         """When the batch's last child ends, its one notice to the parent."""
@@ -894,26 +994,22 @@ class Subagents:
             await run.stop()
             assistant.workbench.drop(run)
             child.record = self._executor_ended(child, finished, error, stalled)
+            if child.workspace:
+                child.record = await self._workspace_said(child)
             assistant.subagent_store.finish(child.record)
             self._live.pop(child.record.id, None)
             self._changed(child)
 
     async def _next(
         self, name: str, conversation_id: str, limit: LimitReached | None
-    ) -> tuple[RouteTarget, bool] | None:
-        """Where a delegated task goes on after `name` reached its plan's limit, and whether a
-        copy there compacts first: the next destination of its route, when it has one on, else
-        the next of its executor's accounts in the user's order; `None` when none can."""
+    ) -> NextStop | None:
+        """Where a delegated task goes on after `name` reached its plan's limit, as the accounts
+        plugin says (its route, else the next of its executor's accounts); `None` when none can,
+        or no plugin brings other accounts."""
         workbench = self._assistant.workbench
-        store = self._assistant.account_store
-        route = await asyncio.to_thread(store.route, conversation_id)
-        if route is not None and route.enabled and route.targets:
-            target = await workbench.next_target(name, route, limit)
-            return None if target is None else (target, route.compact)
-        account = await workbench.next_account(name, limit)
-        if account is None:
-            return None
-        return RouteTarget(split_account(name)[0], account), workbench.failover(name).compact
+        workbench.mark_limited(name, limit)
+        found = await workbench.next_stop(name, conversation_id)
+        return found if isinstance(found, NextStop) else None
 
     async def _hand_over(
         self, child: _Child, heard: Callable[[ExecutorEvent], None]
@@ -928,18 +1024,17 @@ class Subagents:
         old = child.run
         if old is None or old.session_id is None:
             return None
-        found_next = await self._next(old.name, child.record.conversation_id, old.limited)
-        if found_next is None:
+        stop = await self._next(old.name, child.record.conversation_id, old.limited)
+        if stop is None:
             return None
-        target, compact = found_next
-        name = account_name(target.executor, target.account)
+        name, compact = stop.executor, stop.compact
         found = assistant.executor(name)
         logged = None if found is None else await _logged_in(found)
         if found is None or logged is None:
             return None
-        crossing = target.executor != split_account(old.name)[0]
+        crossing = split_account(name)[0] != split_account(old.name)[0]
         # The model and the effort it ran on go on with it (decided with the user on 25/10/2026).
-        model, effort, note = await workbench.carried(old, name, target)
+        model, effort, note = await workbench.carried(old, name, stop.model, stop.effort)
         packet = ""
         if crossing:
             source = await asyncio.to_thread(workbench.label, old.name)
@@ -988,7 +1083,7 @@ class Subagents:
             workbench.notify(InstanceActivity(run.id, "route", destination))
             _logger.info("A delegated task went on on another executor by its route.")
             return run, await run.run(packet, heard)
-        workbench.notify(InstanceActivity(run.id, "account", logged.login or target.account))
+        workbench.notify(InstanceActivity(run.id, "account", logged.login or name))
         _logger.info("A delegated task went on on another account after a plan limit.")
         # It compacts first where its harness has `/compact`; one that fails leaves it as it was.
         if not (compact and "compact" in old.commands):
@@ -1000,6 +1095,20 @@ class Subagents:
                 raise
             workbench.notify(InstanceActivity(run.id, "note", not_compacted(error)))
         return run, await run.turn(CONTINUE)
+
+    async def _workspace_said(self, child: _Child) -> Subagent:
+        """A task's result, with the workspace it worked in: its branch, and what it changed."""
+        record = child.record
+        maker = self._assistant.task_workspaces
+        changes = ""
+        if maker is not None:
+            try:
+                changes = await maker.changes(Path(record.folder))
+            except Exception:  # a git that fails: the result goes without its changes, logged
+                _logger.exception("A workspace's changes could not be read.")
+        said = f"[Atlas: It worked in the workspace {child.workspace}, at {record.folder}"
+        said += f"; changed: {changes}.]" if changes else ".]"
+        return dataclasses.replace(record, summary=f"{record.summary}\n\n{said}".strip())
 
     def _executor_ended(
         self,
@@ -1522,6 +1631,16 @@ def _last_words(history: Sequence[Message]) -> str:
 
 def _unwrapped(steer: str) -> str:
     return steer.removeprefix(STEER_OPEN).removesuffix(STEER_CLOSE).strip()
+
+
+def _warned(answer: dict[str, object], shared: Sequence[str]) -> dict[str, object]:
+    """A spawn's answer, warning of the folders another agent works in."""
+    if shared:
+        answer["warning"] = (
+            f"Another agent works in {', '.join(shared)} now: the two may change the same "
+            'files. workspace: "new" gives a task a copy of its own.'
+        )
+    return answer
 
 
 def _entry(record: Subagent) -> dict[str, object]:

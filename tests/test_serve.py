@@ -45,6 +45,27 @@ def _stop(server: subprocess.Popen[str]) -> None:
     server.wait(timeout=30)
 
 
+def _read_once_released(database: Path, query: str) -> tuple[str, ...]:
+    """A row of the home's database once the stopped server let go of it. `taskkill /F` ends the
+    server wherever it was, and on Windows the interpreter under the launcher can still hold the
+    WAL's files a moment after `_stop` returns: reading then is a "disk I/O error" (CI,
+    01/11/2026)."""
+    deadline = time.monotonic() + 15
+    while True:
+        connection = sqlite3.connect(database)
+        try:
+            row = connection.execute(query).fetchone()
+        except sqlite3.OperationalError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.2)
+            continue
+        finally:
+            connection.close()
+        assert row is not None
+        return tuple(str(value) for value in row)
+
+
 def _health(port: int, deadline: float) -> dict[str, str]:
     while True:
         try:
@@ -96,17 +117,13 @@ def test_a_fresh_home_is_built_served_and_left_as_declared(tmp_path: Path) -> No
     assert any(json.loads(line)["msg"] == "Serving." for line in log_lines)
 
     # The database is in WAL mode and has its ledger.
-    database = sqlite3.connect(home / "atlas.db")
-    try:
-        assert database.execute("PRAGMA journal_mode").fetchone() == ("wal",)
-        assert database.execute(
-            "SELECT name FROM sqlite_master WHERE name = 'home_migrations'"
-        ).fetchone() == ("home_migrations",)
-    finally:
-        database.close()
+    assert _read_once_released(home / "atlas.db", "PRAGMA journal_mode") == ("wal",)
+    assert _read_once_released(
+        home / "atlas.db", "SELECT name FROM sqlite_master WHERE name = 'home_migrations'"
+    ) == ("home_migrations",)
 
     # The skills Atlas ships were copied into the library when it started.
-    assert (home / "skills" / "gws-gmail" / "SKILL.md").is_file()
+    assert (home / "skills" / "write-plugin" / "SKILL.md").is_file()
     assert (home / "skills" / ".bundled_manifest").is_file()
 
     # Everything at the top of the home is declared in its boundary.
@@ -294,11 +311,8 @@ def test_a_section_an_older_atlas_kept_is_read_past_and_the_server_moves_it(
     assert config.read_text(encoding="utf-8") == '# set up by hand\n[log]\nlevel = "INFO"\n'
     [kept] = list((home / "backups").glob("config-*.toml"))
     assert "claude_code" in kept.read_text(encoding="utf-8")
-    database = sqlite3.connect(home / "atlas.db")
-    try:
-        (program,) = database.execute(
-            "SELECT value FROM plugins_settings WHERE plugin = 'claude-code' AND name = 'program'"
-        ).fetchone()
-    finally:
-        database.close()
+    (program,) = _read_once_released(
+        home / "atlas.db",
+        "SELECT value FROM plugins_settings WHERE plugin = 'claude-code' AND name = 'program'",
+    )
     assert json.loads(program) == ["C:/tools/claude.exe", "--verbose"]

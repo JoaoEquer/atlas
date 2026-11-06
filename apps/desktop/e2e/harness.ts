@@ -182,16 +182,8 @@ ${options.config}
     )
   }
 
-  options.setup?.(home, model)
-
-  for (const name of options.homes ?? []) {
-    atlas(home, 'home', 'create', name, '--clone')
-  }
-
   const claude = options.environment?.CLAUDE_CONFIG_DIR ?? path.join(root, 'claude')
-  // Codex will not start on a folder that is not there.
   const codex = options.environment?.CODEX_HOME ?? path.join(root, 'codex')
-  await mkdir(codex, { recursive: true })
   const gemini = options.environment?.GEMINI_CLI_HOME ?? path.join(root, 'gemini')
   const dsh = options.environment?.DSH_HOME ?? path.join(root, 'dsh')
   const environment = {
@@ -201,7 +193,23 @@ ${options.config}
     GEMINI_CLI_HOME: gemini,
     ...options.environment
   }
-  const { app, page } = await openApp(root, home, environment, options.lang, options.chromium)
+
+  // Until the app is up, a failure (Electron not starting, a command that fails) stops the fake
+  // model here: no test holds it yet, and its process kept the folder it ran from.
+  let opened: { app: ElectronApplication; page: Page }
+  try {
+    options.setup?.(home, model)
+    for (const name of options.homes ?? []) {
+      atlas(home, 'home', 'create', name, '--clone')
+    }
+    // Codex will not start on a folder that is not there.
+    await mkdir(codex, { recursive: true })
+    opened = await openApp(root, home, environment, options.lang, options.chromium)
+  } catch (error) {
+    model.stop()
+    throw error
+  }
+  const { app, page } = opened
 
   return {
     app,
@@ -483,8 +491,7 @@ export function homeButton(page: Page): Locator {
   return page.getByTestId('home-button')
 }
 
-/** Open the settings screen from the gear, on one of its sections (step 15b); Extensions on its
- *  plugins' tab. */
+/** Open the settings screen from the gear, on one of its sections (step 15b). */
 export async function openSettings(page: Page, section: string): Promise<Locator> {
   const settings = page.getByTestId('settings')
   if (!(await settings.isVisible())) {
@@ -492,11 +499,18 @@ export async function openSettings(page: Page, section: string): Promise<Locator
   }
   await settings.getByTestId(`settings-nav-${section}`).click()
   await expect(settings.getByTestId('settings-section')).toHaveAttribute('data-section', section)
-  if (section === 'extensions') {
-    await settings.getByTestId('extensions-tab-plugin').click()
-  }
 
   return settings
+}
+
+/** Open Extensions from the sidebar, on its plugins' tab. */
+export async function openExtensions(page: Page): Promise<Locator> {
+  await page.getByTestId('extensions-entry').click()
+  const extensions = page.getByTestId('extensions-view')
+  await expect(extensions).toBeVisible()
+  await extensions.getByTestId('extensions-tab-plugin').click()
+
+  return extensions
 }
 
 /** Open the home's menu: the homes, a new one, the home's dialog. */

@@ -1,73 +1,10 @@
-import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { expect, test } from '@playwright/test'
 
-import { atlas, type Desktop, launch, openSettings, ROOT, stopTree } from './harness'
-
-/** The token tests/fake_telegram.py takes. */
-const TOKEN = '123456:fake-token'
-const ANA = 100
-
-/** tests/fake_telegram.py in a process of its own, driven over HTTP as a person would write. */
-class FakeTelegram {
-  private constructor(
-    private readonly child: ChildProcess,
-    readonly url: string
-  ) {}
-
-  static async start(): Promise<FakeTelegram> {
-    const child = spawn('uv', ['run', '--project', ROOT, 'python', 'tests/fake_telegram.py'], {
-      cwd: ROOT,
-      detached: process.platform !== 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
-    })
-    const port = await new Promise<number>((resolve, reject) => {
-      let output = ''
-      const timer = setTimeout(() => {
-        reject(new Error(`The fake Telegram did not start.\n${output}`))
-      }, 60_000)
-      child.stdout.on('data', (chunk: Buffer) => {
-        output += chunk.toString('utf8')
-        const match = /FAKE_TELEGRAM_READY port=(\d+)/.exec(output)
-
-        if (match?.[1]) {
-          clearTimeout(timer)
-          resolve(Number(match[1]))
-        }
-      })
-      child.stderr.on('data', (chunk: Buffer) => {
-        output += chunk.toString('utf8')
-      })
-    })
-
-    return new FakeTelegram(child, `http://127.0.0.1:${String(port)}`)
-  }
-
-  async say(user: number, text: string): Promise<void> {
-    await fetch(`${this.url}/_fake/say`, {
-      body: JSON.stringify({ name: 'Ana', text, user }),
-      headers: { 'content-type': 'application/json' },
-      method: 'POST'
-    })
-  }
-
-  /** What the bot sent `user`. */
-  async sent(user: number): Promise<string[]> {
-    const response = await fetch(`${this.url}/_fake/calls`)
-    const { calls } = (await response.json()) as { calls: { method: string; params: Record<string, unknown> }[] }
-
-    return calls
-      .filter(call => call.method === 'sendMessage' && String(call.params.chat_id) === String(user))
-      .map(call => String(call.params.text))
-  }
-
-  stop(): void {
-    stopTree(this.child)
-  }
-}
+import { ANA, FakeTelegram, TOKEN } from './fake-telegram'
+import { atlas, type Desktop, launch, openExtensions } from './harness'
 
 let desktop: Desktop | undefined
 let telegram: FakeTelegram | undefined
@@ -85,7 +22,7 @@ test('Telegram is turned on from the Plugins screen with consent, and a person l
   const { model, page } = desktop
   const fake = telegram
 
-  await openSettings(page, 'extensions')
+  await openExtensions(page)
   // By its name: another plugin's description may name Telegram (voice's does).
   const row = page.locator('[data-testid="plugin-row"][data-plugin="telegram"]')
   await expect(row).toContainText('telegram')
@@ -132,7 +69,7 @@ test('Telegram is turned on from the Plugins screen with consent, and a person l
   await expect(page.getByTestId('conversation-via')).toHaveText('via telegram')
 
   // Off: it stops.
-  await openSettings(page, 'extensions')
+  await openExtensions(page)
   await row.getByTestId('plugin-disable').click()
   await expect(row.getByTestId('plugin-state')).toHaveText('off')
 })
@@ -228,7 +165,7 @@ test("A plugin's screen adds a page and a panel, and calls its Python; a screen 
   await expect(page.getByTestId('counter-panel')).toHaveText('on nothing')
 
   // The other screen imports what a screen may not: it fails, said on the Plugins screen, alone.
-  await openSettings(page, 'extensions')
+  await openExtensions(page)
   const row = page.getByTestId('plugin-row').filter({ hasText: 'reacher' })
   await expect(row.getByTestId('plugin-screen-problem')).toContainText('It imports node:fs')
 
@@ -267,13 +204,13 @@ test('A plugin saved while the app is open loads again in place, its screen and 
   await expect(shown.getByTestId('counter-said')).toHaveText('n=11')
 
   // And on asking, from the Plugins screen.
-  await openSettings(page, 'extensions')
+  await openExtensions(page)
   await page.getByTestId('plugins-reload').click()
   const counter = page.getByTestId('plugin-row').filter({ hasText: 'counter' })
   await expect(counter.getByTestId('plugin-state')).toHaveText('on')
   await expect(page.getByRole('alert')).toHaveCount(0)
 
-  // Another one is written with Atlas, in a new conversation, out of the settings.
+  // Another one is written with Atlas, in a new conversation, out of Extensions.
   await page.getByTestId('plugins-write').click()
   await expect(page.getByTestId('plugins-view')).toBeHidden()
   await expect(page.getByRole('textbox', { name: 'Message Atlas' })).toHaveValue('/write-plugin ')

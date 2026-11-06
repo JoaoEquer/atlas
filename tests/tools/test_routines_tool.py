@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from atlas.home import Database, migrate
-from atlas.jobs import SCHEMA, Creator, Routines, RoutineStore
+from atlas.jobs import SCHEMA, Creator, RoutineExecutor, Routines, RoutineStore
 from atlas.tools import cronjob_manage
 
 NOW = datetime(2026, 10, 12, 13, 0, tzinfo=UTC)
@@ -153,3 +153,79 @@ def test_a_bot_makes_lists_and_changes_only_its_own_routines(routines: Routines)
     assert routines.store.get("news").name == "news"
     assert _as(routines, "finance", action="pause", job_id="bills") == "Paused bills."
     assert _as(routines, None, action="remove", job_id="standup") == "Removed standup."
+
+
+# -- a routine's probe (step 23) -----------------------------------------------------------------
+
+
+def test_the_agent_gives_a_prompt_routine_a_probe_and_changes_or_removes_it(
+    routines: Routines,
+) -> None:
+    made = _call(
+        routines,
+        action="create",
+        name="mail",
+        schedule="every 5m",
+        prompt="Triage the new mail.",
+        probe="python unread.py",
+    )
+    refused = _call(
+        routines, action="create", name="once", schedule="in 30m", prompt="a", probe="./x"
+    )
+    changed = _call(routines, action="update", job_id="mail", probe="python unread.py --all")
+
+    assert "Woken by the probe: python unread.py" in made
+    assert routines.store.get("mail").created_by is Creator.AGENT
+    assert "repeats" in refused
+    assert "python unread.py --all" in changed
+    _call(routines, action="update", job_id="mail", probe="")
+    assert routines.store.get("mail").probe is None
+
+
+def test_a_bots_routine_has_no_probe(routines: Routines) -> None:
+    refused = _as(
+        routines,
+        "finance",
+        action="create",
+        name="bills",
+        schedule="every 1h",
+        prompt="Bills.",
+        probe="./due",
+    )
+
+    assert "a bot's routine has no probe" in refused
+    assert routines.store.all() == []
+
+
+def test_the_agent_makes_a_routine_an_executor_runs_and_gives_it_back(
+    routines: Routines, tmp_path: Path
+) -> None:
+    folder = str(tmp_path / "project")
+    made = _call(
+        routines,
+        action="create",
+        name="sweep",
+        schedule="every 1d",
+        prompt="Sweep the dependencies.",
+        executor="claude-code",
+        folder=folder,
+        workspace=True,
+    )
+    refused = _as(
+        routines,
+        "finance",
+        action="create",
+        name="bills",
+        schedule="every 1h",
+        prompt="Bills.",
+        executor="codex",
+        folder=folder,
+    )
+
+    assert f"Run by claude-code in {folder}." in made
+    assert routines.store.get("sweep").executor == RoutineExecutor(
+        "claude-code", folder, workspace=True
+    )
+    assert "never in an executor" in refused
+    given_back = _call(routines, action="update", job_id="sweep", executor="")
+    assert "Run by" not in given_back

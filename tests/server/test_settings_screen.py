@@ -214,3 +214,33 @@ def test_an_entry_past_the_limit_is_refused_in_the_screens_words(serve: Serve) -
         "That would put MEMORY.md at 2,303 of its 2,200 characters: shorten or remove another "
         "entry first."
     )
+
+
+def test_a_memory_limit_saved_checks_the_next_write_and_shows_in_the_next_conversation(
+    serve: Serve, home: Home, fake: FakeModelServer
+) -> None:
+    home.config_file.write_text('[model]\nprovider = "openrouter"\n', encoding="utf-8")
+    note = json.dumps({"action": "add", "target": "memory", "content": "z" * 600})
+    fake.reply(FakeReply(text="Ready."))
+    fake.reply(FakeReply(calls=[FakeCall("memory", note, id="m1")]), FakeReply(text="Full."))
+    fake.reply(FakeReply(text="Hi again."))
+    server = serve()
+    with server.client() as client:
+        conversation = _conversation(client)
+        _turn(client, conversation, "Hello")
+        written = _write(client, "memory", "memory_limit", "500")
+        out_of_range = _write(client, "memory", "user_limit", "100")
+        _turn(client, conversation, "Note it")
+        entries = client.result("memory.entries", {"target": "memory"})
+        _edit(client, target="memory", action="add", content="Uses pnpm")
+        _turn(client, _conversation(client), "Who are you?")
+
+    assert _rows(written["result"])["memory", "memory_limit"]["value"] == "500"  # type: ignore[arg-type]
+    assert _rows(written["result"])["memory", "user_limit"]["default"] == "1375"  # type: ignore[arg-type]
+    assert "between 500 and 20000" in out_of_range["error"]["message"]  # type: ignore[index]
+    tool = [m["content"] for m in fake.bodies(CHAT)[-2]["messages"] if m["role"] == "tool"]
+    assert "over the limit" in tool[-1], "the open conversation's next write meets the new limit"
+    assert entries["limit"] == 500
+    system = _asked_with(fake, "Who are you?")["messages"][0]  # type: ignore[index]
+    assert "9/500 chars" in str(system["content"])  # type: ignore[index]
+    assert "user_limit" not in home.config_file.read_text(encoding="utf-8")

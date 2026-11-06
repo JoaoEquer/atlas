@@ -12,7 +12,7 @@ It is also where your coding agents live. Claude Code, Codex, the Gemini CLI and
 ## What you can do with it
 
 - **Run every coding agent from one window.** Each one you have installed shows up in the Executors tab, with its folders, sessions and plan usage.
-- **Use all your accounts at once.** Personal, company A, company B: each account keeps its own folder, settings and history, and they run side by side. When one reaches its plan's limit, the session goes on in the next one. See [Coding agents and accounts](/docs/guides/coding-agents/).
+- **Use all your accounts at once,** with the Accounts plugin. Personal, company A, company B: each account keeps its own folder, settings and history, and they run side by side. When one reaches its plan's limit, the session goes on in the next one; with one account, it goes on by itself when the plan resets. See [Coding agents and accounts](/docs/guides/coding-agents/).
 - **Reach your other machines.** Install Atlas on a home lab, a VPS or the office PC and open it from the app on your laptop, over Tailscale or SSH. See [Several machines](/docs/guides/machines/).
 - **Hand work to Atlas.** Ask in plain words, and Atlas delegates to the right coding agent, on the account you name, follows along and brings back the result.
 - **Let it learn.** Every few messages, a copy of the agent rereads the conversation and keeps what it learned: who you are in your profile, facts about your setup in its notes, how to do a task in a skill.

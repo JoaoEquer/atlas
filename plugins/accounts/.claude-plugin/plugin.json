@@ -1,0 +1,14 @@
+{
+  "name": "accounts",
+  "displayName": "Accounts",
+  "version": "0.1.0",
+  "description": "Run Claude Code, Codex, the Gemini CLI and DeepSeek on all your accounts at once, each in its own folder, and move a session to the next account, or to another agent by its route, when its plan runs out.",
+  "author": { "name": "the Atlas contributors" },
+  "license": "MIT",
+  "keywords": ["accounts", "executors", "plan limit"],
+  "atlas": {
+    "api": 29,
+    "accounts": true,
+    "calls": ["list", "add", "remove", "set_hand_over", "set_folder", "route", "set_route"]
+  }
+}

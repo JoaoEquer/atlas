@@ -47,7 +47,7 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
-    "electron": "43.7.5",
+    "electron": "43.8.1",
     "esbuild": "0.28.1",
     "eslint": "10.11.0",
     "eslint-plugin-perfectionist": "5.10.0",
@@ -59,11 +59,11 @@
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "typescript-eslint": "8.64.0",
-    "vite": "8.2.0",
-    "vitest": "4.1.11"
+    "vite": "8.2.4",
+    "vitest": "4.1.12"
   },
   "allowScripts": {
-    "electron@43.7.5": true,
+    "electron@43.8.1": true,
     "esbuild@0.28.1": true
   }
 }

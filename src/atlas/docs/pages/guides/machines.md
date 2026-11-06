@@ -20,6 +20,27 @@ The code holds that home's password, so paste it only into your own app. **Chang
 
 If you reach the machine with SSH already, Atlas uses the keys you have. Choose **Add a machine**, pick **SSH tunnel**, and give the host as `user@host` or a name from your `~/.ssh/config`.
 
+## Through a relay
+
+A relay lets the app reach your home from anywhere, with no port open and no Tailscale: the home
+and the app both connect out to it, and it joins them. Only the app and the home read what crosses:
+the relay carries bytes it cannot read, sealed with a key that never leaves your connection code.
+
+Set the relay's address in your home's `config.toml` and print the code:
+
+```toml
+[relay]
+url = "wss://relay.example.com"
+```
+
+```bash
+atlas server code --relay
+```
+
+In the app on the other machine, **Settings → Machines → Add**, paste the code and choose **Relay,
+from anywhere**. The home waits at the relay as long as its server runs; keep it always on (below)
+so it is there when you are away.
+
 ## Always on
 
 A home can run as a service: turn on **Always on** and it runs with the app closed and starts with the computer. Routines then run on time, and every window you open sees the same conversations.

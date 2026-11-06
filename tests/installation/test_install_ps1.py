@@ -311,7 +311,6 @@ def test_the_toolchain_the_installer_writes_is_the_one_atlas_reads(tmp_path: Pat
         "git": "git-2.55.0.5-win32-x64",
         "uv": "uv-0.12.5-win32-x64",
         "node": "node-24.21.0-win32-x64",
-        "gh": "gh-2.101.0-win32-x64",
     }
     listed = "; ".join(f"{tool} = {_quoted(name)}" for tool, name in names.items())
     done = run(
@@ -329,7 +328,7 @@ def test_the_toolchain_the_installer_writes_is_the_one_atlas_reads(tmp_path: Pat
     toolchain = Toolchain.of(Checkout(root / "atlas"))
 
     assert not (root / "tools" / "toolchain.json").read_bytes().startswith(b"\xef\xbb\xbf")
-    assert sorted(toolchain.programs) == ["gh", "git", "node", "npm", "npx", "uv"]
+    assert sorted(toolchain.programs) == ["git", "node", "npm", "npx", "uv"]
     assert toolchain.programs["git"] == root / "tools" / names["git"] / "cmd" / "git.exe"
     assert (
         toolchain.programs["npm"]

@@ -1,14 +1,14 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { EventParams } from '@/protocol/channel'
 import type { AtlasClient } from '@/protocol/client'
 import type { McpList, McpServerRow, PluginRow, SkillRow } from '@/protocol/protocol.generated'
-import { openHome, startApp } from '@/store/app'
+import { $extensionsTab, $pluginFocus, $view, openHome, showExtensions, showPluginConsent, startApp } from '@/store/app'
 import { matches, pluginSignIns } from '@/store/extensions'
-import { $extensionsTab, $settingsSection, closeSettings, openSettings, SECTIONS } from '@/store/settings'
+import { SECTIONS } from '@/store/settings'
 
-import { ExtensionsSection } from './extensions-view'
+import { ExtensionsView } from './extensions-view'
 
 const plugin = (name: string, change: Partial<PluginRow> = {}): PluginRow => ({
   author: 'someone',
@@ -122,7 +122,7 @@ function client(home: Home, calls: string[]): AtlasClient {
   } as unknown as AtlasClient
 }
 
-async function open(home: Home = HOME, tab?: Parameters<typeof openSettings>[1], remote = false): Promise<string[]> {
+async function open(home: Home = HOME, tab?: Parameters<typeof showExtensions>[0], remote = false): Promise<string[]> {
   const calls: string[] = []
   stop = startApp({
     client: () => client(home, calls),
@@ -130,18 +130,22 @@ async function open(home: Home = HOME, tab?: Parameters<typeof openSettings>[1],
     shell: { focus: () => undefined, notify: () => undefined }
   })
   await openHome('work')
-  render(<ExtensionsSection />)
+  render(<ExtensionsView />)
   await act(async () => {
-    openSettings('extensions', tab)
+    showExtensions(tab)
     await new Promise(resolve => setTimeout(resolve, 0))
   })
 
   return calls
 }
 
+beforeAll(() => {
+  // jsdom lays nothing out, so it has no scrollIntoView.
+  Element.prototype.scrollIntoView = () => undefined
+})
+
 afterEach(() => {
   cleanup()
-  closeSettings()
   $extensionsTab.set('plugin')
   stop()
 })
@@ -158,9 +162,9 @@ function at<T>(items: readonly T[], index: number): T {
 
 const tab = (kind: string) => screen.getByTestId(`extensions-tab-${kind}`)
 
-describe('the settings screen has one Extensions section, in the place of Plugins and Executors', () => {
-  it('lists Extensions among its sections, and no Plugins or Executors of their own', () => {
-    expect(SECTIONS).toContain('extensions')
+describe('Extensions is a screen of its own, out of the settings', () => {
+  it('leaves the settings without Extensions, Plugins or Executors sections', () => {
+    expect(SECTIONS).not.toContain('extensions')
     expect(SECTIONS).not.toContain('plugins')
     expect(SECTIONS).not.toContain('executors')
   })
@@ -170,7 +174,7 @@ describe('Extensions shows a tab per kind, as the marketplace does', () => {
   it('opens on the plugins, each tab with its count, and reads every list once', async () => {
     const calls = await open()
 
-    expect($settingsSection.get()).toBe('extensions')
+    expect($view.get()).toBe('extensions')
     expect(tab('plugin').getAttribute('aria-selected')).toBe('true')
     expect(tab('plugin').textContent).toBe('Plugins2')
     expect(tab('skill').textContent).toBe('Skills3')
@@ -196,6 +200,36 @@ describe('Extensions shows a tab per kind, as the marketplace does', () => {
       await Promise.resolve()
     })
     expect(calls).toContain('plugin.enable')
+  })
+
+  it('says a plugin turned on waits for the consent again, and opens at its consent when asked', async () => {
+    const waiting = plugin('claude-code', {
+      bundled: true,
+      declaration: ['Adds the executor claude-code'],
+      enabled: true
+    })
+    const home = { ...HOME, plugins: [waiting, ...HOME.plugins.slice(1)] }
+    await open(home, 'skill')
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView')
+
+    await act(async () => {
+      showPluginConsent('claude-code')
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    expect($extensionsTab.get()).toBe('plugin')
+    const row = screen.getAllByTestId('plugin-row').find(found => found.dataset.plugin === 'claude-code')
+    if (!row) {
+      throw new Error('No row of claude-code.')
+    }
+
+    expect(within(row).getByTestId('plugin-consent-again').textContent).toContain('waits for your consent again')
+    expect(within(row).getByTestId('plugin-consent').textContent).toContain('Adds the executor claude-code')
+    expect(scrolled).toHaveBeenCalled()
+    expect($pluginFocus.get()).toBeNull()
+    // Another plugin, off and never turned on, says nothing of it.
+    const other = screen.getAllByTestId('plugin-row').find(found => found.dataset.plugin === 'video')
+    expect(other && within(other).queryByTestId('plugin-consent-again')).toBeNull()
   })
 
   it('says where each skill came from, on its shelf', async () => {

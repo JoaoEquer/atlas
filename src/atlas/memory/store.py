@@ -107,7 +107,10 @@ class _Read:
 class MemoryFiles:
     """The two stores an agent reads and writes: the home's profile, and its own memory. The
     main agent's memory is beside the profile; a bot's is in the bot's folder (`memory_folder`),
-    and the profile is still the home's, one for all (docs/ARCHITECTURE.md, Bots)."""
+    and the profile is still the home's, one for all (docs/ARCHITECTURE.md, Bots).
+
+    `limits` is kept as given, not copied: the home's stores share one, which the settings screen
+    changes in place (`[memory]`), so the next write is checked against the new limit."""
 
     def __init__(
         self,
@@ -118,7 +121,7 @@ class MemoryFiles:
     ) -> None:
         self.folder = folder
         self.memory_folder = folder if memory_folder is None else memory_folder
-        self.limits = dict(LIMITS if limits is None else limits)
+        self.limits = dict(LIMITS) if limits is None else limits
 
     def path(self, target: Target) -> Path:
         folder = self.folder if target is Target.USER else self.memory_folder

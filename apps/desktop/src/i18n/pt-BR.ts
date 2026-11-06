@@ -3,6 +3,7 @@ import type { Messages } from './en'
 
 const STATUSES: Record<string, string> = {
   error: 'falhou',
+  needed: 'precisou de você',
   ok: 'respondeu',
   running: 'rodando',
   silent: 'em silêncio',
@@ -196,6 +197,10 @@ export const ptBR: Override<Messages> = {
     defaulted: (label: string) => `${label} · padrão`,
     effort: 'Esforço: o quanto o modelo pensa (nesta conversa)',
     effortLevel: (level: string) => EFFORTS[level] ?? level,
+    effortTitle: 'Esforço',
+    defaultBadge: 'Padrão',
+    noModelMatch: 'Nenhum modelo com esse nome',
+    searchModels: 'Buscar modelos',
     model: 'Modelo (desta conversa, a partir do próximo turno)',
     noModel: 'Sem modelo: grave uma chave com atlas secrets set',
     placeholder: 'Mensagem para o Atlas',
@@ -247,7 +252,14 @@ export const ptBR: Override<Messages> = {
     untitled: 'Nova conversa',
     via: (source: string) => `pelo ${source}`
   },
+  start: {
+    atlas: 'Fale com o Atlas: uma conversa nova, ou uma que você já teve.',
+    bots: 'Agentes com missão, memória e conversa próprias.',
+    executors: 'Agentes de código trabalhando nas suas pastas, uma sessão de cada vez.'
+  },
   tabs: {
+    openFolder: 'Abrir a pasta',
+    terminal: 'Terminal (Ctrl+`)',
     close: (title: string) => `Fechar ${title}`,
     label: 'Conversas e sessões abertas',
     new: 'Nova aba',
@@ -299,6 +311,97 @@ export const ptBR: Override<Messages> = {
     profileHint: 'A foto e o nome aparecem no pé da barra lateral. O backup leva a foto.',
     switchTo: 'Trocar de casa',
     zipFilter: 'Backup do Atlas'
+  },
+  firstSteps: {
+    count: (done: number, all: number) => `${String(done)} de ${String(all)}`,
+    hide: 'Esconder',
+    routinePrompt: 'Toda segunda às 9h, me lembre de revisar o que tenho para a semana.',
+    start: 'Começar',
+    tasks: {
+      bot: 'Criar um bot',
+      delegate: 'Entregar uma tarefa a um executor',
+      routine: 'Agendar uma rotina',
+      store: 'Instalar algo da loja',
+      telegram: 'Falar com o Atlas pelo Telegram'
+    },
+    title: 'Primeiros passos'
+  },
+  connectionOffer: {
+    missing: 'Esta conexão não está instalada aqui: a loja tem.',
+    title: (label: string) => `Conectar ${label}`
+  },
+  firstRun: {
+    accounts: 'Tem mais de uma conta?',
+    accountsIntro:
+      'O plugin Contas roda seus agentes de código nas outras contas: quando uma bater o limite do plano, a sessão segue na próxima sozinha.',
+    accountsPlugin: 'Ligar o plugin Contas',
+    bring: 'Trazer minhas sessões do',
+    bringAll: 'Trazer tudo',
+    bringCount: (count: number) => (count === 1 ? 'Trazer 1 sessão' : `Trazer ${String(count)} sessões`),
+    bringNote: 'O resto vai para Arquivadas, a um clique. Nada muda nos originais.',
+    away: (step: string) => `A configuração espera em ${step}.`,
+    awayBack: 'Voltar a ela',
+    botFather: 'No Telegram, fale com o @BotFather, mande /newbot, escolha um nome e copie o token que ele der.',
+    botRunning:
+      'Seu bot está ligado. Mande uma mensagem a ele no Telegram: ele responde com um código, e você aparece aqui.',
+    botStarting: 'Ligando o seu bot…',
+    connect: 'Conectar',
+    continue: 'Continuar',
+    github: 'GitHub',
+    google: 'Gmail e Agenda',
+    turnOn: 'Ligar',
+    letIn: 'Deixar entrar',
+    letInDone: (name: string) => `${name} entrou: fale com o Atlas pelo Telegram.`,
+    letInWaits: (name: string, code: string) => `${name} espera com ${code}`,
+    telegramMissing: 'Este Atlas não tem o plugin do Telegram.',
+    telegramOn: 'Conectar deixa o plugin do Telegram:',
+    tokenLabel: 'O token do bot',
+    counting: 'Contando…',
+    hints: {
+      connections: 'GitHub, Gmail, Agenda',
+      executors: 'Claude Code, Codex',
+      model: 'Uma chave de API',
+      telegram: 'O Atlas no celular',
+      work: 'Último passo'
+    },
+    inProgress: 'Em andamento',
+    intros: {
+      connections: 'O Atlas trabalha nas suas contas pelos programas delas, cada um com login nesta máquina.',
+      executors:
+        'O Atlas trabalha pelos agentes de código que você já usa, nas suas pastas, cada um com o seu próprio login.',
+      model:
+        'O Atlas conversa com um modelo usando a sua própria chave de API. Cole uma para começar: ela é ' +
+        'conferida com o provedor, sem custo, e guardada criptografada nesta máquina.',
+      telegram: 'Fale com o Atlas pelo celular, por um bot só seu, e responda às perguntas dos seus agentes por lá.',
+      work: 'Suas sessões continuam onde estão. Escolha o que aparece na lista; o resto espera em Arquivadas.'
+    },
+    leave: 'Ir para o Atlas',
+    logIn: 'Entrar',
+    marks: { done: 'Feito', skipped: 'Pulado' },
+    noExecutors:
+      'Nenhum executor está ligado, então não há o que trazer: ligue um no passo anterior, ou comece por aqui.',
+    reopen: 'Refaça isto quando quiser em Configurações → Geral.',
+    setup: 'Configuração',
+    skip: 'Pular',
+    start: 'Começar uma conversa',
+    stepOf: (step: number, total: number) => `Passo ${String(step)} de ${String(total)}`,
+    steps: {
+      connections: 'Conexões',
+      executors: 'Executores',
+      model: 'Modelo',
+      telegram: 'Telegram',
+      work: 'Trazer seu trabalho'
+    },
+    titles: {
+      connections: { lead: 'Conecte suas', word: 'contas' },
+      executors: { lead: 'Conecte seus', word: 'agentes' },
+      model: { lead: 'Escolha o', word: 'modelo' },
+      telegram: { lead: 'O Atlas no seu', word: 'bolso' },
+      work: { lead: 'Traga seu', word: 'trabalho' }
+    },
+    windowAll: 'de qualquer data',
+    windowDays: (days: number) => `dos últimos ${String(days)} dias`,
+    windowLabel: 'Desde quando'
   },
   keys: {
     band: 'Nenhum provedor de modelo está conectado, então o Atlas ainda não responde.',
@@ -397,6 +500,7 @@ export const ptBR: Override<Messages> = {
       source === 'atlas' ? 'Vem com o Atlas' : source === 'plugin' ? `Do plugin ${plugin}` : 'Desta casa',
     skillsIntro:
       'Procedimentos que o modelo carrega pelo nome quando precisa; os que você pode chamar mostram o /comando.',
+    title: 'Extensões',
     yours: 'Desta casa'
   },
   plugins: {
@@ -406,6 +510,8 @@ export const ptBR: Override<Messages> = {
     screenNotLoaded: (why: string) => `A tela dele não carregou: ${why}`,
     approved: 'pode falar',
     cancel: 'Cancelar',
+    consentAgain:
+      'Uma atualização mudou o que ele pode fazer, então ele espera seu consentimento de novo: leia e ligue.',
     consentIntro: 'Ligar este plugin deixa ele:',
     defaultValue: (value: string) => `Padrão: ${value}`,
     empty: 'Nenhum plugin. O Atlas traz alguns, e você pode pôr outro como pasta na casa, em plugins/.',
@@ -444,6 +550,119 @@ export const ptBR: Override<Messages> = {
     waits: (code: string) => `espera com ${code}`,
     waiting: (count: number) => (count === 1 ? '1 esperando' : `${count} esperando`)
   },
+  routineForm: {
+    auto: 'Rodar no modo automático dele, que não pergunta nada',
+    bot: 'Bot',
+    cancel: 'Cancelar',
+    draft: 'Abrir um PR em rascunho do que mudou (plugin do GitHub)',
+    editTitle: 'Mudar a rotina',
+    effort: 'Esforço',
+    effortOfHome: 'O padrão do modelo',
+    efforts: { high: 'Alto', low: 'Baixo', medium: 'Médio' },
+    executor: 'Executor',
+    folder: 'Pasta',
+    model: 'Modelo',
+    modelOfHome: 'O modelo da casa',
+    name: 'Nome',
+    newTitle: 'Nova rotina',
+    probe: 'Sonda',
+    probeHint: 'opcional: um comando cuja saída nova a acorda',
+    prompt: 'O que fazer',
+    runner: 'Quem roda',
+    runners: { atlas: 'O Atlas', bot: 'Um bot', executor: 'Um agente de código, numa pasta' },
+    save: 'Salvar',
+    saveAndRun: 'Salvar e rodar agora',
+    schedule: 'Quando',
+    scheduleHint: 'every day at 9am, every 30m, weekdays at 8am',
+    unwatched:
+      'Ela roda sem ninguém olhando: a primeira pergunta para a execução, que fica esperando você em Executores.',
+    workspace: 'Cada execução numa workspace nova (para rotina que muda código)'
+  },
+  templates: {
+    add: 'Adicionar',
+    agentRuns: 'Roda no seu agente de código',
+    atlasRuns: 'Roda no modelo do Atlas',
+    effort: (level: string) => `esforço ${level}`,
+    groups: { personal: 'Pessoais', project: 'De projeto' },
+    install: (plugin: string) => `Instalar ${plugin} antes`,
+    intro: 'Rotinas escritas pelo Atlas, prontas para ajustar: Adicionar abre uma no formulário.',
+    needs: (plugin: string) => `Precisa do plugin ${plugin}`,
+    tab: 'Modelos',
+    tiers: { essential: 'Essencial', recommended: 'Recomendado', useful: 'Útil' },
+    words: {
+      bills: {
+        name: 'contas',
+        prompt:
+          'Leia meus e-mails da última semana atrás de contas e lembretes de pagamento, e liste o que vence nesta semana, cada um com o valor e a data. Se nada vencer, responda [SILENT].',
+        title: 'Contas da semana'
+      },
+      dependencyUpdates: {
+        name: 'dependencias',
+        prompt:
+          'Atualize as dependências deste projeto que têm versão nova menor ou de correção, rode os testes depois de cada uma e fique só com o que passar. Liste o que atualizou, e o que deixou e por quê.',
+        title: 'Atualizar dependências'
+      },
+      failingChecks: {
+        name: 'checks-falhando',
+        prompt:
+          'Com o gh, liste os pull requests e as execuções do branch principal deste projeto com checks que falharam no último dia: cada um com o check que falhou e a primeira linha do erro. Se nenhum falhou, responda [SILENT].',
+        title: 'Checks que falharam'
+      },
+      newsDigest: {
+        name: 'noticias',
+        prompt:
+          'Procure na web as notícias de hoje sobre os assuntos que a minha memória diz que eu acompanho, e me dê cinco manchetes, cada uma com uma linha e o link.',
+        title: 'Notícias da manhã'
+      },
+      releaseNotes: {
+        name: 'notas-da-versao',
+        prompt:
+          'Leia os commits juntados nesta semana e escreva as notas da versão para quem usa este projeto: o que é novo, o que mudou e o que foi corrigido, em palavras simples. Não mude nenhum arquivo.',
+        title: 'Rascunho das notas da versão'
+      },
+      weeklyReview: {
+        name: 'semana',
+        prompt:
+          'Olhe para a minha semana, a agenda e os resultados das rotinas, e me escreva uma revisão curta: o que foi feito, o que escorregou e com o que começar na segunda.',
+        title: 'Revisão da semana'
+      },
+      agenda: {
+        name: 'amanha',
+        prompt:
+          'Leia minha agenda de amanhã e me diga, em poucas linhas, o que eu tenho e quando, o que preparar hoje à noite e qualquer conflito. Se amanhã estiver vazio, responda [SILENT].',
+        title: 'A agenda de amanhã'
+      },
+      backup: {
+        name: 'backup',
+        prompt: 'Rode `atlas backup`. Se funcionou, responda [SILENT]; se falhou, diga por quê e o que fazer.',
+        title: 'Backup diário'
+      },
+      mailSummary: {
+        name: 'emails',
+        prompt:
+          'Leia meus e-mails não lidos desde ontem e me dê os que precisam de resposta minha, cada um numa linha com quem e o quê, e depois o resto numa linha só. Não responda mais nada.',
+        title: 'Resumo dos e-mails de manhã'
+      },
+      missingTests: {
+        name: 'testes',
+        prompt:
+          'Ache o código mudado nesta semana que nenhum teste cobre. Escreva os testes que faltam, do jeito que este projeto testa, e rode-os. Não mude o código testado; liste o que não conseguiu cobrir e por quê.',
+        title: 'Testes faltando'
+      },
+      securitySweep: {
+        name: 'seguranca',
+        prompt:
+          'Procure problemas de segurança neste projeto: vulnerabilidades conhecidas das dependências, segredos commitados por engano e código inseguro (injeção, entrada sem checagem). Não mude nada: liste o que achou, o pior primeiro, cada um com onde está e como corrigir.',
+        title: 'Varredura de segurança'
+      },
+      stalePullRequests: {
+        name: 'prs-parados',
+        prompt:
+          'Com o gh, liste os pull requests abertos deste projeto sem atividade há 3 dias ou mais: cada um com o título, o autor, há quanto tempo espera e o que espera. Se não houver nenhum, responda [SILENT].',
+        title: 'PRs parados há 3 dias'
+      }
+    }
+  },
   routines: {
     confirmRemove: 'Apagar?',
     empty: 'Nenhuma rotina ainda. Peça ao Atlas para agendar uma, ou use atlas routines create no terminal.',
@@ -459,6 +678,14 @@ export const ptBR: Override<Messages> = {
     open: 'Abrir',
     pause: 'Pausar',
     paused: 'pausada',
+    executor: (name: string, folder: string, workspace: boolean) =>
+      `Rodada pelo ${name} em ${folder}${workspace ? ', numa workspace nova a cada vez' : ''}`,
+    edit: 'Mudar',
+    newRoutine: 'Nova rotina',
+    scoreboard: (alone: number, needed: number, failed: number) =>
+      `Esta semana: ${String(alone)} rodaram sozinhas · ${String(needed)} precisaram de você · ${String(failed)} falharam`,
+    probe: (command: string) => `Acordada pela sonda: $ ${command}`,
+    probed: 'a sonda ouviu algo',
     remove: 'Apagar',
     resume: 'Retomar',
     runNow: 'Rodar agora',
@@ -479,8 +706,9 @@ export const ptBR: Override<Messages> = {
     install: 'Instalar',
     installed: 'Instalado',
     installing: 'Instalando…',
+    installs: (count: number) => `${count.toLocaleString('pt-BR')} instalações`,
     intro:
-      'Skills, servidores MCP, plugins e executores feitos para o Atlas. Cada um foi revisado, e instala exatamente como foi revisado.',
+      'Skills, servidores MCP, plugins e executores para o Atlas: os da loja, cada um revisado e instalado exatamente como foi revisado, e depois o que os catálogos públicos listam, lido direto deles.',
     kinds: { executor: 'Executor', mcp: 'Servidor MCP', plugin: 'Plugin', skill: 'Skill' },
     license: (license: string) => `Licença ${license}`,
     localChanges: (name: string) =>
@@ -520,6 +748,11 @@ export const ptBR: Override<Messages> = {
     secrets: 'Segredos que ele lê',
     shipped: 'Vem com o Atlas',
     source: 'Código-fonte',
+    sources: {
+      'claude-plugins': 'Do diretório de plugins do Claude Code',
+      'mcp-registry': 'Do MCP Registry',
+      'skills.sh': 'Do skills.sh'
+    },
     stale: (problem: string, when: string) =>
       `Não deu para ler a loja agora (${problem}). Ela estava assim em ${when}.`,
     tabs: { executor: 'Executores', mcp: 'MCPs', plugin: 'Plugins', skill: 'Skills' },
@@ -530,6 +763,7 @@ export const ptBR: Override<Messages> = {
     unread: (problem: string) => `Não deu para ler a loja: ${problem}`,
     update: 'Atualizar',
     updateAnyway: 'Atualizar mesmo assim',
+    updated: (date: string) => `atualizado em ${date}`,
     updating: 'Atualizando…',
     version: (version: string) => `Versão ${version}`
   },
@@ -548,6 +782,9 @@ export const ptBR: Override<Messages> = {
   },
   settings: {
     about: 'Sobre',
+    firstRun: 'Configuração inicial',
+    firstRunHint: 'Os passos com que o Atlas abriu: o modelo, os executores e as sessões que a lista mostra.',
+    firstRunOpen: 'Refazer a configuração',
     aboutYou: 'Sobre você',
     aboutYouHint:
       'Quem você é, do que gosta e como trabalha: o USER.md. O Atlas lê em toda conversa e acrescenta conforme aprende.',
@@ -583,6 +820,9 @@ export const ptBR: Override<Messages> = {
     languageHint: 'Deste computador. A janela recarrega para trocar; nenhuma conversa para.',
     languageSystem: 'O do sistema',
     languages: { en: 'English', 'pt-BR': 'Português' },
+    limit: 'Limite, em caracteres',
+    limitHint:
+      'Toda chamada ao modelo leva tudo, então um limite maior custa mais a cada vez. De 500 a 20.000; baixar para menos do que está escrito não corta nada: o Atlas abre espaço antes de acrescentar.',
     locked: (variable: string) => `Definido por ${variable}, que vale mais que o config.toml.`,
     memory: 'Memória',
     memoryHint: 'O que o Atlas anotou sobre a sua máquina, as suas ferramentas e as manias delas: o MEMORY.md.',
@@ -596,13 +836,13 @@ export const ptBR: Override<Messages> = {
     saved: 'Salvo',
     saving: 'Salvando…',
     sections: {
-      extensions: 'Extensões',
       general: 'Geral',
       machines: 'Máquinas',
       model: 'Modelo',
       personalization: 'Personalização',
       safety: 'Segurança',
-      workspace: 'Área de trabalho'
+      voice: 'Voz',
+      workspace: 'Pasta e fuso'
     },
     theme: 'Aparência',
     themeDark: 'Escuro',
@@ -625,14 +865,64 @@ export const ptBR: Override<Messages> = {
     answer: 'Responder',
     asks: (name: string) => `${name} pergunta`,
     deny: 'Recusar',
+    noReset: 'O limite do plano chegou sem dizer quando volta: continue quando quiser.',
     other: 'Outro',
     reason: 'Por que não? (opcional, ele lê)',
+    resumesAt: (time: string) => `O limite do plano chegou: continua sozinho às ${time}.`,
     skip: 'Pular',
     wantsTo: (name: string, tool: string) => {
       const act = EXECUTOR_ACTS[tool]
 
       return act ? `${name} quer ${act}` : `${name} quer usar ${tool}`
     }
+  },
+  dictation: {
+    again: 'Escrever de novo',
+    anywhere: 'em qualquer lugar',
+    cancel: 'Cancelar',
+    change: 'Trocar tecla',
+    choose: 'Escolher uma tecla',
+    copied: 'Este programa não aceita a colagem: o texto está copiado, cole com Ctrl+V',
+    copy: 'Copiar',
+    copyDone: 'Copiado',
+    dictate: 'Ditar: clique para gravar, clique de novo para escrever na caixa',
+    failed: (why: string) => `O ditado falhou: ${why}`,
+    inBox: 'na caixa',
+    listen: 'Ouvir',
+    none: 'Nenhum ditado ainda.',
+    notWritten: (why: string) => `Não foi escrito: ${why}`,
+    nothing: 'Não ouvi nada',
+    page: 'Ditados',
+    pageIntro: (key: string) =>
+      key
+        ? `Aperte ${key} em qualquer programa para gravar, e de novo para o texto cair onde você está. Os ditados ficam guardados aqui, com o áudio.`
+        : 'O ditado em qualquer lugar está desligado: escolha uma tecla e aperte-a em qualquer programa para ditar ali. Os ditados da caixa também ficam guardados aqui, com o áudio.',
+    pasted: 'Pronto',
+    pressKey: 'Aperte a tecla…',
+    recording: (key: string) => `Gravando: ${key} para parar`,
+    recordingBox: 'Gravando: clique para parar',
+    remove: 'Apagar',
+    shortcut: 'Tecla',
+    shortcutFailed: (why: string) => `A tecla não pôde ser usada: ${why}`,
+    transcribing: 'Escrevendo o que você disse…',
+    turnOff: 'Desligar',
+    writing: 'Escrevendo o que você disse…'
+  },
+  speech: {
+    ask: (size: string) =>
+      `Chegou um áudio. O Atlas transcreve áudios neste computador, com um modelo baixado uma vez (${size} MB).`,
+    download: 'Baixar',
+    downloadSize: (size: string) => `Baixar o modelo (${size} MB)`,
+    downloading: (done: string, total: string) => `Baixando o modelo de voz: ${done} de ${total} MB…`,
+    local: 'Este computador',
+    model: 'O modelo neste computador',
+    modelHint: (credit: string) => `Os áudios ficam no computador que roda o Atlas. ${credit}.`,
+    notNow: 'Agora não',
+    off: 'Ninguém',
+    present: 'Baixado: os áudios são transcritos aqui.',
+    transcription: 'Quem transcreve os áudios',
+    transcriptionHint:
+      'O áudio que você manda, em qualquer canal, e o que você dita. OpenAI e Gemini usam a chave guardada para eles em Modelo.'
   },
   subagents: {
     button: (agents: number, tasks: number) =>
@@ -726,8 +1016,21 @@ export const ptBR: Override<Messages> = {
     which: 'Em qual executor',
     newSessionIn: (folder: string) => `Nova sessão em ${folder}`,
     noneOn: 'Nenhum harness ligado ainda.',
+    consentAgain: (title: string) => `${title} espera seu consentimento de novo depois de uma atualização`,
+    consentAgainBody: 'O plugin dele foi atualizado e declara algo novo, então fica desligado até você concordar.',
+    reviewConsent: 'Revisar e ligar',
+    notRunning: (title: string) => `${title} não está rodando`,
+    notRunningBody: 'Ligue ou instale em Extensões para continuar esta sessão.',
+    toExtensions: 'Abrir Extensões',
+    tooOld: (title: string, version: string) => `${title} ${version} é antigo demais para o Atlas`,
+    update: 'Atualizar',
+    updateAvailable: (from: string, to: string) => `Atualização disponível: ${from} → ${to}`,
+    updateFailed: 'A atualização não terminou.',
+    updateHint: (command: string) => `Roda: ${command}`,
+    updated: (version: string) => `Atualizado para ${version}`,
+    updating: (to: string) => `Atualizando para ${to}…`,
     reading: 'Lendo os harnesses…',
-    openSettings: 'Ligar em Configurações',
+    openExtensions: 'Ligar em Extensões',
     notFound: 'não encontrado neste computador',
     notLoggedIn: 'sem login',
     on: 'ligado',
@@ -751,70 +1054,112 @@ export const ptBR: Override<Messages> = {
     untitled: 'Nova sessão'
   },
   accounts: {
-    add: 'Adicionar conta',
-    adding: 'Adicionar',
     cancel: 'Cancelar',
-    folder: (folder: string) => `A conta em que as sessões novas de ${folder} começam`,
     logIn: 'Fazer login',
     login: 'O e-mail dela (opcional)',
     loginNote: (title: string) => `O ${title} abre o login dele no navegador: entre com esta conta.`,
-    main: 'principal',
-    mainAccount: 'Conta principal',
-    nickname: 'O apelido dela',
-    nicknameNote:
-      'Ela ganha uma pasta própria ao lado da sua, com login, configurações e conversas próprios: letras, números, - ou _.',
-    nicknamePlaceholder: 'empresa-b, pessoal…',
-    of: 'O harness de que ela é conta',
-    remove: (name: string) => `Remover ${name}`,
-    removeNote: (name: string, folder: string) =>
-      `Remover ${name}? A pasta dela (${folder}) fica como está, com o login e as conversas; os projetos dela voltam para a conta principal.`,
-    session: 'Conta: trocar continua uma cópia desta conversa na outra conta',
-    sessionBusy: 'A conta pode ser trocada quando a sessão parar de trabalhar.',
-    sessionTitle: 'Conta da sessão',
-    switchChecking: 'Olhando a outra conta…',
-    switched: (name: string, tokens: null | number) =>
-      tokens === null
-        ? `Agora em ${name}. A primeira mensagem nesta conta carrega o histórico inteiro; compactar antes (/compact) carrega menos.`
-        : `Agora em ${name}. A primeira mensagem nesta conta carrega o histórico inteiro, cerca de ${tokens.toLocaleString('pt-BR')} tokens de uma vez; compactar antes (/compact) carrega menos.`,
-    switchCopy: 'A conversa continua numa cópia nessa conta; esta conta fica com ela como está.',
-    switchCost: (tokens: null | number) =>
-      tokens === null
-        ? 'A primeira mensagem relê a conversa inteira, no plano dessa conta.'
-        : `A primeira mensagem relê a conversa inteira, cerca de ${tokens.toLocaleString('pt-BR')} tokens de uma vez, no plano dessa conta. Compactar antes (/compact) carrega menos.`,
-    switchGo: 'Trocar',
-    switchMissing: (names: string) => `Essa conta não tem: ${names}.`,
-    switchTitle: (name: string) => `Continuar em ${name}?`,
-    switchUnknown: 'Não deu para comparar o que essa conta tem.',
-    title: 'Contas'
+    mainAccount: 'Conta principal'
   },
+
   route: {
-    add: (name: string) => `Pôr ${name} na rota`,
-    addStop: 'Adicionar uma parada…',
-    atLimit: 'no limite',
-    close: 'Fechar',
-    compact: 'Compactar antes de seguir',
-    compactHint: 'Na cópia em outra conta do mesmo harness, onde ele tiver /compact: a cópia lê menos e custa menos.',
-    down: (name: string) => `${name} depois`,
-    effort: (name: string) => `Esforço em ${name}`,
-    here: 'aqui',
-    itsDefault: 'o padrão dele',
-    model: (name: string) => `Modelo em ${name}`,
-    notLoggedIn: 'sem login',
-    ready: 'pronta',
-    same: 'como agora',
-    used: (percent: number) => `${String(percent)}% usado`,
-    empty: 'Nenhum destino ainda: no limite do plano, valem as contas do próprio executor.',
-    enabled: 'No limite do plano, seguir esta rota',
-    main: 'conta principal',
-    note: 'No limite do plano a sessão segue para o próximo destino com login e fora do próprio limite, nesta ordem. Noutra conta do mesmo harness ela continua numa cópia; noutro harness começa lá uma sessão nova com o que esta fez.',
-    notInstalled: 'não instalado',
-    pill: (count: number) => (count ? `Rota · ${String(count)}` : 'Rota'),
-    pillOn: (account: string, count: number) => (count ? `${account} · rota ${String(count)}` : account),
-    remove: (name: string) => `Tirar ${name} da rota`,
-    title: 'A rota da sessão: para onde ela segue no limite do plano',
-    titleOn: 'A conta da sessão, e para onde ela segue no limite do plano',
-    up: (name: string) => `${name} antes`,
     wentOn: (name: string) => `O limite do plano chegou: continuou em ${name}.`
+  },
+
+  changes: {
+    add: 'Adicionar',
+    ahead: (count: number, base: string) =>
+      `${count === 1 ? '1 commit' : `${String(count)} commits`} ainda fora de ${base}`,
+    commit: 'Fazer o commit',
+    commitMessage: 'O que estas mudanças fazem',
+    committed: 'Commit feito no branch.',
+    merge: (base: string) => `Juntar em ${base}`,
+    mergeNote: (branch: string, base: string) =>
+      `${branch} é juntado em ${base}, na própria pasta do projeto onde ${base} está aberto.`,
+    mergeYes: 'Juntar',
+    merged: (base: string) => `Juntado em ${base}.`,
+    push: 'Enviar o branch',
+    pushNote: (branch: string) => `${branch} é enviado ao remoto do projeto, origin: quem tem acesso vê.`,
+    pushYes: 'Enviar',
+    pushed: (branch: string) => `${branch} foi enviado.`,
+    binary: 'Um arquivo binário.',
+    checkpoints: (count: number) => (count === 1 ? '1 ponto de volta' : `${String(count)} pontos de volta`),
+    goBack: 'Voltar aqui',
+    goBackNote:
+      'Os arquivos voltam a como estavam antes desta mensagem; como estão agora fica guardado como um ponto de volta, para voltar a ele. A sessão segue numa cópia.',
+    goBackYes: 'Voltar',
+    wentBack: (label: string) =>
+      `Os arquivos estão como antes de “${label}”. A sua próxima mensagem segue numa cópia da sessão.`,
+    comment: 'Comentar esta linha',
+    commentPlaceholder: 'O que deve mudar aqui? Ctrl+Enter adiciona.',
+    more: 'Mudaram mais arquivos do que os mostrados aqui.',
+    none: 'Nada mudou ainda.',
+    readAgain: 'Ler as mudanças de novo',
+    reading: 'Lendo as mudanças…',
+    removeComment: 'Tirar o comentário',
+    send: (count: number) =>
+      count === 1 ? 'Mandar 1 comentário ao agente' : `Mandar ${String(count)} comentários ao agente`,
+    statuses: { added: 'novo', deleted: 'apagado', renamed: 'renomeado' },
+    summary: (count: number, base: string) =>
+      `${count === 1 ? '1 arquivo mudou' : `${String(count)} arquivos mudaram`} desde ${base}`,
+    title: 'Mudanças',
+    truncated: 'O resto deste arquivo não aparece.'
+  },
+  workspaces: {
+    archive: (name: string) => `Arquivar ${name}: o trabalho fica guardado no branch, a pasta sai`,
+    cancel: 'Cancelar',
+    create: 'Criar',
+    delete: (name: string) => `Apagar ${name}`,
+    deleteAnyway: 'Apagar mesmo assim',
+    deleteNote: (branch: string) => `A pasta e o branch ${branch} são apagados.`,
+    deleteYes: 'Apagar',
+    name: 'Nome da workspace',
+    namePlaceholder: 'corrigir-login',
+    new: 'Nova workspace',
+    ports: (ports: string) => `Portas ${ports}`,
+    portsSize: 'Portas por workspace',
+    portsStart: 'Primeira porta',
+    projectMenu: (name: string) => `Workspaces de ${name}`,
+    save: 'Salvar',
+    script: 'Script de preparo',
+    scriptHint:
+      'Roda em cada workspace nova depois de criada, com as portas dela em ATLAS_WORKSPACE_PORT e ATLAS_WORKSPACE_PORTS. Antes, os arquivos listados no .worktreeinclude do projeto são copiados.',
+    scriptPlaceholder: 'npm ci',
+    setup: 'Preparo das workspaces novas',
+    states: {
+      archived: 'arquivada',
+      preparing: 'preparando…',
+      setup_failed: 'o preparo falhou'
+    },
+    title: 'Workspaces',
+    unarchive: (name: string) => `Trazer ${name} de volta, com o trabalho como estava`,
+    undelivered: 'Ela tem trabalho não entregue, que se perde junto.'
+  },
+  environment: {
+    context: 'Contexto',
+    local: 'Local',
+    newWorktree: 'Nova worktree',
+    newWorktreeHint: (branch: string) => `Uma sessão nova numa workspace só dela, num branch a partir de ${branch}`,
+    title: 'Ambiente',
+    tokens: (count: string) => `${count} tokens`,
+    worktree: 'Worktree'
+  },
+  modes: {
+    hints: {
+      acceptEdits: 'Aceita as edições de arquivo sem perguntar',
+      auto: 'O classificador do próprio harness decide o que ele pode fazer',
+      default: 'Sempre pergunta antes de alterar alguma coisa',
+      plan: 'Faz um plano antes de alterar alguma coisa'
+    },
+    names: {
+      acceptEdits: 'Aceitar edições',
+      auto: 'Automático',
+      default: 'Manual',
+      plan: 'Plano'
+    },
+    title: 'Modo'
+  },
+  planRing: {
+    used: (percent: number, window: string) => `${String(percent)}% usado · ${window}`
   },
   executorPanel: {
     active: (on: number, all: number) => (on === all ? String(all) : `${String(on)} de ${String(all)}`),
@@ -1029,6 +1374,7 @@ export const ptBR: Override<Messages> = {
     thisMachine: (home: string) => `Esta máquina · casa ${home}`,
     title: 'Máquinas',
     transport: 'Caminho',
+    viaRelay: 'Relé, de qualquer lugar',
     viaSsh: 'Túnel SSH',
     viaTailscale: 'Tailscale',
     working: 'Aplicando…'

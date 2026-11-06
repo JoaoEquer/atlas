@@ -63,7 +63,7 @@ def _plugin(
 def plugins(home: Home, vault: Vault, tmp_path: Path) -> Plugins:
     database = Database(home.database_file)
     migrate(database, SCHEMAS)
-    return Plugins(home, database, vault, bundled_folder=tmp_path / "bundled")
+    return Plugins(home, database, vault, official_folder=tmp_path / "bundled")
 
 
 def _on(plugins: Plugins, name: str) -> None:
@@ -434,15 +434,6 @@ def test_a_folder_is_copied_and_a_folder_of_the_user_s_is_never_replaced_or_remo
     with pytest.raises(PluginError, match="nowhere to update it from"):
         update_plugin(plugins, "mine")
     assert (home.plugins_folder / "mine" / "skills").is_dir()
-
-
-def test_a_plugin_atlas_ships_is_never_replaced(home: Home, vault: Vault, tmp_path: Path) -> None:
-    database = Database(home.database_file)
-    migrate(database, SCHEMAS)
-    _plugin(tmp_path / "bundled", "fonts")
-    plugins = Plugins(home, database, vault, bundled_folder=tmp_path / "bundled")
-    with pytest.raises(PluginError, match="Atlas ships a plugin named fonts"):
-        install_plugin(plugins, str(_plugin(tmp_path / "other", "fonts")))
 
 
 def test_the_terminal_installs_updates_and_removes(

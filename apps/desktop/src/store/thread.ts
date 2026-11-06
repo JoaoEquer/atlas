@@ -301,6 +301,29 @@ export function fromHistory(messages: MessageRow[], running: boolean): Thread {
   }
 }
 
+/** A conversation read again (`read`) keeps the keys of the thread already on screen (`shown`), item
+ * by item while they are of the same kind: what came as events is keyed by their numbers and what
+ * was read by the messages', and a key that changes draws its part again from its Markdown. A key
+ * another of the read items holds stays theirs. */
+export function keepKeys(shown: Thread, read: Thread): Thread {
+  const taken = new Set(read.items.map(item => item.key))
+  const used = new Set<string>()
+  const items = read.items.map((item, index) => {
+    const before = shown.items[index]
+    const same =
+      before?.kind === item.kind &&
+      (before.kind !== 'tool' || (item.kind === 'tool' && before.toolId === item.toolId)) &&
+      (before.key === item.key || !taken.has(before.key)) &&
+      !used.has(before.key)
+    const key = same ? before.key : item.key
+    used.add(key)
+
+    return key === item.key ? item : { ...item, key }
+  })
+
+  return { ...read, items }
+}
+
 /** The thread after one event, at `now` (for the timers). An event that changes nothing returns the
  * same object. */
 export function applyEvent(thread: Thread, event: EventParams, now = Date.now()): Thread {

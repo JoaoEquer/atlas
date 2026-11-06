@@ -59,27 +59,30 @@ import type {
   ProposalRow,
   ProviderConnected,
   RequestCancel,
-  RouteTargetParams,
   RoutineFinished,
   RoutineRow,
+  RoutineSave,
   RunRow,
+  ScoreboardRow,
   SearchHit,
   SecretParams,
   SecretResult,
   SessionFolderRow,
-  SessionRouteRow,
   SessionRow,
   SettingChange,
   SettingsList,
   SkillRow,
   SlashCommandRow,
   Soul,
+  SpeechState,
   SubagentRow,
   TitleChanged,
   UserSaid
 } from '@/protocol/protocol.generated'
 
 import { applyCommand } from './commands'
+import type { ExtensionKind } from './extensions'
+import { markDone } from './first-steps'
 import { guarded } from './guarded'
 import { EMPTY_MARKET, type Market, type MarketKind, withRow } from './marketplace'
 import { closePreview, openPreview, targetOf } from './previews'
@@ -89,7 +92,7 @@ import { applySubagent } from './subagents'
 import { away, named, readTabs, screenPlace, type Tab, type TabPlace, Tabs, writeTabs } from './tabs'
 import { type CommandOutcome, leaveExecutorTab, runCommand, showExecutorTab } from './terminals'
 import { setPluginThemes } from './theme'
-import { applyEvent, EMPTY_THREAD, fromHistory, terminalText, type Thread } from './thread'
+import { applyEvent, EMPTY_THREAD, fromHistory, keepKeys, terminalText, type Thread } from './thread'
 import {
   failed as usageFailed,
   type UsageRead,
@@ -233,7 +236,16 @@ export function folderKey(executor: string, folder: string): string {
 
 /** The bot dialog on screen: a new bot, or one being edited, with its definition as read. */
 export type BotDialog = { definition: BotDefinition | null; mode: 'create' | 'edit' }
-type View = 'conversation' | 'marketplace' | 'plugin' | 'proposals' | 'routines' | 'session'
+type View =
+  | 'conversation'
+  | 'dictations'
+  | 'extensions'
+  | 'marketplace'
+  | 'plugin'
+  | 'proposals'
+  | 'routines'
+  | 'session'
+  | 'start'
 
 /**
  * What the user chose for a session open in another program (decided with the user on 15/10/2026):
@@ -259,15 +271,6 @@ export interface OpenSession {
   title: string
 }
 
-/** A session's route as the screen sets it: its stops in order, each with the model and the
- * effort the session goes on with there, whether it is followed, and whether a copy compacts
- * first. */
-export interface SessionRouteSet {
-  compact: boolean
-  enabled: boolean
-  targets: RouteTargetParams[]
-}
-
 /** What opening a session needs to know of it: its row in the list, its tab, or its instance. */
 type SessionShown = Pick<SessionRow, 'elsewhere' | 'executor' | 'folder' | 'instance_id' | 'session_id' | 'title'>
 
@@ -279,6 +282,9 @@ export interface SessionSettings {
   atlasAnswers: boolean
   auto: boolean
   effort: null | string
+  /** A permission mode of its harness other than its automatic one (`plan`); `null`, its
+   * default, or `auto` while that is on. */
+  mode: null | string
   model: null | string
 }
 
@@ -287,6 +293,7 @@ const NO_SESSION_SETTINGS: SessionSettings = {
   atlasAnswers: false,
   auto: true,
   effort: null,
+  mode: null,
   model: null
 }
 
@@ -378,6 +385,8 @@ export class HomeSession {
   readonly $view = atom<View>('conversation')
   /** The home's routines, read when the home connects and when they change. */
   readonly $routines = atom<RoutineRow[]>([])
+  /** This week's runs, at the top of the Routines screen (step 25). */
+  readonly $scoreboard = atom<null | ScoreboardRow>(null)
   /** The marketplace's screen (step 16s): read when it opens and when an item changes. */
   readonly $market = atom<Market>(EMPTY_MARKET)
   /** The home's plugins and the people their channels let in or who wait with a code. */
@@ -387,6 +396,8 @@ export class HomeSession {
   readonly $pairings = atom<PairingRow[]>([])
   /** What the server refused on the Plugins screen, said there. */
   readonly $pluginError = atom<null | string>(null)
+  /** Who writes recordings down, and the speech model on the server's computer (step 26). */
+  readonly $speech = atom<null | SpeechState>(null)
   /** The home's MCP servers and its skills, for the Extensions screen; `null` until it read them. */
   readonly $mcpServers = atom<McpList | null>(null)
   readonly $skills = atom<null | SkillRow[]>(null)
@@ -441,9 +452,6 @@ export class HomeSession {
   readonly $sessionThread = atom<Thread>(EMPTY_THREAD)
   readonly $sessionSettings = atom<SessionSettings>(NO_SESSION_SETTINGS)
   readonly $sessionError = atom<null | string>(null)
-  /** The route of the session on screen (asked for by the user on 21/10/2026), read when its
-   * instance opens; `null` before it is read or with no instance. */
-  readonly $sessionRoute = atom<null | SessionRouteRow>(null)
   /** The tabs of the central area (store/tabs.ts). */
   readonly tabs = new Tabs()
   /** Where the window keeps them, its machine and name, once the home said its name. */
@@ -451,6 +459,8 @@ export class HomeSession {
   /** The trail of each session shown before, by `sessionOwner`: shown again at once as its tab
    * comes back, while it is read anew. */
   private readonly sessionThreads = new Map<string, Thread>()
+  /** Whether the session on screen's executor ran at the last look, `null` with none open. */
+  private openRuns: boolean | null = null
   /** Each executor's models and their efforts, as its plugin read them: read when one of its
    * sessions opens, and again after its account changes. */
   readonly $executorModels = map<Record<string, ExecutorModel[] | undefined>>({})
@@ -540,6 +550,7 @@ export class HomeSession {
           void this.refreshBots().catch(() => undefined)
           void this.refreshPicture().catch(() => undefined)
           void this.refreshPlugins().catch(() => undefined)
+          void this.refreshSpeech().catch(() => undefined)
           // The session on screen missed what its instance did while the socket was gone.
           void this.refreshWorkbench()
             .then(() => this.readSession())
@@ -567,13 +578,27 @@ export class HomeSession {
     const retitle = () => {
       this.tabs.retitle(place => this.titleOf(place))
     }
+    // The session on screen is read again once its executor runs, having not been readable before
+    // (its plugin waiting for the consent again after an update, found on 01/11/2026).
+    const runs = () => {
+      const now = this.openExecutorRuns()
+      if (now && this.openRuns === false) {
+        void this.readSession().catch(() => undefined)
+      }
+
+      this.openRuns = now
+    }
     this.stops.push(
       this.tabs.$tabs.listen(save),
       this.$selected.listen(save),
       this.$view.listen(save),
       this.$openSession.listen(save),
       this.$conversations.listen(retitle),
-      this.$bots.listen(retitle)
+      this.$bots.listen(retitle),
+      this.$workbench.listen(runs),
+      this.$openSession.listen(() => {
+        this.openRuns = this.openExecutorRuns()
+      })
     )
     atlas.start()
   }
@@ -824,7 +849,9 @@ export class HomeSession {
       this.retitled(conversationId, opened.conversation.title)
     }
     this.client.watch(conversationId, opened.seq)
-    this.$threads.setKey(conversationId, fromHistory(opened.messages, opened.running))
+    const read = fromHistory(opened.messages, opened.running)
+    const shown = this.$threads.get()[conversationId]
+    this.$threads.setKey(conversationId, shown ? keepKeys(shown, read) : read)
     this.$autoMode.setKey(conversationId, opened.auto_mode)
     void this.readModel(conversationId).catch(() => undefined)
     void this.readSubagents(conversationId).catch(() => undefined)
@@ -1414,44 +1441,6 @@ export class HomeSession {
     }
   }
 
-  /** Keep another account under a nickname, in a folder of its own; its row then logs it in. */
-  async addAccount(executor: string, nickname: string): Promise<boolean> {
-    const row = await this.onWorkbench(`accounts:${executor}`, client =>
-      client.call('executor.add_account', { executor, nickname })
-    )
-
-    if (row) {
-      await Promise.all([this.refreshAccounts(executor), this.refreshExecutors()])
-    }
-
-    return row !== undefined
-  }
-
-  /** Forget another account; its folder stays, with its login and its sessions. */
-  async removeAccount(executor: string, account: string): Promise<boolean> {
-    const done = await this.onWorkbench(`accounts:${executor}`, client =>
-      client.call('executor.remove_account', { account_id: account, executor })
-    )
-
-    if (done) {
-      await Promise.all([this.refreshAccounts(executor), this.refreshExecutors()])
-      void this.refreshFolders(executor)
-    }
-
-    return done !== undefined
-  }
-
-  /** The account a folder's new sessions start on (`''`, the main one). */
-  async setFolderAccount(executor: string, folder: string, account: string): Promise<void> {
-    const done = await this.onWorkbench(`folder-account:${executor}`, client =>
-      client.call('executor.folder_account', { account_id: account, executor, folder })
-    )
-
-    if (done) {
-      await this.refreshFolders(executor)
-    }
-  }
-
   /** What changes if the session on screen goes on on `account` (`''`, the main one), for the user
    * to read before switching; `undefined` with no instance running on it, whose next one simply
    * starts on that account. */
@@ -1496,32 +1485,6 @@ export class HomeSession {
 
       this.applyInstance(row)
       this.followInstance(row, instance)
-    }
-  }
-
-  /** The route of the session on the instance `instanceId`: where it goes on at a plan's limit. */
-  async readSessionRoute(instanceId: string): Promise<void> {
-    if (this.$sessionRoute.get()?.instance_id !== instanceId) {
-      this.$sessionRoute.set(null)
-    }
-
-    const row = await this.onSession(client => client.call('workbench.route', { instance_id: instanceId }))
-
-    if (row) {
-      this.$sessionRoute.set(row)
-    }
-  }
-
-  /** The session's route, in order, each stop with the model and the effort it goes on with,
-   * whether it is followed and whether a copy compacts first: kept for its card, so the instances
-   * that take its place follow it too. */
-  async setSessionRoute(instanceId: string, route: SessionRouteSet): Promise<void> {
-    const row = await this.onSession(client =>
-      client.call('workbench.set_route', { ...route, instance_id: instanceId })
-    )
-
-    if (row) {
-      this.$sessionRoute.set(row)
     }
   }
 
@@ -1583,9 +1546,29 @@ export class HomeSession {
     this.readUsageIfStale(executor)
   }
 
+  /** Whether the session on screen's executor is on and found; `null` with none open. */
+  private openExecutorRuns(): boolean | null {
+    const open = this.$openSession.get()
+    if (!open) {
+      return null
+    }
+
+    const row = this.$workbench.get().executors.find(found => found.name === open.executor)
+
+    return row !== undefined && row.enabled && row.installed && row.supported
+  }
+
   /** A new session of `executor` in `folder`, not started yet: its first prompt starts it. */
   newSession(executor: string, folder: string): void {
     void this.openSession({ elsewhere: '', executor, folder, instance_id: '', session_id: '', title: '' })
+  }
+
+  /** A new session of `executor` in `folder`, on screen, started with `prompt` once it is open
+   *  (step 21, A5: an issue that becomes a workspace); whether the prompt went. */
+  async newSessionWith(executor: string, folder: string, prompt: string): Promise<boolean> {
+    await this.openSession({ elsewhere: '', executor, folder, instance_id: '', session_id: '', title: '' })
+
+    return this.sendToSession(prompt)
   }
 
   /** Read the session on screen again, as its harness keeps it now. As its turn ends (`ended`), the
@@ -1686,6 +1669,11 @@ export class HomeSession {
         if (settings.atlasAnswers) {
           await this.client.call('workbench.atlas_answers', { enabled: true, instance_id: instanceId })
         }
+
+        // A mode chosen before it ran, its plan mode, is its harness's from the first prompt on.
+        if (!settings.auto && settings.mode && started.modes.includes(settings.mode)) {
+          this.applyInstance(await this.client.call('workbench.mode', { instance_id: instanceId, mode: settings.mode }))
+        }
       }
 
       await this.client.call('workbench.prompt', {
@@ -1709,12 +1697,51 @@ export class HomeSession {
     }
   }
 
+  /** After its workspace's files went back to a checkpoint (step 21, A3): the session on screen
+   * goes on in a copy from its next message, its instance stopped, the original left as it was;
+   * a session its harness has not named yet just goes on. */
+  async goOnInCopy(): Promise<void> {
+    const open = this.$openSession.get()
+
+    if (!open) {
+      return
+    }
+
+    if (open.instanceId) {
+      await this.onSession(client => client.call('workbench.stop', { instance_id: open.instanceId }))
+    }
+
+    const now = this.$openSession.get() ?? open
+    this.followOpen({ ...now, choice: now.sessionId ? 'copy' : now.choice, instanceId: '' })
+  }
+
   /** Stop the instance on the session on screen, for good; the session stays, to go on later. */
   async stopSession(): Promise<void> {
     const open = this.$openSession.get()
 
     if (open?.instanceId) {
       await this.onSession(client => client.call('workbench.stop', { instance_id: open.instanceId }))
+    }
+  }
+
+  /** A permission mode of the session's harness: on its instance when one runs, kept for the next
+   * one when none does. */
+  async setSessionMode(mode: string): Promise<void> {
+    const open = this.$openSession.get()
+    const instance = open ? this.instance(open.instanceId) : undefined
+
+    if (!instance) {
+      this.$sessionSettings.set({ ...this.$sessionSettings.get(), auto: false, mode })
+
+      return
+    }
+
+    const row = await this.onSession(client =>
+      client.call('workbench.mode', { instance_id: instance.instance_id, mode })
+    )
+
+    if (row) {
+      this.applyInstance(row)
     }
   }
 
@@ -1725,7 +1752,8 @@ export class HomeSession {
     const instance = open ? this.instance(open.instanceId) : undefined
 
     if (!instance) {
-      this.$sessionSettings.set({ ...this.$sessionSettings.get(), [which]: enabled })
+      const mode = which === 'auto' ? { mode: null } : {}
+      this.$sessionSettings.set({ ...this.$sessionSettings.get(), ...mode, [which]: enabled })
 
       return
     }
@@ -2051,8 +2079,9 @@ export class HomeSession {
 
   async refreshRoutines(): Promise<void> {
     await this.reading('routines', async () => {
-      const { routines } = await this.client.call('routine.list', {})
+      const { routines, scoreboard } = await this.client.call('routine.list', {})
       this.$routines.set(routines)
+      this.$scoreboard.set(scoreboard ?? null)
     })
   }
 
@@ -2067,7 +2096,7 @@ export class HomeSession {
     this.market({ error: null, reading: true })
 
     try {
-      const list = await this.client.call('marketplace.list', { refresh })
+      const list = await this.client.call('marketplace.list', { query: this.$market.get().query, refresh })
       this.market({ list, page: withRow(this.$market.get().page, list), reading: false })
     } catch (error) {
       this.market({ error: error instanceof Error ? error.message : String(error), reading: false })
@@ -2111,6 +2140,11 @@ export class HomeSession {
           brought: done.changed.filter(changed => changed !== name),
           confirming: done.local_changes ? name : null
         })
+
+        if (action === 'install') {
+          // A first step (store/first-steps.ts): a skill installed shows nowhere else.
+          markDone($home.get(), ['store'])
+        }
       }
     } catch (error) {
       this.market({ failed: error instanceof Error ? error.message : String(error) })
@@ -2198,6 +2232,18 @@ export class HomeSession {
   }
 
   /** Run now, pause, resume or remove a routine; the list is read again after. */
+  /** Make or change a prompt routine from the Routines screen's form (step 25), and run it now when
+   * asked. */
+  async saveRoutine(draft: RoutineSave, runNow: boolean): Promise<void> {
+    const saved = await this.client.call('routine.save', draft)
+
+    if (runNow) {
+      await this.client.call('routine.run', { routine_id: saved.id })
+    }
+
+    await this.refreshRoutines()
+  }
+
   async actOnRoutine(action: 'pause' | 'remove' | 'resume' | 'run', routineId: string): Promise<void> {
     await this.client.call(`routine.${action}`, { routine_id: routineId })
     await this.refreshRoutines()
@@ -2309,6 +2355,10 @@ export class HomeSession {
     }
 
     return conversationId
+  }
+
+  async refreshSpeech(): Promise<void> {
+    this.$speech.set(await this.client.call('speech.status', {}))
   }
 
   async refreshProposals(): Promise<void> {
@@ -2539,6 +2589,24 @@ export class HomeSession {
       return
     }
 
+    if (event.type === 'workspaces.changed') {
+      $workspacesSeen.set($workspacesSeen.get() + 1)
+
+      return
+    }
+
+    if (event.type === 'dictations.changed') {
+      $dictationsSeen.set($dictationsSeen.get() + 1)
+
+      return
+    }
+
+    if (event.type === 'speech.changed') {
+      this.$speech.set(event.payload as SpeechState)
+
+      return
+    }
+
     if (event.type === 'proposals.changed') {
       void this.refreshProposals().catch(() => undefined)
 
@@ -2579,7 +2647,7 @@ export class HomeSession {
       // the instances are kept by their own events.
       void this.refreshExecutors().catch(() => undefined)
 
-      // And what the marketplace's card says of it, when the Plugins screen opened over that card.
+      // And what the marketplace's card says of it, when the marketplace is on screen.
       if (this.$view.get() === 'marketplace') {
         void this.refreshMarketplace()
       }
@@ -2833,12 +2901,20 @@ export const $proposals = atom<ProposalRow[]>([])
 export const $approved = map<Record<string, Approved | undefined>>({})
 export const $view = atom<View>('conversation')
 export const $routines = atom<RoutineRow[]>([])
+export const $scoreboard = atom<null | ScoreboardRow>(null)
 export const $market = atom<Market>(EMPTY_MARKET)
 export const $plugins = atom<PluginRow[]>([])
 /** The screens of the home on screen's plugins that are on (step 16m). */
 export const $screens = atom<PluginScreenRow[]>([])
 export const $pairings = atom<PairingRow[]>([])
 export const $pluginError = atom<null | string>(null)
+export const $speech = atom<null | SpeechState>(null)
+/** Counted up when a dictation was kept, written down or deleted: the Dictations page reads them
+ *  again (step 26). */
+export const $dictationsSeen = atom(0)
+/** Counted up when a workspace was made, prepared, archived, brought back or deleted: the
+ *  executors tab reads them again (step 21). */
+export const $workspacesSeen = atom(0)
 export const $mcpServers = atom<McpList | null>(null)
 export const $skills = atom<null | SkillRow[]>(null)
 export const $extensionsError = atom<null | string>(null)
@@ -2863,7 +2939,6 @@ export const $openSession = atom<OpenSession | null>(null)
 export const $sessionThread = atom<Thread>(EMPTY_THREAD)
 export const $sessionSettings = atom<SessionSettings>(NO_SESSION_SETTINGS)
 export const $sessionError = atom<null | string>(null)
-export const $sessionRoute = atom<null | SessionRouteRow>(null)
 export const $executorModels = map<Record<string, ExecutorModel[] | undefined>>({})
 export const $executorConnectors = map<Record<string, ConnectorsRead | undefined>>({})
 export const $executorUsage = map<Record<string, undefined | UsageRead>>({})
@@ -2927,11 +3002,13 @@ const MIRRORS: Mirror[] = [
   mirror($approved, s => s.$approved),
   mirror($view, s => s.$view),
   mirror($routines, s => s.$routines),
+  mirror($scoreboard, s => s.$scoreboard),
   mirror($market, s => s.$market),
   mirror($plugins, s => s.$plugins),
   mirror($screens, s => s.$screens),
   mirror($pairings, s => s.$pairings),
   mirror($pluginError, s => s.$pluginError),
+  mirror($speech, s => s.$speech),
   mirror($mcpServers, s => s.$mcpServers),
   mirror($skills, s => s.$skills),
   mirror($extensionsError, s => s.$extensionsError),
@@ -2956,7 +3033,6 @@ const MIRRORS: Mirror[] = [
   mirror($sessionThread, s => s.$sessionThread),
   mirror($sessionSettings, s => s.$sessionSettings),
   mirror($sessionError, s => s.$sessionError),
-  mirror($sessionRoute, s => s.$sessionRoute),
   mirror($executorModels, s => s.$executorModels),
   mirror($executorConnectors, s => s.$executorConnectors),
   mirror($executorUsage, s => s.$executorUsage),
@@ -3273,15 +3349,29 @@ export function newConversation(): void {
   current().newConversation()
 }
 
-/** The plugin guide, on GitHub: what a plugin may hold and every part of the SDK. */
-export const PLUGIN_GUIDE = 'https://github.com/marqueskaio/atlas/blob/main/src/atlas/docs/pages/extending/plugins.md'
+/** The start screen a new tab opens on (components/start-screen.tsx): Atlas, the bots and the
+ *  executors side by side, each with its list, read again. */
+export function showStart(): void {
+  const session = current()
+  session.$view.set('start')
+  void session.refreshBots().catch(() => undefined)
+  void session.refreshWorkbench().catch(() => undefined)
+}
+
+/** The plugin guide, on the site: what a plugin may hold and every part of the SDK. */
+export const PLUGIN_GUIDE = 'https://atlasv4.com/docs/extending/plugins/'
 
 /** A new conversation with `/write-plugin ` in its box, for the user to say what the plugin should
  *  do: the skill Atlas ships writes it with them. */
 export function writePlugin(): void {
+  newConversationWith('/write-plugin ')
+}
+
+/** A new conversation with `text` in its box, for the user to finish and send. */
+export function newConversationWith(text: string): void {
   const session = current()
   session.newConversation()
-  session.$restored.setKey(DRAFT, '/write-plugin ')
+  session.$restored.setKey(DRAFT, text)
 }
 
 export function refreshProposals(): Promise<void> {
@@ -3295,11 +3385,51 @@ export function showProposals(): void {
   void session.refreshProposals().catch(() => undefined)
 }
 
+/** Open the Dictations page (step 26). */
+export function showDictations(): void {
+  current().$view.set('dictations')
+}
+
 /** Open the routines, read again. */
 export function showRoutines(): void {
   const session = current()
   session.$view.set('routines')
   void session.refreshRoutines().catch(() => undefined)
+}
+
+/** The Extensions screen's tab: its plugins, skills, MCP servers or executors. */
+export const $extensionsTab = atom<ExtensionKind>('plugin')
+
+/** Open Extensions, on `tab` when one is given, every tab's list read again for its count. */
+export function showExtensions(tab?: ExtensionKind): void {
+  current().$view.set('extensions')
+  if (tab) {
+    $extensionsTab.set(tab)
+  }
+
+  refreshPlugins()
+  refreshExtensions()
+  if ($extensionsTab.get() === 'executor') {
+    void detectExecutors()
+  }
+}
+
+/** The plugin whose consent card Extensions opens on, scrolled to; cleared once shown. */
+export const $pluginFocus = atom<null | string>(null)
+
+/** Open Extensions on the Plugins tab at `plugin`'s consent card: what the sidebar and a session's
+ * tab offer for an executor whose plugin waits for the user's consent again after an update. */
+export function showPluginConsent(plugin: string): void {
+  $pluginFocus.set(plugin)
+  showExtensions('plugin')
+}
+
+/** Show one of Extensions' tabs; the harnesses are looked for on theirs. */
+export function showExtensionsTab(tab: ExtensionKind): void {
+  $extensionsTab.set(tab)
+  if (tab === 'executor') {
+    void detectExecutors()
+  }
 }
 
 /** Open the marketplace (step 16s) on its list, read again. */
@@ -3319,8 +3449,18 @@ export function setMarketKind(kind: MarketKind): void {
   current().market({ kind })
 }
 
+/** How long the search waits for the typing to stop before the outside catalogs are asked. */
+const MARKET_SEARCH_PAUSE_MS = 400
+let searching: ReturnType<typeof setTimeout> | undefined
+
+/** Search: the marketplace's own items at once, the outside catalogs (step 24) once typing stops. */
 export function setMarketQuery(query: string): void {
-  current().market({ query })
+  const session = current()
+  session.market({ query })
+  clearTimeout(searching)
+  searching = setTimeout(() => {
+    void session.refreshMarketplace()
+  }, MARKET_SEARCH_PAUSE_MS)
 }
 
 export function openMarketItem(name: string): void {
@@ -3380,6 +3520,23 @@ export function refreshPlugins(): void {
   const session = current()
   session.$pluginError.set(null)
   void session.refreshPlugins().catch(() => undefined)
+}
+
+/** Who writes recordings down, read again after the choice changed. */
+export function readSpeech(): Promise<void> {
+  return current().refreshSpeech()
+}
+
+/** Download the speech model on the server's computer; its progress comes as `speech.changed`. */
+export async function downloadSpeech(): Promise<void> {
+  const session = current()
+  session.$speech.set(await session.client.call('speech.download', {}))
+}
+
+/** The user's no to the speech model's download, kept on the server's computer. */
+export async function declineSpeech(): Promise<void> {
+  const session = current()
+  session.$speech.set(await session.client.call('speech.decline', {}))
 }
 
 /** The Atlas version the open home's server runs; `null` before it said. */
@@ -3493,6 +3650,37 @@ export function forgetPairing(channel: string, user: string): Promise<boolean> {
 
 export function readRuns(routineId: string): Promise<void> {
   return current().readRuns(routineId)
+}
+
+/** The routine the form shows (step 25): a new one, one to change, or a template's; `null`, closed. */
+export const $routineForm = atom<null | RoutineSave>(null)
+
+export function openRoutineForm(draft?: RoutineSave): void {
+  $routineForm.set(draft ?? { name: '', prompt: '', schedule: '' })
+}
+
+export function closeRoutineForm(): void {
+  $routineForm.set(null)
+}
+
+/** The form's start for a routine there is: what it is now. */
+export function routineDraft(routine: RoutineRow): RoutineSave {
+  return {
+    bot: routine.bot ?? '',
+    effort: routine.effort,
+    executor: routine.executor,
+    model: routine.model,
+    name: routine.name,
+    probe: routine.probe ?? '',
+    prompt: routine.prompt ?? '',
+    routine_id: routine.id,
+    schedule: routine.schedule
+  }
+}
+
+export async function saveRoutine(draft: RoutineSave, runNow: boolean): Promise<void> {
+  await current().saveRoutine(draft, runNow)
+  closeRoutineForm()
 }
 
 export function actOnRoutine(action: 'pause' | 'remove' | 'resume' | 'run', routineId: string): Promise<void> {
@@ -3615,16 +3803,9 @@ export function readExecutorModels(executor: string): void {
   }
 }
 
-export function addAccount(executor: string, nickname: string): Promise<boolean> {
-  return current().addAccount(executor, nickname)
-}
-
-export function removeAccount(executor: string, account: string): Promise<boolean> {
-  return current().removeAccount(executor, account)
-}
-
-export function setFolderAccount(executor: string, folder: string, account: string): Promise<void> {
-  return current().setFolderAccount(executor, folder, account)
+/** Read an executor's accounts again, for the accounts plugin's screen (screen version 4). */
+export function refreshAccounts(executor: string): Promise<void> {
+  return current().refreshAccounts(executor)
 }
 
 export function checkSessionAccount(account: string): Promise<AccountSwitchRow | undefined> {
@@ -3633,14 +3814,6 @@ export function checkSessionAccount(account: string): Promise<AccountSwitchRow |
 
 export function switchSessionAccount(account: string, note?: string): Promise<void> {
   return current().switchSessionAccount(account, note)
-}
-
-export function readSessionRoute(instanceId: string): Promise<void> {
-  return current().readSessionRoute(instanceId)
-}
-
-export function setSessionRoute(instanceId: string, route: SessionRouteSet): Promise<void> {
-  return current().setSessionRoute(instanceId, route)
 }
 
 export function deleteSession(row: SessionRow): Promise<boolean> {
@@ -3680,6 +3853,12 @@ export function newSession(executor: string, folder: string): void {
   current().newSession(executor, folder)
 }
 
+export function newSessionWith(executor: string, folder: string, prompt: string): Promise<boolean> {
+  focusExecutor(executor)
+
+  return current().newSessionWith(executor, folder, prompt)
+}
+
 /** A folder from the system's dialog, when the app started its server; `null` otherwise. */
 export async function chooseFolder(): Promise<null | string> {
   return (await shell.chooseFolder?.()) ?? null
@@ -3701,8 +3880,18 @@ export function stopSession(): Promise<void> {
   return current().stopSession()
 }
 
+export function goOnInCopy(): Promise<void> {
+  return current().goOnInCopy()
+}
+
 export function setSessionSwitch(which: SessionSwitch, enabled: boolean): Promise<void> {
   return current().setSessionSwitch(which, enabled)
+}
+
+/** One of the session's harness's permission modes other than its automatic one, which goes by
+ * `setSessionSwitch('auto')` and its warning. */
+export function setSessionMode(mode: string): Promise<void> {
+  return current().setSessionMode(mode)
 }
 
 export function setSessionModel(model: null | string, effort: null | string): Promise<void> {
@@ -3923,6 +4112,24 @@ export function answerExecutor(id: string, result: Record<string, unknown>): voi
 
 /** Turn an executor's plugin on from the onboarding, with the consent to what the user just
  * read it declare; the server looks for it again, and the workbench offers it to start. */
+/** Update an executor's harness with the command its row shows, at the user's click, then read the
+ * executors again: true once it updated. Why it did not, with the end of its output, is kept under
+ * `update:<name>` in `$workbenchError`. */
+export async function updateExecutor(name: string): Promise<boolean> {
+  const session = current()
+  const ended = await session.onWorkbench(`update:${name}`, client =>
+    client.call('executor.update', { executor: name })
+  )
+
+  if (ended && !ended.updated) {
+    session.$workbenchError.setKey(`update:${name}`, ended.output || t.executors.updateFailed)
+  }
+
+  await session.refreshExecutors().catch(() => undefined)
+
+  return ended?.updated ?? false
+}
+
 export async function turnOnExecutor(row: ExecutorRow): Promise<void> {
   const session = current()
   await session.onWorkbench('offer', client => client.call('plugin.enable', { consent: row.consent, name: row.plugin }))

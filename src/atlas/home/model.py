@@ -42,6 +42,14 @@ SOUL_FILE = "SOUL.md"
 #: The home's picture, beside its name in the app (home/picture.py).
 PICTURE_FILE = "picture.png"
 DOCUMENTS_FOLDER = "documents"
+#: The workspaces' worktrees, one folder per project (step 21).
+WORKTREES_FOLDER = "worktrees"
+#: Each routine's probe's own folder, where it keeps what it saw (step 23).
+PROBES_FOLDER = "probes"
+#: The user's dictations, each recording with what it said (step 26).
+DICTATIONS_FOLDER = "dictations"
+#: The speech model, downloaded once for every home of the machine, at the root (step 26).
+SPEECH_FOLDER = "speech"
 #: The files the user attached to messages, one folder each (step 16g).
 ATTACHMENTS_FOLDER = "attachments"
 LOGS_FOLDER = "logs"
@@ -175,6 +183,33 @@ LAYOUT: tuple[Entry, ...] = (
         EntryClass.USER,
         "in a container, the user's home folder, where the workspace starts: what the agent made",
     ),
+    Entry(
+        WORKTREES_FOLDER,
+        True,
+        EntryClass.MACHINE,
+        "the workspaces' worktrees, copies of the user's repositories each on a branch of its own; "
+        "their work goes back through git, not a backup",
+    ),
+    Entry(
+        PROBES_FOLDER,
+        True,
+        EntryClass.USER,
+        "each routine's probe's own folder, where it keeps what it already saw; lost, a probe "
+        "hears everything again as new",
+    ),
+    Entry(
+        DICTATIONS_FOLDER,
+        True,
+        EntryClass.USER,
+        "what the user dictated, each recording with its words, kept until deleted",
+    ),
+    Entry(
+        SPEECH_FOLDER,
+        True,
+        EntryClass.MACHINE,
+        "the model that writes down recordings on this computer, at the root for every home; "
+        "downloaded again where it is missing",
+    ),
     Entry(HOMES_FOLDER, True, EntryClass.HOMES, "the other homes of this machine"),
     Entry(ACTIVE_HOME_FILE, False, EntryClass.MACHINE, "which home opens here when none is named"),
     Entry(
@@ -301,6 +336,23 @@ class Home:
         return self.root / DOCUMENTS_FOLDER
 
     @property
+    def worktrees_folder(self) -> Path:
+        return self.root / WORKTREES_FOLDER
+
+    @property
+    def probes_folder(self) -> Path:
+        return self.root / PROBES_FOLDER
+
+    @property
+    def dictations_folder(self) -> Path:
+        return self.root / DICTATIONS_FOLDER
+
+    @property
+    def speech_folder(self) -> Path:
+        """The speech model's folder: the root's, as only the root's is used."""
+        return self.root / SPEECH_FOLDER
+
+    @property
     def homes_folder(self) -> Path:
         return self.root / HOMES_FOLDER
 
@@ -413,6 +465,16 @@ class TrustSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class MemorySettings:
+    #: The characters `memory/USER.md` may hold, from 500 to 20,000: who the user is. Every model
+    #: call carries it, and lowered under what is written it cuts nothing.
+    user_limit: int = 1_375
+    #: The characters `memory/MEMORY.md` may hold, from 500 to 20,000: the agent's notes. Every
+    #: model call carries it, and lowered under what is written it cuts nothing.
+    memory_limit: int = 2_200
+
+
+@dataclass(frozen=True, slots=True)
 class WorkspaceSettings:
     #: Where the file tools and commands start. Unset, the user's home folder.
     folder: Path | None = None
@@ -425,10 +487,40 @@ class TimeSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class BackupSettings:
+    #: Where the server writes the home's backup on its own (step 20): a home in a machine that may
+    #: be lost (a cloud computer, a VPS) keeps its last few there. Unset, none is written but by
+    #: hand (`atlas backup`, the app).
+    folder: Path | None = None
+    #: Hours between two backups.
+    every_hours: int = 24
+    #: The backups of this home kept in the folder, the newest; 0 keeps all.
+    keep: int = 3
+
+
+@dataclass(frozen=True, slots=True)
+class RelaySettings:
+    #: The relay the home waits at, so the app reaches it from anywhere with no open port (step
+    #: 20): a `wss://` address. Unset, none: the tailnet and SSH reach it.
+    url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class BrowserSettings:
     #: The program that runs Chrome, Edge or Chromium, and the arguments before its own (step 14).
     #: Unset, the first one found where they install.
     chrome: tuple[str, ...] = ()
+
+
+#: Who writes down a recording (step 26): this computer, a provider with its key, or nobody.
+TRANSCRIPTIONS = ("local", "openai", "gemini", "off")
+
+
+@dataclass(frozen=True, slots=True)
+class VoiceSettings:
+    #: Who writes down a recording sent or dictated: `local` (this computer, with its model
+    #: downloaded once), `openai`, `gemini` (each with its key), or `off`.
+    transcription: str = "local"
 
 
 #: The marketplace Atlas reads (step 16s), and where GitHub serves a repository's archive and one
@@ -436,6 +528,13 @@ class BrowserSettings:
 MARKETPLACE_REPOSITORY = "marqueskaio/atlas-marketplace"
 ARCHIVE_URL = "https://codeload.github.com/{repo}/tar.gz/{ref}"
 RAW_URL = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
+#: The official MCP Registry's list of servers (step 24), one of the marketplace's outside sources.
+REGISTRY_URL = "https://registry.modelcontextprotocol.io/v0/servers"
+#: skills.sh's search, and GitHub's API, which says a repository's newest commit and its files.
+SKILLS_URL = "https://skills.sh/api/search"
+GITHUB_API_URL = "https://api.github.com"
+#: Claude Code's official plugin directory, whose catalog lists its plugins.
+CLAUDE_PLUGINS_REPOSITORY = "anthropics/claude-plugins-official"
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,6 +548,17 @@ class MarketplaceSettings:
     archive_url: str = ARCHIVE_URL
     #: Where one file of a repository is read, with `{repo}`, `{ref}` and `{path}`.
     raw_url: str = RAW_URL
+    #: List what the outside catalogs offer beside the marketplace (step 24): the MCP Registry,
+    #: Claude Code's plugin directory and skills.sh.
+    outside: bool = True
+    #: Where the MCP Registry's list of servers is read.
+    registry_url: str = REGISTRY_URL
+    #: Where skills.sh is searched.
+    skills_url: str = SKILLS_URL
+    #: Where GitHub's API is reached, to pin an outside item to its repository's commit.
+    github_api_url: str = GITHUB_API_URL
+    #: Claude Code's plugin directory on GitHub, `owner/name`, whose catalog is read at its branch.
+    claude_plugins: str = CLAUDE_PLUGINS_REPOSITORY
 
 
 @dataclass(frozen=True, slots=True)
@@ -461,10 +571,14 @@ class Settings:
     vault: VaultSettings = field(default_factory=VaultSettings)
     model: ModelSettings = field(default_factory=ModelSettings)
     trust: TrustSettings = field(default_factory=TrustSettings)
+    memory: MemorySettings = field(default_factory=MemorySettings)
     workspace: WorkspaceSettings = field(default_factory=WorkspaceSettings)
     time: TimeSettings = field(default_factory=TimeSettings)
     browser: BrowserSettings = field(default_factory=BrowserSettings)
     marketplace: MarketplaceSettings = field(default_factory=MarketplaceSettings)
+    relay: RelaySettings = field(default_factory=RelaySettings)
+    backup: BackupSettings = field(default_factory=BackupSettings)
+    voice: VoiceSettings = field(default_factory=VoiceSettings)
 
 
 # -- migrations ----------------------------------------------------------------------------------

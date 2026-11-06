@@ -7,8 +7,12 @@
   then its authorization server's metadata (RFC 8414, then OpenID Connect discovery). A server
   that publishes neither gets the older spec's defaults at its origin (`/authorize`, `/token`,
   `/register`).
-- **Who Atlas is**: a public client (`none`) registered for each sign-in (RFC 7591), so the
-  redirect address it registers is the one it listens on.
+- **Who Atlas is**: where the authorization server takes one
+  (`client_id_metadata_document_supported`), the address of the document that describes Atlas,
+  published on its site (`CLIENT_DOCUMENT`, the form the 2026 MCP spec prefers): a public client
+  that comes back to a loopback address, on whatever port it listens (RFC 8252). Elsewhere, a
+  public client (`none`) registered for each sign-in (RFC 7591), so the redirect address it
+  registers is the one it listens on.
 - **The code grant with PKCE S256**, a `state` checked on the way back, the authorization
   server's `iss` checked when it sends one (RFC 9207), and `resource` naming the server
   (RFC 8707). An authorization server that lists its PKCE methods without S256 is refused.
@@ -54,6 +58,10 @@ HTTP_SECONDS = 30.0
 #: Seconds a sign-in waits for the user to authorize in the browser.
 SIGN_IN_SECONDS = 600.0
 CALLBACK_PATH = "/callback"
+#: The client metadata document that says who Atlas is (step 24), whose address is its `client_id`
+#: where the authorization server takes one: `site/public/oauth/client.json`, published with the
+#: site.
+CLIENT_DOCUMENT = "https://atlasv4.com/oauth/client.json"
 _CLIENT_NAME = "Atlas"
 _logger = logging.getLogger("atlas.mcp")
 
@@ -84,6 +92,8 @@ class Endpoints:
     issuer: str | None = None
     #: The scopes the server says it supports, asked for all at once.
     scope: str | None = None
+    #: It takes a client metadata document's address as a `client_id`, so Atlas registers nothing.
+    client_documents: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,6 +277,7 @@ async def discover(http: httpx2.AsyncClient, url: str) -> Endpoints:
         resource,
         issuer=named,
         scope=scope,
+        client_documents=metadata.get("client_id_metadata_document_supported") is True,
     )
 
 
@@ -448,7 +459,11 @@ async def sign_in(
     async with httpx2.AsyncClient(timeout=HTTP_SECONDS, follow_redirects=True) as http:
         endpoints = await discover(http, url)
         async with _Callback() as callback:
-            client_id = await register(http, endpoints, callback.address)
+            client_id = (
+                CLIENT_DOCUMENT
+                if endpoints.client_documents
+                else await register(http, endpoints, callback.address)
+            )
             verifier, challenge = pkce()
             state = secrets.token_urlsafe(32)
             show(authorization_url(endpoints, client_id, callback.address, challenge, state))

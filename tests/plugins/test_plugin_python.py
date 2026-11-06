@@ -1,5 +1,6 @@
 """The rest of a plugin's Python (step 16l, SDK version 16): a slash command with code of
-its own, a terminal command, the user's model, a message to a conversation, and a model provider.
+its own, a terminal command, the user's model, a message to a conversation, a model provider, and
+the memory's limits (version 26).
 
 The plugins are real folders in a temporary home, loaded as Atlas loads them; the conversations
 run on the assistant against the fake model, so what reaches a model is what a provider would get.
@@ -7,7 +8,7 @@ run on the assistant against the fake model, so what reaches a model is what a p
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,16 @@ import pytest
 from atlas.__main__ import SCHEMAS, main
 from atlas.agent import TurnEnded
 from atlas.assistant import Assistant, AssistantPluginHost, ConversationEvent
-from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
+from atlas.home import (
+    Database,
+    Home,
+    MemorySettings,
+    ModelSettings,
+    Settings,
+    WorkspaceSettings,
+    migrate,
+)
+from atlas.memory import Action, Operation, Target
 from atlas.models import (
     AssistantMessage,
     CallLedger,
@@ -85,7 +95,7 @@ ALL = {
 def plugins(home: Home, vault: Vault, tmp_path: Path) -> Plugins:
     database = Database(home.database_file)
     migrate(database, SCHEMAS)
-    return Plugins(home, database, vault, bundled_folder=tmp_path / "bundled")
+    return Plugins(home, database, vault, official_folder=tmp_path / "bundled")
 
 
 def _on(plugins: Plugins, name: str = "echo") -> None:
@@ -363,6 +373,58 @@ def test_a_plugin_writes_to_a_conversation_and_a_turn_answers_it(
     assert ended == ["sent: True", "Great, the video is ready."]
     last = fake.bodies(CHAT)[0]["messages"][-1]["content"]
     assert "[From the plugin echo]\nThe render is done." in str(last)
+
+
+LIMITS_CODE = """
+from atlas.plugins.sdk import PluginContext
+
+
+def register(ctx: PluginContext) -> None:
+    async def limits(arguments, host):
+        return repr(ctx.memory_limits())
+
+    ctx.register_command("limits", limits, "The memory's limits.")
+"""
+
+
+def test_a_plugin_reads_the_memorys_limits_as_they_change_and_none_without_atlas(
+    plugins: Plugins,
+    home: Home,
+    vault: Vault,
+    fake: FakeModelServer,
+    connect: Connect,
+    tmp_path: Path,
+) -> None:
+    _plugin(home.plugins_folder, {"api": 26, "commands": ["limits"]}, LIMITS_CODE)
+    _on(plugins)
+    assistant, _ = _assistant(home, vault, fake, connect, tmp_path)
+    assistant.bots.create("finance", body="Keep the bills paid.")
+    assistant.memory.change(Target.USER, [Operation(Action.ADD, "Name: Ana")])
+    fake.reply(FakeReply(text="Paid."))
+
+    async def scenario() -> list[str]:
+        parts = await plugins.parts()
+        [limits] = parts.commands
+        said = [await limits.run("", _Host())]
+        plugins.host = AssistantPluginHost(assistant)
+        said.append(await limits.run("", _Host()))
+        changed = MemorySettings(user_limit=600, memory_limit=4_000)
+        assistant.use_settings(replace(assistant.settings, memory=changed))
+        said.append(await limits.run("", _Host()))
+        conversation = assistant.conversation(assistant.bot_conversation("finance"))
+        conversation.send("Is the rent paid?")
+        await conversation.wait()
+        await assistant.close()
+        await plugins.stop()
+        return said
+
+    assert asyncio.run(scenario()) == [
+        "None",
+        "MemoryLimits(user=1375, memory=2200)",
+        "MemoryLimits(user=600, memory=4000)",
+    ]
+    system = str(fake.bodies(CHAT)[0]["messages"][0]["content"])
+    assert "9/600 chars" in system, "a bot's stores follow the home's limits"
 
 
 # -- the terminal --------------------------------------------------------------------------------

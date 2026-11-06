@@ -69,11 +69,12 @@ atlas server token [--new]
 Print the connection code another machine's app opens this home with. A secret: it holds the token.
 
 ```
-atlas server code [--port PORT]
+atlas server code [--relay] [--port PORT]
 ```
 
 | Argument | What it does |
 |---|---|
+| `--relay` | Also through the relay set as [relay] url (step 20): the app reaches the home from anywhere, with no port open, and only it and the home read what crosses. |
 | `--port PORT` | The port clients reach, when the home is not always on (a container: default 18790, or ATLAS_SERVER_PORT). |
 
 ## `atlas always-on`
@@ -250,7 +251,7 @@ atlas routines list
 Make a routine that runs a prompt, or a command, on a schedule.
 
 ```
-atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHELL_COMMAND] [--model MODEL] [--bot NAME]
+atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHELL_COMMAND] [--model MODEL] [--bot NAME] [--probe COMMAND] [--executor NAME] [--folder FOLDER] [--auto] [--workspace] [--draft]
 ```
 
 | Argument | What it does |
@@ -261,6 +262,12 @@ atlas routines create name --schedule SCHEDULE [--prompt PROMPT] [--command SHEL
 | `--command SHELL_COMMAND` | A command in the system's shell; its output is what you get. |
 | `--model MODEL` | Pin a model, provider/model (openai/gpt-6-sol); unset, the settings'. |
 | `--bot NAME` | The bot the prompt runs as; its result enters the bot's fixed conversation. |
+| `--probe COMMAND` | With --prompt and a schedule that repeats: a command run first, with no model; the prompt runs only when it prints something new, which the prompt receives. |
+| `--executor NAME` | With --prompt and --folder: the outside executor that runs the prompt there, as a session of its own each run (claude-code, codex...). |
+| `--folder FOLDER` | The folder the executor works in. |
+| `--auto` | Run the executor in its automatic mode; otherwise its first question stops a run. |
+| `--workspace` | Each run in a new workspace of the folder, archived when it changed nothing. |
+| `--draft` | With --workspace: open a draft pull request of what a run changed (GitHub plugin). |
 
 One of `--prompt` or `--command` is required.
 
@@ -728,13 +735,14 @@ The marketplace: skills, MCP servers, plugins and executors made for Atlas, each
 What the marketplace offers, what Atlas ships, and what came from it.
 
 ```
-atlas marketplace list [--kind KIND] [--refresh]
+atlas marketplace list [--kind KIND] [--refresh] [--search TEXT]
 ```
 
 | Argument | What it does |
 |---|---|
 | `--kind KIND` |  |
 | `--refresh` | Read the marketplace now. |
+| `--search TEXT` | Search the outside catalogs (the MCP Registry) for TEXT too. |
 
 ### `atlas marketplace show`
 
@@ -790,7 +798,7 @@ atlas marketplace remove name
 Check item files as the marketplace's CI does: each by its rules, its code fetched at its commit.
 
 ```
-atlas marketplace check [items ...] [--root ROOT] [--load]
+atlas marketplace check [items ...] [--root ROOT] [--load] [--base BASE]
 ```
 
 | Argument | What it does |
@@ -798,6 +806,19 @@ atlas marketplace check [items ...] [--root ROOT] [--load]
 | `[items ...]` | Item files; by default every one in the folder's items. |
 | `--root ROOT` | The marketplace's folder; by default this one. |
 | `--load` | Also load each plugin's Python, in a home thrown away after: only where foreign code may run, as the marketplace's CI. |
+| `--base BASE` | The marketplace as it is on its branch: refuse what only its owner changes (an official mark, removed.yaml, outside.yaml), for a pull request of someone else. |
+
+### `atlas marketplace outside`
+
+Check every plugin of Claude Code's directory as Atlas reads one, running none, and write what does not work in Atlas, as the marketplace's nightly check does.
+
+```
+atlas marketplace outside [--out OUT]
+```
+
+| Argument | What it does |
+|---|---|
+| `--out OUT` | Write outside.yaml here; by default, print it. |
 
 ## `atlas pairing`
 

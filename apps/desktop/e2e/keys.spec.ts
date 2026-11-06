@@ -11,15 +11,16 @@ test.afterEach(async () => {
   desktop = undefined
 })
 
-test('a first run opens on the key screen: a refused key stays out, a good one starts the conversation', async () => {
+test('a first run opens on its Model step: a refused key stays out, a good one goes on to the steps after it', async () => {
   desktop = await launch({ openRouterKey: 'sk-or-v1-good' })
   const { model, page } = desktop
-  await expect(page.getByTestId('key-screen')).toBeVisible()
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'model')
 
-  // "Choose later" leaves a band that leads back.
-  await page.getByTestId('key-later').click()
-  await expect(page.getByTestId('key-screen')).toBeHidden()
+  // "Go to Atlas" with no key leaves a band that leads back.
+  await page.getByTestId('first-run-leave').click()
+  await expect(page.getByTestId('first-run')).toBeHidden()
   await page.getByTestId('key-band-connect').click()
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'model')
 
   await page.getByTestId('key-provider-openrouter').getByRole('radio').click()
   const field = page.getByTestId('key-input')
@@ -29,7 +30,12 @@ test('a first run opens on the key screen: a refused key stays out, a good one s
 
   await field.fill('  sk-or-v1-good  ')
   await page.getByTestId('key-connect').click()
-  await expect(page.getByTestId('key-screen')).toBeHidden()
+  // The key stored, the steps after it follow, and the whole is left at any point.
+  await page.getByTestId('first-run-continue').click()
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'executors')
+  await expect(page.getByTestId('first-run-step-model')).toHaveAttribute('data-mark', 'done')
+  await page.getByTestId('first-run-leave').click()
+  await expect(page.getByTestId('first-run')).toBeHidden()
   await expect(page.getByTestId('key-band')).toBeHidden()
 
   await model.reply({ text: 'Connected and answering.' })

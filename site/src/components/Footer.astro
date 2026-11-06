@@ -1,42 +1,50 @@
 ---
 import { REPOSITORY } from '../../site.config.mjs'
 import Mark from '../assets/atlas-mark.svg'
+import { type Lang, localized, WORDS } from '../lib/i18n'
 
+interface Props {
+  lang?: Lang
+}
+
+const { lang = 'en' } = Astro.props
+const words = WORDS[lang].footer
+const at = (path: string) => localized(path, lang)
 const columns = [
   {
-    title: 'Atlas',
+    title: words.atlas,
     links: [
-      { href: '/#install', label: 'Install' },
-      { href: '/docs/', label: 'Documentation' },
-      { href: '/changelog/', label: 'Changelog' },
-      { href: '/news/', label: 'News' }
+      { href: `${at('/')}#install`, label: words.install },
+      { href: at('/docs/'), label: words.documentation },
+      { href: '/changelog/', label: WORDS[lang].nav.changelog },
+      { href: '/news/', label: WORDS[lang].nav.news }
     ]
   },
   {
-    title: 'Guides',
+    title: words.guides,
     links: [
-      { href: '/docs/guides/coding-agents/', label: 'Coding agents and accounts' },
-      { href: '/docs/guides/machines/', label: 'Several machines' },
-      { href: '/docs/guides/models/', label: 'Models and keys' },
-      { href: '/docs/troubleshooting/', label: 'Troubleshooting' }
+      { href: at('/docs/guides/coding-agents/'), label: words.codingAgents },
+      { href: at('/docs/guides/machines/'), label: words.machines },
+      { href: at('/docs/guides/models/'), label: words.models },
+      { href: at('/docs/troubleshooting/'), label: words.troubleshooting }
     ]
   },
   {
-    title: 'Open source',
+    title: words.openSource,
     links: [
       { href: REPOSITORY, label: 'GitHub' },
-      { href: `${REPOSITORY}/issues`, label: 'Issues' },
-      { href: '/docs/extending/plugins/', label: 'Write a plugin' },
-      { href: `${REPOSITORY}/blob/main/LICENSE`, label: 'MIT license' }
+      { href: `${REPOSITORY}/issues`, label: words.issues },
+      { href: at('/docs/extending/plugins/'), label: words.writePlugin },
+      { href: `${REPOSITORY}/blob/main/LICENSE`, label: words.license }
     ]
   },
   {
-    title: 'For agents',
+    title: words.forAgents,
     links: [
       { href: '/llms.txt', label: 'llms.txt' },
       { href: '/llms-full.txt', label: 'llms-full.txt' },
-      { href: '/index.md', label: 'This site in Markdown' },
-      { href: '/changelog/rss.xml', label: 'Changelog feed' }
+      { href: lang === 'en' ? '/index.md' : '/pt-br/index.md', label: words.markdown },
+      { href: '/changelog/rss.xml', label: words.changelogFeed }
     ]
   }
 ]
@@ -49,18 +57,16 @@ const columns = [
   </div>
   <div class="page footer-grid">
     <div class="footer-brand">
-      <a class="footer-home" href="/" aria-label="Atlas, home">
+      <a class="footer-home" href={at('/')} aria-label={WORDS[lang].home}>
         <Mark class="footer-mark" aria-hidden="true" />
       </a>
-      <p class="footer-line">Every coding agent. Every account. One window.</p>
-      <p>
-        Free and open source under the MIT license. No account, no telemetry: what Atlas learns stays on your machine.
-      </p>
-      <a class="button button--solid footer-install" href="/#install">
-        Install Atlas
+      <p class="footer-line">{words.line}</p>
+      <p>{words.blurb}</p>
+      <a class="button button--solid footer-install" href={`${at('/')}#install`}>
+        {words.installAtlas}
       </a>
     </div>
-    <nav class="footer-links" aria-label="Footer">
+    <nav class="footer-links" aria-label={words.label}>
       {columns.map(column => (
         <div>
           <p class="footer-title">{column.title}</p>
@@ -76,8 +82,8 @@ const columns = [
     </nav>
   </div>
   <div class="page footer-base">
-    <p>Atlas is not affiliated with Anthropic, OpenAI, Google or DeepSeek. Their products’ names belong to them.</p>
-    <p>Set in Mona Sans and Martian Mono, under the SIL Open Font License.</p>
+    <p>{words.affiliation}</p>
+    <p>{words.fonts}</p>
   </div>
 </footer>
 

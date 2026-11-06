@@ -14,6 +14,13 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Atlas',
+      // English at /docs/, and Portuguese at /pt-br/docs/ for the pages translated so far
+      // (src/translations/pt-br/); the others show there in English, with Starlight's notice.
+      defaultLocale: 'root',
+      locales: {
+        root: { label: 'English', lang: 'en' },
+        'pt-br': { label: 'Português', lang: 'pt-BR' }
+      },
       description:
         'The documentation of Atlas, the open-source desktop app that runs Claude Code, Codex, the Gemini CLI and DeepSeek on every account and machine.',
       logo: { src: './src/assets/atlas-mark.svg', alt: 'Atlas' },

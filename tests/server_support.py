@@ -18,11 +18,15 @@ from websockets.sync.client import ClientConnection, connect
 
 from atlas.__main__ import SCHEMAS
 from atlas.home import Home, Settings
+from atlas.instances import RelayRoom
 from atlas.models import Models
 from atlas.secrets import Vault
 from atlas.server import PROTOCOL, TOKEN_PREFIX, Gateway, create_app
 
 TOKEN = "test-token-0123456789"
+# How long a test waits for a frame, the server or a client. Only a failing test waits it out, and
+# the tests share the machine's cores with each other.
+WAIT = 30.0
 
 
 class AtlasServer:
@@ -32,10 +36,11 @@ class AtlasServer:
         settings: Settings,
         models: Models,
         vault: Vault,
+        relay: RelayRoom | None = None,
         **gateway: Any,
     ) -> None:
         self.gateway = Gateway(home, settings, models, vault, schemas=SCHEMAS, **gateway)
-        app = create_app(self.gateway, token=TOKEN, bound_host="127.0.0.1")
+        app = create_app(self.gateway, token=TOKEN, bound_host="127.0.0.1", relay=relay)
         config = uvicorn.Config(
             app, host="127.0.0.1", port=0, log_config=None, log_level=None, access_log=False
         )
@@ -45,7 +50,7 @@ class AtlasServer:
 
     def __enter__(self) -> "AtlasServer":
         self._thread.start()
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + WAIT
         while not self._server.started:
             if time.monotonic() > deadline or not self._thread.is_alive():
                 raise RuntimeError("The Atlas server did not start.")
@@ -77,7 +82,7 @@ class Client:
         self.socket = socket
         self._next_id = 0
         self._kept: deque[dict[str, Any]] = deque()
-        self.ready = self._read(10)
+        self.ready = self._read(WAIT)
         assert self.ready["params"]["type"] == "server.ready"
 
     def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -95,19 +100,19 @@ class Client:
     def send(self, frame: dict[str, Any]) -> None:
         self.socket.send(json.dumps(frame))
 
-    def event(self, kind: str, timeout: float = 10) -> dict[str, Any]:
+    def event(self, kind: str, timeout: float = WAIT) -> dict[str, Any]:
         """The next event of a kind, its `params`; earlier frames of other kinds stay kept."""
         frame = self._take(
             lambda f: f.get("method") == "event" and f["params"]["type"] == kind, timeout
         )
         return frame["params"]
 
-    def request(self, method: str, timeout: float = 10) -> dict[str, Any]:
+    def request(self, method: str, timeout: float = WAIT) -> dict[str, Any]:
         """The next server request of a method: its whole frame."""
         return self._take(lambda f: f.get("method") == method and "id" in f, timeout)
 
     def next_frame(
-        self, wanted: Callable[[dict[str, Any]], bool], timeout: float = 10
+        self, wanted: Callable[[dict[str, Any]], bool], timeout: float = WAIT
     ) -> dict[str, Any]:
         """The next frame `wanted` accepts, whatever it is; the others stay kept."""
         return self._take(wanted, timeout)
@@ -115,7 +120,7 @@ class Client:
     def answer(self, request_id: str, result: dict[str, Any]) -> None:
         self.send({"jsonrpc": "2.0", "id": request_id, "result": result})
 
-    def events_until(self, kind: str, timeout: float = 10) -> list[dict[str, Any]]:
+    def events_until(self, kind: str, timeout: float = WAIT) -> list[dict[str, Any]]:
         """Every event of a conversation up to and including the next of a kind, in order; the
         lists' `conversations.changed`, which every client hears, stays kept for `event`."""
         seen: list[dict[str, Any]] = []
@@ -138,7 +143,7 @@ class Client:
                 return frame
         return None
 
-    def _take(self, wanted: Any, timeout: float = 10) -> dict[str, Any]:
+    def _take(self, wanted: Any, timeout: float = WAIT) -> dict[str, Any]:
         for frame in list(self._kept):
             if wanted(frame):
                 self._kept.remove(frame)

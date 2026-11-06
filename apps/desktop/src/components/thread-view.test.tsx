@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { t } from '@/i18n'
 import type { Item } from '@/store/thread'
 
+import { $modelMenu } from './model-picker'
 import { ThreadView } from './thread-view'
 import { clampForDisplay, inputFields, MAX_SHOWN_CHARS, type Shown, toolTitle } from './tool-row'
 
@@ -426,7 +427,9 @@ describe('a turn that failed (the UI review, 25/10/2026)', () => {
     fireEvent.click(screen.getByTestId('turn-connect-key'))
     expect($settings.get()).toBe(true)
     expect($settingsSection.get()).toBe('model')
-    expect(screen.getByTestId('turn-change-model')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('turn-change-model'))
+    expect($modelMenu.get()).toBe(true)
+    $modelMenu.set(false)
     $settings.set(false)
   })
 

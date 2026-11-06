@@ -73,6 +73,24 @@ def test_what_the_web_says_reaches_the_model_as_outside_text() -> None:
     assert refused.startswith("[Atlas:")  # Atlas's own notices are not wrapped
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data/",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "http://[::ffff:169.254.169.254]/",
+        "http://localhost.:1/x",
+    ],
+)
+def test_a_cloud_computer_s_metadata_address_is_never_read(url: str) -> None:
+    """Step 20: by name, by number, or by a name that resolves into the link-local range."""
+    said = _raw(WebFetch().tool(), url=url)
+    if "localhost" in url:
+        assert "metadata" not in said, "loopback is not metadata"
+        return
+    assert said == "[Atlas: Blocked: URL targets a cloud metadata endpoint.]"
+
+
 # -- web_search ----------------------------------------------------------------------------------
 
 

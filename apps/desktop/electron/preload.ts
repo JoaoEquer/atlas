@@ -39,6 +39,10 @@ contextBridge.exposeInMainWorld('atlas', {
       }
     }
   },
+  /** The colors of the window's own buttons, which Windows draws over the tab strip's corner. */
+  titleBar: (color: string, symbolColor: string): void => {
+    ipcRenderer.send('atlas:title-bar', color, symbolColor)
+  },
   /** A folder, from the system's open dialog: where a new executor session works (step 16f). */
   chooseFolder: (): Promise<null | string> => ipcRenderer.invoke('atlas:choose-folder'),
   /** A home's server, started if needed; `null` is the home that opens first. */
@@ -87,6 +91,8 @@ contextBridge.exposeInMainWorld('atlas', {
   },
   /** A session's folder opened in VS Code; `''` once handed over, else why not. */
   openInEditor: (folder: string): Promise<string> => ipcRenderer.invoke('atlas:open-in-editor', folder),
+  /** A session's folder opened in the system's file manager; `''` once opened, else why not. */
+  openFolder: (folder: string): Promise<string> => ipcRenderer.invoke('atlas:open-folder', folder),
   /** Stop a home's server; the window lets one go when a fourth opens. */
   release: (home: null | string): Promise<void> => ipcRenderer.invoke('atlas:release', home),
   /** Open this home first next time (the last home). */

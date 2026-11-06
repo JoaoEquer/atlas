@@ -33,12 +33,14 @@ import secrets
 import shutil
 import tempfile
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, cast
+
+import httpx2
 
 from atlas import __version__
 from atlas.agent import (
@@ -63,11 +65,12 @@ from atlas.assistant import (
     Decides,
     ExecutorUsage,
     FileSent,
+    GitState,
     InstanceActivity,
     InstanceChanged,
+    InstanceState,
     PreviewAsked,
     Reviewed,
-    RouteView,
     RoutineRunner,
     SubagentChanged,
     Titled,
@@ -75,6 +78,7 @@ from atlas.assistant import (
     TurnStopped,
     WorkbenchEvent,
     account_name,
+    other_accounts,
 )
 from atlas.bots import Bot, BotError
 from atlas.browser import ENGINE
@@ -89,14 +93,18 @@ from atlas.conversations import (
     StoredMessage,
 )
 from atlas.home import (
+    BACKUP_PREFIX,
+    TRANSCRIPTIONS,
     Database,
     Home,
     HomeError,
+    MemorySettings,
     PictureError,
     Schema,
     Settings,
     SettingsError,
     TrustSettings,
+    backup_name,
     check_backup,
     create_home,
     edit_settings,
@@ -107,6 +115,7 @@ from atlas.home import (
     home_root,
     import_backup,
     list_homes,
+    prune_backups,
     read_picture,
     suggest_home_name,
     utc_now,
@@ -124,11 +133,21 @@ from atlas.installation import (
     compose_log,
     compose_progress,
 )
-from atlas.jobs import JobsError, RouteTarget, Routine, Run, RunStatus, Scheduler
+from atlas.jobs import (
+    AccountStore,
+    DelegationError,
+    JobsError,
+    Routine,
+    RoutineExecutor,
+    Run,
+    RunStatus,
+    Scheduler,
+)
 from atlas.marketplace import Kind as MarketKind
-from atlas.marketplace import Marketplace, MarketplaceError, MarketplaceStore
+from atlas.marketplace import Marketplace, MarketplaceError, MarketplaceStore, outside_sources
 from atlas.marketplace import Page as MarketPage
 from atlas.marketplace import Row as MarketRow
+from atlas.marketplace import fetch as market_fetch
 from atlas.memory import FILES as MEMORY_FILES
 from atlas.memory import Action, OpenProposal, Operation, Target, apply, size
 from atlas.models import (
@@ -152,10 +171,14 @@ from atlas.plugins import (
     ExecutorError,
     LoadedCall,
     LoadedExecutor,
+    LoadedReader,
     Pairing,
     PluginError,
     Plugins,
     PluginView,
+    UpdateSource,
+    official_plugins,
+    refresh_official,
 )
 from atlas.plugins import Permission as ExecutorPermission
 from atlas.plugins import Question as ExecutorQuestion
@@ -179,6 +202,7 @@ from atlas.server.protocol import (
     AccountRow,
     AccountsChanged,
     AccountSwitchRow,
+    Activity,
     ApprovalParams,
     ApprovalResult,
     Archived,
@@ -203,6 +227,8 @@ from atlas.server.protocol import (
     BotRow,
     BotsChanged,
     CallRow,
+    CheckpointList,
+    CheckpointRow,
     CommandCheck,
     CommandList,
     CommandOutput,
@@ -219,21 +245,24 @@ from atlas.server.protocol import (
     ConversationRow,
     ConversationsChanged,
     Created,
+    DictationAudio,
+    DictationList,
+    DictationRef,
+    DictationRow,
+    DictationWrite,
+    DiffFileRow,
+    DiffLineRow,
     Empty,
     Events,
     EventsParams,
     ExecutorAccountParams,
-    ExecutorAccountRef,
     ExecutorAccounts,
-    ExecutorAddAccountParams,
     ExecutorApprovalParams,
     ExecutorApprovalResult,
     ExecutorChoiceRow,
     ExecutorCommandsParams,
     ExecutorConnector,
     ExecutorConnectors,
-    ExecutorFailoverParams,
-    ExecutorFolderAccountParams,
     ExecutorList,
     ExecutorModel,
     ExecutorModels,
@@ -242,7 +271,10 @@ from atlas.server.protocol import (
     ExecutorQuestionRow,
     ExecutorRef,
     ExecutorRow,
+    ExecutorUpdated,
     ExecutorUsageRow,
+    FolderGit,
+    FolderRef,
     HomeBackupParams,
     HomeCreateParams,
     HomeImportParams,
@@ -303,6 +335,8 @@ from atlas.server.protocol import (
     PreviewPayload,
     PreviewRead,
     PreviewReadParams,
+    ProjectRow,
+    ProjectSettings,
     ProposalApproved,
     ProposalChange,
     ProposalCount,
@@ -320,16 +354,18 @@ from atlas.server.protocol import (
     RenameParams,
     RequestCancel,
     ReviewSummary,
-    RouteStopRow,
+    RoutineExecutorRow,
     RoutineFinished,
     RoutineList,
     RoutineRef,
     RoutineRemoved,
     RoutineRow,
+    RoutineSave,
     RoutinesChanged,
     RunList,
     RunRow,
     Said,
+    ScoreboardRow,
     SearchHit,
     SearchParams,
     SearchResults,
@@ -337,6 +373,7 @@ from atlas.server.protocol import (
     SecretResult,
     SendParams,
     SendResult,
+    SessionContext,
     SessionDeleteParams,
     SessionFolderList,
     SessionFolderRow,
@@ -344,7 +381,6 @@ from atlas.server.protocol import (
     SessionListParams,
     SessionRead,
     SessionReadParams,
-    SessionRouteRow,
     SessionRow,
     SettingRow,
     SettingsList,
@@ -355,6 +391,7 @@ from atlas.server.protocol import (
     SlashCommandRow,
     Soul,
     SoulText,
+    SpeechState,
     StatusUpdate,
     SubagentControl,
     SubagentDecidesParams,
@@ -389,17 +426,33 @@ from atlas.server.protocol import (
     WorkbenchFolderParams,
     WorkbenchList,
     WorkbenchModelParams,
+    WorkbenchModeParams,
     WorkbenchPrompted,
     WorkbenchPromptParams,
-    WorkbenchRouteParams,
     WorkbenchStartParams,
     WorkbenchSwitchParams,
     WorkbenchUseAccountParams,
+    WorkspaceCommit,
+    WorkspaceCreate,
+    WorkspaceDelete,
+    WorkspaceDiff,
+    WorkspaceList,
+    WorkspaceListParams,
+    WorkspacePushed,
+    WorkspaceRef,
+    WorkspaceRestore,
+    WorkspaceRow,
+    WorktreeParams,
     dump,
     read,
 )
 from atlas.server.replay import Replay
-from atlas.skills import SkillLibrary, SkillUsage, changed, read_manifest
+from atlas.server.updates import LOOK_SECONDS, Newest, UpdateError, newer, newest
+from atlas.server.updates import command as update_command
+from atlas.server.updates import run as run_update
+from atlas.server.updates import shown as shown_command
+from atlas.skills import SkillLibrary, SkillUsage, changed, read_manifest, retire_bundled
+from atlas.speech import Dictation, Dictations, ModelStore, Speech, SpeechError
 from atlas.terminals import TerminalError, Terminals
 from atlas.tools import (
     SECRET_REQUEST_SECONDS,
@@ -413,6 +466,7 @@ from atlas.tools import (
     SecretOutcome,
     SecretRequest,
 )
+from atlas.tools import Connection as OfferedConnection
 from atlas.trust import (
     ApprovalAnswer,
     ApprovalRequest,
@@ -422,6 +476,7 @@ from atlas.trust import (
     detect_hardline_command,
 )
 from atlas.trust import Outcome as ApprovalOutcome
+from atlas.workspaces import Project, Workspace, WorkspaceError, Workspaces, WorkspaceState
 
 #: How long ask_user's questions wait for an answer.
 ASK_SECONDS = 300
@@ -446,6 +501,19 @@ PREVIEW_CHARS = 120
 _THREADS_TABLE = "conversations_threads"
 #: How long after the host's update ended a server that starts still tells its clients.
 UPDATE_NEWS_SECONDS = 600.0
+#: The plugin that keeps the harnesses' other accounts (step 22), its own file in its data folder,
+#: and the one an update leaves there with what Atlas kept before.
+ACCOUNTS_PLUGIN = "accounts"
+ACCOUNTS_BOOK = "accounts.json"
+ACCOUNTS_FROM_ATLAS = "from-atlas.json"
+#: The voice plugin, and the file in its data folder that says its provider was kept for writing
+#: down recordings (step 26).
+VOICE_PLUGIN = "voice"
+VOICE_MOVED = "transcription-moved"
+#: Where the voice plugin kept the dictations before step 26, in its data folder.
+VOICE_DICTATIONS = "dictations"
+#: The longest dictation a client may send, in bytes: a few minutes of speech.
+DICTATION_BYTES = 10 * 1024 * 1024
 
 _logger = logging.getLogger("atlas.server")
 
@@ -491,8 +559,19 @@ class Gateway:
         terminals: Terminals | None = None,
         environ: Mapping[str, str] | None = None,
         host_updater: HostChannel | None = None,
+        update_transport: httpx2.AsyncBaseTransport | None = None,
+        speech: Speech | None = None,
     ) -> None:
         self.replay = Replay()
+        #: Where each executor's newest version is published and how its install updates, as
+        #: its plugin says; the newest version of each, read at most once a day; the transport
+        #: those reads take (a test's own).
+        self._update_sources: dict[str, UpdateSource] = {}
+        self._newest = Newest()
+        self._update_transport = update_transport
+        self._looking: asyncio.Task[None] | None = None
+        #: The executors updating now, at the user's click.
+        self._updating: set[str] = set()
         #: The way to a Compose host's updater, for the update button of a remote app; `None` on
         #: a native installation, whose app updates it on its own machine.
         self._host_updater = host_updater
@@ -520,6 +599,8 @@ class Gateway:
         self._plugin_watch: asyncio.Task[None] | None = None
         self._ask_seconds = ask_seconds
         self._connections: set[Connection] = set()
+        #: The last moment the home was seen working or with a client (step 20).
+        self._idle_since: datetime | None = None
         #: The MCP servers as the clients were last told, so `mcp.changed` says only a change.
         self._mcp_shown = McpList([], None)
         self._requests: dict[str, _Pending] = {}
@@ -546,8 +627,32 @@ class Gateway:
             browser_engine=browser_engine,
             clock=clock,
         )
+        #: Writing down recordings (step 26), the model at the root for every home: Atlas's own
+        #: reader of audio, on every channel.
+        self.speech = speech or Speech(
+            ModelStore(Home(home_root(home.root)).speech_folder),
+            lambda: self.assistant.settings.voice.transcription,
+            vault.get,
+            address=self._provider_address,
+        )
+        self.speech.on_changed = self._speech_changed
+        #: The home's workspaces (step 21), each a worktree on a branch of its own.
+        self.workspaces = Workspaces(
+            home.worktrees_folder, Database(home.database_file), clock=clock
+        )
+        #: The setup scripts running, kept so none is collected before it ends.
+        self._preparing: set[asyncio.Task[None]] = set()
+        #: What the user dictated in this home (step 26), each recording with its words.
+        self.dictations = Dictations(home.dictations_folder)
+        self.assistant.use_reader(LoadedReader("atlas", "audio", self.speech.transcribe))
+        self.assistant.use_workspaces(_TaskWorkspaces(self))
+        #: Housekeeping's rounds, so the connections are read every few.
+        self._houses = 0
+        #: Whether each offered connection was logged in when its plugin's status was last read.
+        self._logged_in: dict[str, bool] = {}
+        self.assistant.use_connections(self.connections)
         self.plugins = Plugins(home, Database(home.database_file), vault, clock=clock)
-        self.plugins.host = AssistantPluginHost(self.assistant)
+        self.plugins.host = AssistantPluginHost(self.assistant, self._told_accounts_changed)
         #: The marketplace (step 16s), installing into this home.
         self.marketplace = Marketplace(
             home,
@@ -556,6 +661,7 @@ class Gateway:
             SkillLibrary(home.skills_folder, SkillUsage(Database(home.database_file))),
             stored=self._stored_names,
             clock=clock,
+            sources=outside_sources(settings.marketplace, market_fetch, home.marketplace_folder),
         )
         #: `mcp.json` as last seen (step 16s): read again once it changes, by the marketplace or
         #: by hand.
@@ -578,6 +684,10 @@ class Gateway:
         #: Each row of an executor on another account (step 16h): its executor, the account's
         #: id and nickname.
         self._account_rows: dict[str, tuple[str, str, str]] = {}
+        #: The other accounts went to their plugin in this run, or there were none (step 22).
+        self._accounts_moved = False
+        #: What the accounts plugin's changes start, told to the screens in the background.
+        self._accounts_telling: set[asyncio.Task[None]] = set()
         #: The executors found of the plugins Atlas ships that are off: the onboarding offers them.
         self._offered: set[str] = set()
         self._executor_plugins: set[str] = set()
@@ -640,6 +750,27 @@ class Gateway:
             "soul.read": self._soul,
             "soul.write": self._soul_write,
             "settings.read": self._settings_read,
+            "speech.status": self._speech_status,
+            "speech.download": self._speech_download,
+            "speech.decline": self._speech_decline,
+            "workspace.list": self._workspace_list,
+            "workspace.create": self._workspace_create,
+            "workspace.archive": self._workspace_archive,
+            "workspace.unarchive": self._workspace_unarchive,
+            "workspace.delete": self._workspace_delete,
+            "workspace.diff": self._workspace_diff,
+            "workspace.checkpoints": self._workspace_checkpoints,
+            "workspace.restore": self._workspace_restore,
+            "workspace.commit": self._workspace_commit,
+            "workspace.merge": self._workspace_merge,
+            "workspace.push": self._workspace_push,
+            "workspace.project": self._workspace_project,
+            "workspace.set_project": self._workspace_set_project,
+            "dictation.write": self._dictation_write,
+            "dictation.list": self._dictation_list,
+            "dictation.audio": self._dictation_audio,
+            "dictation.again": self._dictation_again,
+            "dictation.delete": self._dictation_delete,
             "settings.write": self._settings_write,
             "memory.entries": self._memory_entries,
             "memory.edit": self._memory_edit,
@@ -664,6 +795,8 @@ class Gateway:
             "bot.delete": self._bot_delete,
             "bot.options": self._bot_options,
             "routine.list": self._routines,
+            "server.activity": self._activity,
+            "routine.save": self._routine_save,
             "routine.runs": self._routine_runs,
             "routine.run": self._routine_run,
             "routine.pause": self._routine_pause,
@@ -680,17 +813,20 @@ class Gateway:
             "workbench.start": self._workbench_start,
             "workbench.prompt": self._workbench_prompt,
             "workbench.auto": self._workbench_auto,
+            "workbench.mode": self._workbench_mode,
+            "workbench.git": self._workbench_git,
+            "workbench.worktree": self._workbench_worktree,
+            "workbench.context": self._workbench_context,
             "workbench.model": self._workbench_model,
             "workbench.atlas_answers": self._workbench_atlas_answers,
             "workbench.duplicate": self._workbench_duplicate,
             "workbench.folder": self._workbench_folder,
             "workbench.account": self._workbench_account,
             "workbench.use_account": self._workbench_use_account,
-            "workbench.route": self._workbench_route,
-            "workbench.set_route": self._workbench_set_route,
             "workbench.account_switch": self._workbench_account_switch,
             "workbench.stop": self._workbench_stop,
             "executor.detect": self._executor_detect,
+            "executor.update": self._executor_update,
             "executor.folders": self._executor_folders,
             "executor.sessions": self._executor_sessions,
             "executor.models": self._executor_models,
@@ -699,19 +835,17 @@ class Gateway:
             "executor.commands": self._executor_commands,
             "executor.account": self._executor_account,
             "executor.accounts": self._executor_accounts,
-            "executor.add_account": self._executor_add_account,
-            "executor.remove_account": self._executor_remove_account,
-            "executor.folder_account": self._executor_folder_account,
-            "executor.failover": self._executor_failover,
             "executor.delete_session": self._executor_delete_session,
             "executor.session": self._executor_session,
             "subagent.session": self._subagent_session,
         }
+        runner = RoutineRunner(self.assistant)
         self.scheduler = Scheduler(
             self.assistant.routines,
-            RoutineRunner(self.assistant),
+            runner,
             clock=clock,
             on_finished=self._routine_finished,
+            prober=runner,
         )
 
     @property
@@ -728,6 +862,13 @@ class Gateway:
         if abandoned:
             _logger.warning("Runs a previous Atlas left running are now unknown: %d.", abandoned)
         self._housekeeping = asyncio.create_task(self._keep_house())
+        # Atlas's own plugins come to this version first, and those used before step 26, when
+        # Atlas shipped them inside itself, are installed (atlas.plugins.official).
+        refreshed = await asyncio.to_thread(refresh_official, self.plugins)
+        if refreshed:
+            _logger.info("Atlas's own plugins were put in place: %s.", ", ".join(refreshed))
+        await asyncio.to_thread(self._skills_to_plugins)
+        await asyncio.to_thread(self._voice_to_speech)
         # In the background: a plugin may take its deadline to load, and the clients need not wait.
         self._channels_start = asyncio.create_task(self.channels.reconcile())
         self._plugins_start = asyncio.create_task(self.load_plugins())
@@ -763,14 +904,16 @@ class Gateway:
                 servers,
                 hooks,
                 commands=commands_folders,
-                programs=programs,
+                programs=[*parts.programs, *programs],
                 agents=agents,
                 monitors=monitors,
                 slash=parts.commands,
                 readers=parts.readers,
+                probes=parts.probes,
             )
             self._calls = {(call.plugin, call.name): call for call in parts.calls}
             self._plugin_providers(await asyncio.to_thread(self.plugins.providers))
+        await self.read_connections()
 
     async def reload_plugins(self, names: Iterable[str] | None = None) -> None:
         """Load the plugins again from their files (step 16n): those named, whose files changed,
@@ -837,25 +980,41 @@ class Gateway:
         asks (`executor.detect`). The executors of the plugins Atlas ships that are off are
         looked at too, for the onboarding to offer."""
         if self._fixed_executors:
-            # Given here (a test, a proof): they stay as given, and are looked at all the same.
+            # Given here (a test, a proof): they stay as given, and are looked at all the same,
+            # with the other accounts of the plugin that brings them.
             async with self._executors_lock:
+                await asyncio.to_thread(self._move_accounts)
+                accounts = await self.plugins.accounts()
+                self.assistant.set_accounts(None if accounts is None else accounts.accounts)
                 for name in self.assistant.executors():
                     given = self.assistant.executor(name)
                     if given is not None:
                         self.detections[name] = await self._look(given)
                         self._executor_names[name] = ("", given.title)
                         self.detections.update(await self._account_detections(name, given))
+                        source = _update_source(given)
+                        if source is not None:
+                            self._update_sources[name] = source
+            self._look_for_updates()
             return
         async with self._executors_lock:
             found: dict[str, Executor] = {}
             detections: dict[str, Detection] = {}
             plugins: set[str] = set()
             offered: set[str] = set()
+            sources: dict[str, UpdateSource] = {}
             self._executors_seen = await asyncio.to_thread(_executor_states, self.plugins)
+            # The other accounts first: the executors on them are rows of their own (step 22).
+            await asyncio.to_thread(self._move_accounts)
+            accounts = await self.plugins.accounts()
+            self.assistant.set_accounts(None if accounts is None else accounts.accounts)
             for loaded in await self.plugins.executors():
                 executor, detection = await self._detect(loaded)
                 plugins.add(loaded.plugin)
                 detections[loaded.name] = detection
+                source = None if executor is None else _update_source(executor)
+                if source is not None and detection.installed:
+                    sources[loaded.name] = source
                 if executor is not None and detection.installed and detection.supported:
                     # Found as before: the executor already made stays, with what it read since
                     # (its models), so a look from the screen starts no harness for nothing.
@@ -872,10 +1031,109 @@ class Gateway:
                 detections.update(await self._account_detections(name, executor))
             self.detections, self._executor_plugins = detections, plugins
             self._offered = offered
+            self._update_sources = sources
+        self._look_for_updates()
         # Only a change is told: each telling reads the plugins and the executors again on every
         # screen, and the executors tab now looks whenever it shows.
         if before != (detections, plugins, offered):
             self.plugins_changed()
+
+    def _skills_to_plugins(self) -> None:
+        """Skills Atlas shipped that a plugin of Atlas's brings now (step 26: `github` and the
+        `gws-*` ones): a home that had them gets that plugin installed and turned on, as the
+        update's own doing, since the skills were on for it, and their copies leave the library,
+        archived when untouched, the user's own when changed. A plugin the user decided on is left
+        as they decided."""
+        library = SkillLibrary(self._home.skills_folder)
+        shipped = read_manifest(library.folder)
+        decided = self.plugins.store.states()
+        for name, found in official_plugins().items():
+            manifest = found.manifest
+            had: set[str] = set(manifest.skills) & shipped.keys() if manifest is not None else set()
+            if not had or manifest is None:
+                continue
+            if name not in decided:
+                try:
+                    self.plugins.enable(name, manifest.fingerprint())
+                except PluginError as error:
+                    _logger.warning(
+                        "A plugin that brings Atlas's skills was not turned on: %s", error
+                    )
+                    continue
+            archived, kept = retire_bundled(library, had)
+            _logger.info(
+                "Skills Atlas shipped come from a plugin now.",
+                extra={"plugin": name, "archived": archived, "kept": kept},
+            )
+
+    def _voice_to_speech(self) -> None:
+        """Once, a home whose voice plugin wrote down recordings before step 26 keeps its
+        dictations, now the home's, and has recordings written down by the same provider: its
+        `provider` becomes `[voice] transcription`, unless the user set that already. Without it,
+        the update would move them to this computer's model, which asks for a download first."""
+        kept = self.plugins.data_folder(VOICE_PLUGIN) / VOICE_DICTATIONS
+        if kept.is_dir() and not self._home.dictations_folder.exists():
+            # The dictations the voice plugin kept are the home's now, where the page reads them.
+            shutil.move(kept, self._home.dictations_folder)
+            _logger.info("The voice plugin's dictations moved to the home's.")
+        marker = self.plugins.data_folder(VOICE_PLUGIN) / VOICE_MOVED
+        if marker.exists():
+            return
+        try:
+            view = self.plugins.view(VOICE_PLUGIN)
+        except PluginError:
+            return
+        if not view.enabled:
+            return
+        provider = view.settings.get("provider", "").strip().lower() or "openai"
+        written = {
+            (value.setting.section, value.setting.key): value
+            for value in editable_values(self._home.root, self._environ)
+        }
+        chosen = written[("voice", "transcription")]
+        if chosen.written is None and chosen.variable is None and provider in TRANSCRIPTIONS:
+            try:
+                settings = edit_settings(
+                    self._home.root, self._environ, {("voice", "transcription"): provider}
+                )
+            except SettingsError as error:
+                _logger.warning("The voice's provider could not be kept: %s", error)
+                return
+            self.assistant.use_settings(settings)
+            _logger.info("Recordings stay written down by the voice's provider.")
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("", encoding="utf-8")
+
+    def _move_accounts(self) -> None:
+        """Once, the other accounts Atlas kept itself until step 22 go to the accounts plugin,
+        which is turned on for whoever had any, as the update's own doing (decided with the user
+        on 03/11/2026: it is what they used): its data folder gets them, and no account's folder
+        is touched. A home that never added an account, or whose plugin already keeps its own,
+        is left as it is."""
+        if self._accounts_moved:
+            return
+        self._accounts_moved = True
+        folder = self.plugins.data_folder(ACCOUNTS_PLUGIN)
+        if (folder / ACCOUNTS_BOOK).exists() or (folder / ACCOUNTS_FROM_ATLAS).exists():
+            return
+        exported = AccountStore(Database(self._home.database_file)).export()
+        if exported is None:
+            return
+        try:
+            view = self.plugins.view(ACCOUNTS_PLUGIN)
+        except PluginError:
+            _logger.warning("The accounts plugin is not here: the other accounts stay unread.")
+            return
+        folder.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(exported, indent=2, ensure_ascii=False) + "\n"
+        (folder / ACCOUNTS_FROM_ATLAS).write_text(text, encoding="utf-8")
+        if view.manifest is not None and not view.enabled:
+            try:
+                self.plugins.enable(ACCOUNTS_PLUGIN, view.manifest.fingerprint())
+            except PluginError as error:
+                _logger.warning("The accounts plugin could not be turned on: %s", error)
+                return
+        _logger.info("The other accounts went to the accounts plugin.")
 
     async def _account_detections(self, name: str, executor: Executor) -> dict[str, Detection]:
         """The detection of `name`'s executor on each of its other accounts (step 16h), each one
@@ -883,15 +1141,15 @@ class Gateway:
         if not executor.capabilities().account_folders:
             return {}
         plugin = self._executor_names.get(name, ("", executor.title))[0]
-        kept = await asyncio.to_thread(self.assistant.account_store.accounts, name)
+        kept = await asyncio.to_thread(other_accounts, self.assistant.accounts, name)
         found: dict[str, Detection] = {}
         for account in kept:
             named = account_name(name, account.id)
             on = self.assistant.executor(named)
             if on is not None:
                 found[named] = await self._look(on)
-                self._executor_names[named] = (plugin, f"{executor.title} · {account.name}")
-                self._account_rows[named] = (name, account.id, account.name)
+                self._executor_names[named] = (plugin, f"{executor.title} · {account.nickname}")
+                self._account_rows[named] = (name, account.id, account.nickname)
         return found
 
     async def _detect(self, loaded: LoadedExecutor) -> tuple[Executor | None, Detection]:
@@ -925,8 +1183,43 @@ class Gateway:
             _logger.exception("An executor could not be looked at.")
             return Detection(False, problem=f"Its detection failed: {error!r}")
 
+    def _look_for_updates(self) -> None:
+        """Read, in the background, the newest version of each executor whose last read is a day
+        old: never on the way to a start, and one read at a time."""
+        now = self._clock()
+        due = [s for s in self._update_sources.values() if self._newest.due(s, now)]
+        if due and (self._looking is None or self._looking.done()):
+            self._looking = asyncio.create_task(self._read_newest(due))
+
+    async def _read_newest(self, sources: Sequence[UpdateSource]) -> None:
+        changed = False
+        async with httpx2.AsyncClient(
+            timeout=LOOK_SECONDS, transport=self._update_transport, follow_redirects=True
+        ) as client:
+            for source in sources:
+                try:
+                    found = await newest(source, client)
+                except UpdateError as error:
+                    # Read again a day later, not at every minute's housekeeping.
+                    _logger.info("A harness's newest version was not read: %s", error)
+                    found = self._newest.get(source)
+                changed = changed or found != self._newest.get(source)
+                self._newest.keep(source, found, self._clock())
+        if changed:
+            self.plugins_changed()
+
+    def _update_of(self, name: str) -> tuple[str, tuple[str, ...]] | None:
+        """The newer version of `name` and the command that installs it, when there is one."""
+        source = self._update_sources.get(name)
+        found = self.detections.get(name)
+        if source is None or found is None:
+            return None
+        version = self._newest.get(source)
+        argv = update_command(source, version) if newer(version, found.version) else None
+        return None if argv is None else (version, argv)
+
     async def close(self) -> None:
-        for task in (self._housekeeping, self._plugin_watch, self._update_news):
+        for task in (self._housekeeping, self._plugin_watch, self._update_news, self._looking):
             if task is not None:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
@@ -1238,12 +1531,9 @@ class Gateway:
 
     async def _check_command(self, connection: Connection, params: CommandParams) -> CommandCheck:
         """The trust gate's own detection, before a ▶ runs a command (step 16f): what is
-        blocked always and what is dangerous both ask, the user deciding."""
-        hard, reason = detect_hardline_command(params.command)
-        if hard:
-            return CommandCheck(True, reason or "")
-        dangerous, _, description = detect_dangerous_command(params.command)
-        return CommandCheck(dangerous, description or "")
+        blocked always and what is dangerous both ask, the user deciding. Off the event loop:
+        reading a long block as shell takes its time."""
+        return await asyncio.to_thread(_command_check, params.command)
 
     async def _interrupt(self, connection: Connection, params: ConversationRef) -> Interrupted:
         if not self.assistant.running(params.conversation_id):
@@ -1685,6 +1975,342 @@ class Gateway:
             raise ProtocolError(INTERNAL_ERROR, f"SOUL.md cannot be read: {error}") from error
         return Soul(text or "", str(soul.path), IDENTITY, text is not None)
 
+    async def _speech_status(self, connection: Connection, params: Empty) -> SpeechState:
+        return await asyncio.to_thread(self._speech_now)
+
+    async def _speech_download(self, connection: Connection, params: Empty) -> SpeechState:
+        self._owner(connection)
+        self.speech.download()
+        return await asyncio.to_thread(self._speech_now)
+
+    async def _speech_decline(self, connection: Connection, params: Empty) -> SpeechState:
+        self._owner(connection)
+        await asyncio.to_thread(self.speech.decline)
+        return await asyncio.to_thread(self._speech_now)
+
+    def _provider_address(self, provider: str) -> str | None:
+        """Where Atlas's provider of this name is reached, as its model catalog says."""
+        try:
+            return self.assistant.models.catalog.provider(provider).base_url
+        except ModelsError:
+            return None
+
+    def _speech_now(self) -> SpeechState:
+        return SpeechState(**asdict(self.speech.status()))
+
+    def _speech_changed(self) -> None:
+        """Tell every client where the speech model is: its download moved, or a recording
+        waited for it."""
+        frame = self._event_frame("speech.changed", self._speech_now())
+        for connection in self._connections:
+            connection.put(frame)
+
+    async def _workspace_list(
+        self, connection: Connection, params: WorkspaceListParams
+    ) -> WorkspaceList:
+        folder = Path(params.folder) if params.folder else None
+        rows = await self._workspaces(self.workspaces.listed, folder)
+        return WorkspaceList([await asyncio.to_thread(self._workspace_row, row) for row in rows])
+
+    async def _workspace_create(
+        self, connection: Connection, params: WorkspaceCreate
+    ) -> WorkspaceRow:
+        self._owner(connection)
+        made = await self._new_workspace(Path(params.folder), params.name, params.base)
+        return await asyncio.to_thread(self._workspace_row, made)
+
+    async def _workspace_archive(
+        self, connection: Connection, params: WorkspaceRef
+    ) -> WorkspaceRow:
+        self._owner(connection)
+        done = await self._workspaces(self.workspaces.archive, params.id)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_unarchive(
+        self, connection: Connection, params: WorkspaceRef
+    ) -> WorkspaceRow:
+        self._owner(connection)
+        done = await self._workspaces(self.workspaces.unarchive, params.id)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_delete(self, connection: Connection, params: WorkspaceDelete) -> Empty:
+        self._owner(connection)
+        await self._workspaces(lambda: self.workspaces.delete(params.id, force=params.force))
+        self._workspaces_changed()
+        return Empty()
+
+    async def _workspace_diff(self, connection: Connection, params: WorkspaceRef) -> WorkspaceDiff:
+        self._owner(connection)
+        files, more = await self._workspaces(self.workspaces.diff, params.id)
+        uncommitted, ahead = await self._workspaces(self.workspaces.status, params.id)
+        return WorkspaceDiff(
+            [
+                DiffFileRow(
+                    found.path,
+                    found.status,
+                    found.added,
+                    found.removed,
+                    found.binary,
+                    found.truncated,
+                    [DiffLineRow(line.kind, line.text, line.old, line.new) for line in found.lines],
+                )
+                for found in files
+            ],
+            more,
+            uncommitted,
+            ahead,
+        )
+
+    async def _workspace_commit(
+        self, connection: Connection, params: WorkspaceCommit
+    ) -> WorkspaceRow:
+        self._owner(connection)
+        done = await self._workspaces(self.workspaces.commit, params.id, params.message)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_merge(self, connection: Connection, params: WorkspaceRef) -> WorkspaceRow:
+        """Into the project's own branch: the app asked the user first."""
+        self._owner(connection)
+        done = await self._workspaces(self.workspaces.merge, params.id)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_push(
+        self, connection: Connection, params: WorkspaceRef
+    ) -> WorkspacePushed:
+        """Outward, to the project's remote: the app asked the user first."""
+        self._owner(connection)
+        said = await self._workspaces(self.workspaces.push, params.id)
+        self._workspaces_changed()
+        return WorkspacePushed(said)
+
+    async def _workspace_checkpoints(
+        self, connection: Connection, params: WorkspaceRef
+    ) -> CheckpointList:
+        self._owner(connection)
+        found = await self._workspaces(self.workspaces.checkpoints, params.id)
+        return CheckpointList([CheckpointRow(k.commit, k.label, k.created_at) for k in found])
+
+    async def _workspace_restore(
+        self, connection: Connection, params: WorkspaceRestore
+    ) -> WorkspaceRow:
+        """Refused while a session works in the workspace: its harness would go on over files
+        that changed under it."""
+        self._owner(connection)
+        workspace = await self._workspaces(self.workspaces.get, params.id)
+        inside = Path(workspace.folder).resolve()
+        for run in self.assistant.workbench.runs():
+            busy = run.state in (InstanceState.STARTING, InstanceState.WORKING)
+            if busy and run.spec.folder.resolve().is_relative_to(inside):
+                raise ProtocolError(
+                    INVALID_PARAMS,
+                    f"A session works in {workspace.name} now: stop it, then go back.",
+                )
+        done = await self._workspaces(self.workspaces.restore, params.id, params.commit)
+        self._workspaces_changed()
+        return await asyncio.to_thread(self._workspace_row, done)
+
+    async def _workspace_project(self, connection: Connection, params: FolderRef) -> ProjectRow:
+        found = await self._workspaces(self.workspaces.project_of, Path(params.folder))
+        if found is None:
+            raise ProtocolError(INVALID_PARAMS, f"{params.folder} is not in a git repository.")
+        return _project_row(found)
+
+    async def _workspace_set_project(
+        self, connection: Connection, params: ProjectSettings
+    ) -> ProjectRow:
+        """The setup script is the owner's own command, typed in the app, as the box's `!` is."""
+        self._owner(connection)
+        done = await self._workspaces(
+            lambda: self.workspaces.set_project(
+                Path(params.folder),
+                setup_script=params.setup_script,
+                ports_start=params.ports_start,
+                ports_size=params.ports_size,
+            )
+        )
+        return _project_row(done)
+
+    async def task_workspace(self, folder: Path, name: str) -> tuple[Path, str]:
+        """A workspace for a delegated task (step 21), made as the app's are and prepared before
+        the task starts in it: its folder and its branch."""
+        try:
+            made = await asyncio.to_thread(self.workspaces.create, folder, name)
+        except WorkspaceError as error:
+            raise DelegationError(f"The workspace could not be made: {error}") from error
+        self._workspaces_changed()
+        if made.state is WorkspaceState.PREPARING:
+            await self._prepare(made.id)
+            made = await asyncio.to_thread(self.workspaces.get, made.id)
+        if made.state is WorkspaceState.SETUP_FAILED:
+            raise DelegationError(
+                f"The workspace {made.branch} was made at {made.folder}, but its setup script "
+                f"failed: {made.setup_output.strip()[-500:]} It is kept for the user."
+            )
+        return Path(made.folder), made.branch
+
+    async def task_workspace_changes(self, folder: Path) -> str:
+        """What the workspace at `folder` changed since it was made; empty when none is there."""
+        found = await asyncio.to_thread(self.workspaces.found_at, folder)
+        if found is None:
+            return ""
+        return await asyncio.to_thread(self.workspaces.changes, found.id)
+
+    async def task_workspace_finish(self, folder: Path, title: str, *, draft: bool) -> str:
+        """A routine's run's workspace once the run ended (step 25): archived when it changed
+        nothing; otherwise kept and, with `draft`, committed, sent and opened as a draft pull
+        request by the GitHub plugin. What became of it, in a line."""
+        found = await asyncio.to_thread(self.workspaces.found_at, folder)
+        if found is None:
+            return ""
+        changes = await asyncio.to_thread(self.workspaces.changes, found.id)
+        uncommitted, ahead = await asyncio.to_thread(self.workspaces.status, found.id)
+        try:
+            if not uncommitted and not ahead:
+                await asyncio.to_thread(self.workspaces.archive, found.id)
+                return f"Its workspace {found.branch} changed nothing, and was archived."
+            if not draft:
+                return f"Its changes are in the workspace {found.branch}: {changes}"
+            call = self._calls.get(("github", "open_pull_request"))
+            if call is None:
+                return (
+                    f"Its changes are in the workspace {found.branch}: {changes} No draft pull "
+                    "request was opened: the GitHub plugin is not on."
+                )
+            if uncommitted:
+                await asyncio.to_thread(self.workspaces.commit, found.id, title)
+            await asyncio.to_thread(self.workspaces.push, found.id)
+            opened = await call.run(
+                {
+                    "folder": found.folder,
+                    "branch": found.branch,
+                    "base": found.base,
+                    "title": title,
+                    "draft": True,
+                }
+            )
+        except Exception as error:  # noqa: BLE001 - git's or the plugin's failure, said in the run
+            return f"Its changes are in the workspace {found.branch}, but {error}"
+        finally:
+            self._workspaces_changed()
+        said = cast("dict[str, object]", opened) if isinstance(opened, dict) else {}
+        url = str(said.get("url") or "")
+        return f"Its changes went to a draft pull request: {url}".strip()
+
+    async def _new_workspace(self, folder: Path, name: str, base: str) -> Workspace:
+        """A workspace made, and its setup script run in the background, every client told."""
+        made = await self._workspaces(self.workspaces.create, folder, name, base or None)
+        self._workspaces_changed()
+        if made.state is WorkspaceState.PREPARING:
+            task = asyncio.create_task(self._prepare(made.id))
+            self._preparing.add(task)
+            task.add_done_callback(self._preparing.discard)
+        return made
+
+    async def _prepare(self, workspace_id: str) -> None:
+        try:
+            await asyncio.to_thread(self.workspaces.prepare, workspace_id)
+        except WorkspaceError:
+            _logger.warning("A workspace could not be prepared.", exc_info=True)
+        self._workspaces_changed()
+
+    async def _workspaces[**P, T](
+        self, call: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        try:
+            return await asyncio.to_thread(call, *args, **kwargs)
+        except WorkspaceError as error:
+            raise ProtocolError(INVALID_PARAMS, str(error)) from error
+
+    def _workspace_row(self, workspace: Workspace) -> WorkspaceRow:
+        environment = self.workspaces.environment(workspace)
+        common = Path(workspace.project)
+        return WorkspaceRow(
+            id=workspace.id,
+            project_root=str(common.parent if common.name == ".git" else common),
+            name=workspace.name,
+            branch=workspace.branch,
+            base=workspace.base,
+            folder=workspace.folder,
+            state=workspace.state.value,
+            created_at=workspace.created_at,
+            ports=environment.get("ATLAS_WORKSPACE_PORTS", ""),
+            setup_output=workspace.setup_output,
+        )
+
+    def _workspaces_changed(self) -> None:
+        frame = self._event_frame("workspaces.changed", Empty())
+        for connection in self._connections:
+            connection.put(frame)
+
+    async def _dictation_write(
+        self, connection: Connection, params: DictationWrite
+    ) -> DictationRow:
+        """Kept before it is written down: a failed transcription loses no speech."""
+        self._owner(connection)
+        try:
+            data = base64.b64decode(params.audio, validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise ProtocolError(INVALID_PARAMS, "The recording is not base64.") from error
+        if not data:
+            raise ProtocolError(INVALID_PARAMS, "The recording is empty.")
+        if len(data) > DICTATION_BYTES:
+            raise ProtocolError(
+                INVALID_PARAMS, "The recording is too long to dictate; record a shorter one."
+            )
+        kept = await asyncio.to_thread(
+            self.dictations.keep, data, params.media_type or "audio/webm", params.where
+        )
+        return _dictation_row(await self._write_down(kept))
+
+    async def _dictation_list(self, connection: Connection, params: Empty) -> DictationList:
+        listed = await asyncio.to_thread(self.dictations.listed)
+        return DictationList([_dictation_row(dictation) for dictation in listed])
+
+    async def _dictation_audio(
+        self, connection: Connection, params: DictationRef
+    ) -> DictationAudio:
+        dictation = self._dictation(params.id)
+        data = await asyncio.to_thread(self.dictations.audio, dictation)
+        return DictationAudio(base64.b64encode(data).decode("ascii"), dictation.media_type)
+
+    async def _dictation_again(self, connection: Connection, params: DictationRef) -> DictationRow:
+        self._owner(connection)
+        return _dictation_row(await self._write_down(self._dictation(params.id)))
+
+    async def _dictation_delete(self, connection: Connection, params: DictationRef) -> Empty:
+        self._owner(connection)
+        await asyncio.to_thread(self.dictations.delete, self._dictation(params.id).id)
+        self._dictations_changed()
+        return Empty()
+
+    def _dictation(self, dictation_id: str) -> Dictation:
+        try:
+            return self.dictations.get(dictation_id)
+        except SpeechError as error:
+            raise ProtocolError(NOT_FOUND, str(error)) from error
+
+    async def _write_down(self, dictation: Dictation) -> Dictation:
+        """The dictation with what it said, or why it was not written down; every client told."""
+        try:
+            text = await self.speech.transcribe(
+                self.dictations.path(dictation), dictation.media_type
+            )
+        except SpeechError as error:
+            done = await asyncio.to_thread(self.dictations.written, dictation, "", str(error))
+        else:
+            done = await asyncio.to_thread(self.dictations.written, dictation, text)
+        self._dictations_changed()
+        return done
+
+    def _dictations_changed(self) -> None:
+        frame = self._event_frame("dictations.changed", Empty())
+        for connection in self._connections:
+            connection.put(frame)
+
     async def _settings_read(self, connection: Connection, params: Empty) -> SettingsList:
         return await asyncio.to_thread(self._settings_now)
 
@@ -1723,6 +2349,8 @@ class Gateway:
     def _settings_now(self) -> SettingsList:
         defaults = {
             ("trust", "approval_timeout"): str(TrustSettings().approval_timeout),
+            ("memory", "user_limit"): str(MemorySettings().user_limit),
+            ("memory", "memory_limit"): str(MemorySettings().memory_limit),
             ("workspace", "folder"): str(Path.home()),
         }
         try:
@@ -1831,8 +2459,17 @@ class Gateway:
         self, connection: Connection, params: PluginCallParams
     ) -> PluginCallResult:
         """A plugin's screen calls its Python (step 16m): only a call its manifest declares, of a
-        plugin that is on; what it raises reaches the screen as the error's message."""
+        plugin that is on; what it raises reaches the screen as the error's message. The owner's
+        app only, never a channel's bridge: a plugin's call runs with the user's permissions."""
+        self._owner(connection)
         found = self._calls.get((params.plugin, params.name))
+        if found is None:
+            # A screen may call while the plugins still load, at start or after a save: the call
+            # is looked for again once they are loaded.
+            if self._plugins_start is not None and not self._plugins_start.done():
+                await asyncio.wait({self._plugins_start})
+            async with self._plugins_lock:
+                found = self._calls.get((params.plugin, params.name))
         if found is None:
             raise ProtocolError(
                 NOT_FOUND, f"The plugin {params.plugin} has no call {params.name} running."
@@ -1979,13 +2616,16 @@ class Gateway:
     async def _marketplace_list(
         self, connection: Connection, params: MarketplaceListParams
     ) -> MarketplaceList:
-        listing = await self._market_call(self.marketplace.listing, refresh=params.refresh)
+        listing = await self._market_call(
+            self.marketplace.listing, refresh=params.refresh, query=params.query
+        )
         return MarketplaceList(
             name=listing.name,
             description=listing.description,
             items=[_market_row(row) for row in listing.rows],
             read_at=format_utc(listing.read_at) if listing.read_at is not None else None,
             problem=listing.problem,
+            source_problems=listing.source_problems,
         )
 
     async def _marketplace_page(
@@ -2474,16 +3114,24 @@ class Gateway:
                     accounts=capabilities.accounts,
                     account_folders=capabilities.account_folders and on is None,
                     files=capabilities.files,
+                    modes=list(capabilities.modes),
                 )
             if on is not None:
                 row = dataclasses.replace(row, base=on[0], account_id=on[1], nickname=on[2])
-            manifest = views[plugin].manifest if plugin in views else None
-            if name in self._offered and manifest is not None:
+            update = self._update_of(name)
+            if update is not None:
+                row = dataclasses.replace(row, latest=update[0], update=shown_command(update[1]))
+            row = dataclasses.replace(row, updating=name in self._updating)
+            view = views.get(plugin)
+            manifest = view.manifest if view is not None else None
+            if name in self._offered and view is not None and manifest is not None:
                 row = dataclasses.replace(
                     row,
                     enabled=False,
                     declaration=list(manifest.declaration()),
                     consent=manifest.fingerprint(),
+                    # On, and offered all the same: its consent no longer matches.
+                    consent_again=view.enabled,
                 )
             executors.append(row)
         return executors
@@ -2512,16 +3160,66 @@ class Gateway:
             attached = tuple(self.assistant.attachments.get(item) for item in params.attachments)
         except AttachmentError as error:
             raise ProtocolError(INVALID_PARAMS, str(error)) from error
+        await self._checkpoint(params.instance_id, params.text)
         steered = await self._on_workbench(
             self.assistant.workbench.prompt(params.instance_id, params.text, attached)
         )
         return WorkbenchPrompted(steered)
+
+    async def _checkpoint(self, instance_id: str, prompt: str) -> None:
+        """A checkpoint of the workspace an instance works in, before its prompt (step 21, A3);
+        none outside a workspace, and a git that fails costs the prompt nothing, logged."""
+        try:
+            folder = self.assistant.workbench.get(instance_id).spec.folder
+        except ExecutorError:
+            return
+        try:
+            found = await asyncio.to_thread(self.workspaces.found_at, folder)
+            if found is None:
+                return
+            kept = await asyncio.to_thread(self.workspaces.checkpoint, found.id, prompt)
+        except WorkspaceError:
+            _logger.warning("A workspace's checkpoint could not be kept.", exc_info=True)
+            return
+        if kept is not None:
+            self._workspaces_changed()
 
     async def _workbench_auto(
         self, connection: Connection, params: WorkbenchSwitchParams
     ) -> InstanceRow:
         workbench = self.assistant.workbench
         await self._on_workbench(workbench.set_auto(params.instance_id, params.enabled))
+        return _instance_row(workbench.get(params.instance_id).view())
+
+    async def _workbench_git(self, connection: Connection, params: FolderRef) -> FolderGit:
+        state = await self._on_workbench(self.assistant.workbench.git(Path(params.folder)))
+        return _folder_git(params.folder, state)
+
+    async def _workbench_worktree(
+        self, connection: Connection, params: WorktreeParams
+    ) -> FolderGit:
+        """Step 18g's new worktree, a workspace since step 21: in the home, not beside the
+        project."""
+        self._owner(connection)
+        made = await self._new_workspace(Path(params.folder), params.name, "")
+        folder = Path(made.folder)
+        return _folder_git(
+            made.folder, await self._on_workbench(self.assistant.workbench.git(folder))
+        )
+
+    async def _workbench_context(
+        self, connection: Connection, params: InstanceRef
+    ) -> SessionContext:
+        tokens, window = await self._on_workbench(
+            self.assistant.workbench.context(params.instance_id)
+        )
+        return SessionContext(tokens, window)
+
+    async def _workbench_mode(
+        self, connection: Connection, params: WorkbenchModeParams
+    ) -> InstanceRow:
+        workbench = self.assistant.workbench
+        await self._on_workbench(workbench.set_mode(params.instance_id, params.mode))
         return _instance_row(workbench.get(params.instance_id).view())
 
     async def _workbench_model(
@@ -2575,31 +3273,6 @@ class Gateway:
         )
         return _instance_row(run.view())
 
-    async def _workbench_route(
-        self, connection: Connection, params: InstanceRef
-    ) -> SessionRouteRow:
-        found = await self._on_workbench(self.assistant.workbench.route(params.instance_id))
-        return _route_of(found)
-
-    async def _workbench_set_route(
-        self, connection: Connection, params: WorkbenchRouteParams
-    ) -> SessionRouteRow:
-        targets = [
-            RouteTarget(
-                given.executor,
-                given.account_id,
-                model=given.model or None,
-                effort=given.effort or None,
-            )
-            for given in params.targets
-        ]
-        found = await self._on_workbench(
-            self.assistant.workbench.set_route(
-                params.instance_id, targets, enabled=params.enabled, compact=params.compact
-            )
-        )
-        return _route_of(found)
-
     async def _workbench_account_switch(
         self, connection: Connection, params: WorkbenchUseAccountParams
     ) -> AccountSwitchRow:
@@ -2621,46 +3294,6 @@ class Gateway:
         listed = await self._on_workbench(self.assistant.workbench.accounts(params.executor))
         return _accounts_of(listed)
 
-    async def _executor_failover(
-        self, connection: Connection, params: ExecutorFailoverParams
-    ) -> ExecutorAccounts:
-        listed = await self._on_workbench(
-            self.assistant.workbench.set_failover(
-                params.executor, params.order, enabled=params.enabled, compact=params.compact
-            )
-        )
-        await self._accounts_changed(params.executor, rows=False)
-        return _accounts_of(listed)
-
-    async def _executor_add_account(
-        self, connection: Connection, params: ExecutorAddAccountParams
-    ) -> AccountRow:
-        view = await self._on_workbench(
-            self.assistant.workbench.add_account(params.executor, params.nickname)
-        )
-        await self._accounts_changed(params.executor)
-        return AccountRow(**dump(view))
-
-    async def _executor_remove_account(
-        self, connection: Connection, params: ExecutorAccountRef
-    ) -> Empty:
-        await self._on_workbench(
-            self.assistant.workbench.remove_account(params.executor, params.account_id)
-        )
-        await self._accounts_changed(params.executor)
-        return Empty()
-
-    async def _executor_folder_account(
-        self, connection: Connection, params: ExecutorFolderAccountParams
-    ) -> Empty:
-        await self._on_workbench(
-            self.assistant.workbench.set_folder_account(
-                params.executor, params.folder, params.account_id
-            )
-        )
-        await self._accounts_changed(params.executor, rows=False)
-        return Empty()
-
     async def _executor_delete_session(
         self, connection: Connection, params: SessionDeleteParams
     ) -> Empty:
@@ -2670,6 +3303,12 @@ class Gateway:
             )
         )
         return Empty()
+
+    def _told_accounts_changed(self, executor: str) -> None:
+        """The accounts plugin changed `executor`'s accounts or a folder's (step 22)."""
+        task = asyncio.create_task(self._accounts_changed(executor))
+        self._accounts_telling.add(task)
+        task.add_done_callback(self._accounts_telling.discard)
 
     async def _accounts_changed(self, executor: str, *, rows: bool = True) -> None:
         """Every screen reads the executor's accounts and folders again; with `rows`, its
@@ -2715,6 +3354,42 @@ class Gateway:
         found without a restart."""
         await self.load_executors()
         return ExecutorList(await self._executor_rows())
+
+    async def _executor_update(
+        self, connection: Connection, params: ExecutorRef
+    ) -> ExecutorUpdated:
+        """Run the update its row shows, then look for the harnesses again: the version found
+        then is the one the screen shows, whatever the command said."""
+        self._owner(connection)
+        name = params.executor
+        update = self._update_of(name)
+        if update is None:
+            raise ProtocolError(INVALID_PARAMS, f"{name} has no update to install.")
+        if name in self._updating:
+            raise ProtocolError(INVALID_PARAMS, f"{name} is updating already.")
+        running = [
+            run
+            for run in self.assistant.workbench.runs()
+            if run.name.split("@")[0] == name
+            and run.state not in (InstanceState.ENDED, InstanceState.FAILED)
+        ]
+        if running:
+            raise ProtocolError(
+                INVALID_PARAMS, "Stop its sessions that run first: a harness in use cannot update."
+            )
+        _logger.warning(
+            "The owner's app asked to update an executor.",
+            extra={"executor": name, "version": update[0]},
+        )
+        self._updating.add(name)
+        self.plugins_changed()
+        try:
+            updated, output = await run_update(update[1])
+        finally:
+            self._updating.discard(name)
+        await self.load_executors()
+        self.plugins_changed()
+        return ExecutorUpdated(updated, "" if updated else output)
 
     async def _executor_folders(
         self, connection: Connection, params: ExecutorRef
@@ -2834,20 +3509,80 @@ class Gateway:
     # -- housekeeping -----------------------------------------------------------------------------
 
     async def _keep_house(self) -> None:
-        """Every minute: the routines due fire, then the curator is asked."""
+        """Every minute: the routines due fire, a backup due is written, then the curator is
+        asked."""
         while True:
             await asyncio.sleep(self._housekeeping_seconds)
             self._fire_routines()
+            self._houses += 1
+            if self._houses % CONNECTION_EVERY == 0:
+                await self.read_connections()
+            try:
+                await asyncio.to_thread(self.back_up_when_due)
+            except Exception:  # the server's edge: housekeeping must not stop, logged
+                _logger.exception("The scheduled backup failed.")
             try:
                 await self.channels.check()
                 if self._executors_seen != await asyncio.to_thread(_executor_states, self.plugins):
                     await self.load_executors()
+                else:
+                    self._look_for_updates()
             except Exception:  # the server's edge: housekeeping must not stop, logged
                 _logger.exception("The plugins could not be checked.")
             try:
                 await self.assistant.curate()
             except Exception:  # the server's edge: housekeeping must not stop, logged
                 _logger.exception("The curator failed.")
+
+    def back_up_when_due(self) -> Path | None:
+        """The home's backup in `[backup] folder` once the newest there is `every_hours` old
+        (step 20), the oldest past `keep` removed; what was written, or `None`."""
+        chosen = self.assistant.settings.backup
+        if chosen.folder is None:
+            return None
+        folder = chosen.folder.expanduser()
+        name = home_name(self._home.root)
+        prefix = f"{BACKUP_PREFIX}{name}-"
+        now = self._clock()
+        newest = max(
+            (found.stat().st_mtime for found in folder.glob(f"{prefix}*.zip")), default=None
+        )
+        if newest is not None and now.timestamp() - newest < chosen.every_hours * 3600:
+            return None
+        written = write_backup(
+            self._home, folder / backup_name(name, now), version=__version__, now=now
+        )
+        _logger.info("The scheduled backup was written.", extra={"files": written.manifest.files})
+        prune_backups(folder, prefix, chosen.keep)
+        return written.path
+
+    def connections(self) -> list[OfferedConnection]:
+        """The connections Atlas offers in the user's conversations, and whether each is ready:
+        its plugin there, on, consented to, and logged in when its status was last read."""
+        found: list[OfferedConnection] = []
+        views = {view.name: view for view in self.plugins.all()}
+        for name, label, use in OFFERED_CONNECTIONS:
+            view = views.get(name)
+            if view is None:
+                continue
+            on = view.running
+            ready = on and self._logged_in.get(name, False)
+            found.append(OfferedConnection(name, label, use, ready))
+        return found
+
+    async def read_connections(self) -> None:
+        """Ask each offered connection's plugin whether it is logged in (its `status` call), at
+        start, when the plugins load and every few minutes; one that does not answer is not."""
+        for name, _, _ in OFFERED_CONNECTIONS:
+            call = self._calls.get((name, "status"))
+            said: object = None
+            if call is not None:
+                try:
+                    said = await asyncio.wait_for(call.run({}), CONNECTION_SECONDS)
+                except Exception:  # noqa: BLE001 - a plugin's own failure: it is not logged in
+                    said = None
+            fields = cast("dict[str, object]", said) if isinstance(said, dict) else {}
+            self._logged_in[name] = fields.get("logged_in") is True
 
     def _fire_routines(self) -> None:
         try:
@@ -2859,9 +3594,67 @@ class Gateway:
     # -- routines ---------------------------------------------------------------------------------
 
     async def _routines(self, connection: Connection, params: Empty) -> RoutineList:
-        found = await asyncio.to_thread(self.assistant.routines.store.all)
+        routines = self.assistant.routines
+        found = await asyncio.to_thread(routines.store.all)
+        score = await asyncio.to_thread(routines.scoreboard)
         running = self.scheduler.running
-        return RoutineList([_routine_row(routine, routine.id in running) for routine in found])
+        return RoutineList(
+            [_routine_row(routine, routine.id in running) for routine in found],
+            ScoreboardRow(format_utc(score.since), score.alone, score.needed, score.failed),
+        )
+
+    async def _routine_save(self, connection: Connection, params: RoutineSave) -> RoutineRow:
+        """The user's own routine, made or changed from the app's form (step 25)."""
+        self._owner(connection)
+        routines = self.assistant.routines
+        provider, _, model = params.model.partition("/")
+        pinned = (provider, model, params.effort or None) if provider and model else None
+        executor = RoutineExecutor(**dump(params.executor)) if params.executor is not None else None
+
+        def save(key: str) -> Routine:
+            if not key:
+                return routines.create(
+                    params.name,
+                    params.schedule,
+                    prompt=params.prompt,
+                    model=pinned,
+                    bot=params.bot or None,
+                    probe=params.probe or None,
+                    executor=executor,
+                )
+            found = routines.store.get(key)
+            if found.prompt is None:
+                raise JobsError(f"{found.name} runs a command: change it from the terminal.")
+            return routines.update(
+                key,
+                name=params.name,
+                schedule=params.schedule if params.schedule != found.schedule.display else None,
+                prompt=params.prompt,
+                probe=params.probe,
+                model=pinned or ("", "", None),
+                bot=params.bot,
+                executor=executor or RoutineExecutor("", ""),
+            )
+
+        routine = await self._act(save, params.routine_id)
+        self._routines_changed()
+        return _routine_row(routine, routine.id in self.scheduler.running)
+
+    async def _activity(self, connection: Connection, params: Empty) -> Activity:
+        return await self.activity()
+
+    async def activity(self) -> Activity:
+        """What the home does now (step 20), for the client and for `GET /activity`: idle since the
+        last moment something worked or a client was connected, and when the next routine is
+        due."""
+        now = self._clock()
+        working = self.assistant.working() or bool(self.scheduler.running)
+        clients = len(self._connections)
+        if working or clients or self._idle_since is None:
+            self._idle_since = now
+        idle = None if working or clients else format_utc(self._idle_since)
+        due = await asyncio.to_thread(self.assistant.routines.next_wake)
+        return Activity(working, clients, idle, None if due is None else format_utc(due))
 
     async def _routine_runs(self, connection: Connection, params: RoutineRef) -> RunList:
         routine = await self._routine(params.routine_id)
@@ -2988,14 +3781,17 @@ def _said_kind(text: str) -> Literal["message", "notice", "terminal", "skill"]:
     return "terminal" if is_terminal_text(text) else "message"
 
 
-def _route_of(found: RouteView) -> SessionRouteRow:
-    stops = [RouteStopRow(**dump(stop)) for stop in found.stops]
-    return SessionRouteRow(found.instance_id, stops, found.enabled, found.compact)
-
-
 def _accounts_of(listed: AccountList) -> ExecutorAccounts:
     rows = [AccountRow(**dump(view)) for view in listed.accounts]
     return ExecutorAccounts(listed.executor, rows, listed.can_add, listed.failover, listed.compact)
+
+
+def _command_check(command: str) -> CommandCheck:
+    hard, reason = detect_hardline_command(command)
+    if hard:
+        return CommandCheck(True, reason or "")
+    dangerous, _, description = detect_dangerous_command(command)
+    return CommandCheck(dangerous, description or "")
 
 
 def _command_row(view: BackgroundCommand) -> CommandRow:
@@ -3089,6 +3885,17 @@ def _proposal_row(item: OpenProposal) -> ProposalRow:
     )
 
 
+#: The connections Atlas offers in the user's conversations (05/11/2026): the plugin, what the
+#: user calls it, and what it lets Atlas do.
+OFFERED_CONNECTIONS = (
+    ("google", "Gmail and Calendar", "their email and their calendar"),
+    ("github", "GitHub", "their repositories, issues and pull requests"),
+)
+#: How long a plugin's status may take, and every how many housekeeping rounds it is read again.
+CONNECTION_SECONDS = 30.0
+CONNECTION_EVERY = 5
+
+
 def _routine_row(routine: Routine, running: bool) -> RoutineRow:
     def text(moment: datetime | None) -> str | None:
         return None if moment is None else format_utc(moment)
@@ -3106,6 +3913,12 @@ def _routine_row(routine: Routine, running: bool) -> RoutineRow:
         routine.created_by.value,
         running,
         routine.bot,
+        routine.probe,
+        None if routine.executor is None else RoutineExecutorRow(**dump(routine.executor)),
+        f"{routine.model_provider}/{routine.model_name}"
+        if routine.model_provider and routine.model_name
+        else "",
+        routine.model_effort or "",
     )
 
 
@@ -3119,6 +3932,7 @@ def _run_row(run: Run) -> RunRow:
         run.conversation_id,
         run.output[:2_000],
         run.error,
+        run.event[:2_000],
     )
 
 
@@ -3186,6 +4000,22 @@ async def _maybe_await(value: object) -> None:
         await value
 
 
+class _TaskWorkspaces:
+    """The gateway as the maker of the workspaces delegated tasks ask for (step 21)."""
+
+    def __init__(self, gateway: Gateway) -> None:
+        self._gateway = gateway
+
+    async def make(self, folder: Path, name: str) -> tuple[Path, str]:
+        return await self._gateway.task_workspace(folder, name)
+
+    async def changes(self, folder: Path) -> str:
+        return await self._gateway.task_workspace_changes(folder)
+
+    async def finish(self, folder: Path, title: str, *, draft: bool) -> str:
+        return await self._gateway.task_workspace_finish(folder, title, draft=draft)
+
+
 class _Desk:
     """The gateway as the desk of the executor instances: their requests become cards."""
 
@@ -3241,6 +4071,10 @@ def _usage_row(usage: ExecutorUsage) -> ExecutorUsageRow:
     )
 
 
+def _folder_git(folder: str, state: GitState) -> FolderGit:
+    return FolderGit(folder, state.repository, state.branch, state.root, state.worktree)
+
+
 def _executor_row(name: str, found: Detection, plugin: str, title: str) -> ExecutorRow:
     account = found.account
     return ExecutorRow(
@@ -3259,6 +4093,15 @@ def _executor_row(name: str, found: Detection, plugin: str, title: str) -> Execu
 
 
 type _ExecutorState = tuple[bool, str | None, tuple[tuple[str, str], ...]]
+
+
+def _update_source(executor: Executor) -> UpdateSource | None:
+    """Where the executor's newest version is published, when its plugin says (version 27)."""
+    try:
+        return executor.update_source() if executor.capabilities().updates else None
+    except Exception:  # a plugin's own code: its failure is logged, and nothing is offered
+        _logger.exception("An executor could not say how it updates.")
+        return None
 
 
 def _executor_states(plugins: Plugins) -> dict[str, _ExecutorState]:
@@ -3322,6 +4165,9 @@ def _market_row(row: MarketRow) -> MarketplaceRow:
         image=row.image,
         source_url=row.source_url,
         problem=row.problem,
+        source=row.source.value,
+        updated=row.updated,
+        installs=row.installs,
     )
 
 
@@ -3340,3 +4186,18 @@ def _market_page(page: MarketPage) -> MarketplacePage:
         homepage=page.homepage,
         entry=page.entry,
     )
+
+
+def _dictation_row(dictation: Dictation) -> DictationRow:
+    return DictationRow(
+        dictation.id,
+        dictation.at,
+        dictation.text,
+        dictation.media_type,
+        dictation.where,
+        dictation.error,
+    )
+
+
+def _project_row(project: Project) -> ProjectRow:
+    return ProjectRow(project.root, project.setup_script, project.ports_start, project.ports_size)

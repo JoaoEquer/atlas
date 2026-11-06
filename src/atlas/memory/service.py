@@ -58,7 +58,7 @@ from atlas.agent import (
     from_atlas,
     input_window,
 )
-from atlas.home import format_utc, utc_now
+from atlas.home import MemorySettings, format_utc, utc_now
 from atlas.memory.model import (
     CONVERSATION_SEARCH_GUIDANCE,
     MEMORY_GUIDANCE,
@@ -105,6 +105,11 @@ COMBINED_REVIEW_PROMPT = (
     + "**Skills**: "
     + COMBINED_SKILLS_PART
 )
+
+
+def limits_of(settings: MemorySettings) -> dict[Target, int]:
+    """The stores' limits a home's `[memory]` sets, in characters."""
+    return {Target.USER: settings.user_limit, Target.MEMORY: settings.memory_limit}
 
 
 class Instructions:

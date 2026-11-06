@@ -10,6 +10,7 @@ import os
 import sqlite3
 import sys
 import time
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,7 @@ from atlas.tools import system_shell
 from claude_code_support import FAKE, claude_code
 from fake_model import FakeCall, FakeModelServer, FakeReply
 from model_support import Connect
-from server_support import Client, Serve
+from server_support import WAIT, Client, Serve
 
 CHAT = "/v1/chat/completions"
 
@@ -928,7 +929,7 @@ def test_every_client_hears_a_turn_begin_and_end_and_the_list_says_which_runs(
         ended = sidebar.event("conversations.changed")["payload"]
         assert ended == {"conversation_id": conversation, "status": "answered", "title": ""}
         client.event("message.complete")
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + WAIT
         while server.gateway.assistant.running(conversation):
             assert time.monotonic() < deadline, "the turn never ended"
             time.sleep(0.05)
@@ -968,7 +969,7 @@ def test_the_curator_is_asked_while_the_server_runs(serve: Serve, home: Home) ->
     moments = [utc_now()]
     serve(housekeeping_seconds=0.05, clock=lambda: moments[-1])
     moments.append(moments[0] + timedelta(hours=3))  # two idle hours went by
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + WAIT
     database = sqlite3.connect(home.database_file)
     try:
         while not database.execute("SELECT count(*) FROM skills_curator_runs").fetchone()[0]:
@@ -1055,6 +1056,7 @@ def test_a_routine_runs_now_and_every_client_hears_how_it_ended(
         conversations = client.result("conversation.list")["conversations"]
         paused = client.result("routine.pause", {"routine_id": made.id})
         resumed = client.result("routine.resume", {"routine_id": made.id})
+        scored = client.result("routine.list")["scoreboard"]
         removed = client.result("routine.remove", {"routine_id": made.id})
         missing = client.call("routine.run", {"routine_id": "nope"})["error"]
         after = client.result("routine.list")["routines"]
@@ -1063,6 +1065,9 @@ def test_a_routine_runs_now_and_every_client_hears_how_it_ended(
         ("news", "every day at 9am", True, "user")
     ]
     assert ran["name"] == "news"
+    assert (scored["alone"], scored["needed"], scored["failed"]) == (1, 0, 0), (
+        "this week's (step 25)"
+    )
     assert finished == {
         "routine_id": made.id,
         "name": "news",
@@ -1367,6 +1372,36 @@ def test_an_installed_harness_is_offered_while_its_plugin_is_off_and_turned_on_w
         ]
         assert (missing["installed"], missing["enabled"]) == (False, False)
         assert missing["problem"].startswith("Claude Code could not start"), "it says why"
+
+
+@pytest.mark.offered_executors
+def test_a_harness_whose_plugin_waits_for_consent_again_says_so(
+    serve: Serve, home: Home, vault: Vault, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A plugin turned on whose declaration an update changed waits, off, for the user's consent
+    again (docs/ARCHITECTURE.md, Off until the user consents). Its executor is no longer running,
+    and its row says why, so the app tells the user instead of dropping it: found on 01/11/2026,
+    when an update changed Claude Code's and every one of its sessions vanished."""
+    monkeypatch.setenv("FAKE_CLAUDE_AUTH", str(tmp_path / "auth.json"))
+    plugins = Plugins(home, Database(home.database_file), vault)
+    plugins.set_setting("claude-code", "program", json.dumps(FAKE))
+    for other in ("codex", "gemini-cli", "deepseek"):
+        plugins.set_setting(other, "program", '["no-such-program"]')
+    # The consent given to what an earlier version declared.
+    plugins.store.decide(
+        "claude-code", enabled=True, consent="an earlier declaration", now=utc_now()
+    )
+    server = serve()
+    with server.client() as client:
+        rows = {row["name"]: row for row in client.result("workbench.list")["executors"]}
+        waiting = rows["claude-code"]
+        assert (waiting["enabled"], waiting["consent_again"]) == (False, True)
+        assert server.gateway.assistant.executors() == [], "not running before the consent"
+        assert rows["codex"]["consent_again"] is False, "never turned on: offered, not waiting"
+
+        client.result("plugin.enable", {"name": "claude-code", "consent": waiting["consent"]})
+        [running] = [row for row in client.result("workbench.list")["executors"] if row["enabled"]]
+        assert (running["name"], running["consent_again"]) == ("claude-code", False)
 
 
 def test_the_screen_looks_again_and_finds_a_harness_updated_while_atlas_runs(
@@ -1950,12 +1985,32 @@ def test_the_main_agent_makes_a_bot_when_asked_and_the_screens_hear(
     assert "bot_create" in search["function"]["description"]  # deferred: it costs a name
 
 
+def _accounts_on(client: Client) -> Callable[[str, dict[str, Any]], dict[str, Any]]:
+    """The accounts plugin Atlas ships turned on from the app, with the consent it shows (step
+    22), and what its screen calls, once the server runs it."""
+    [row] = [p for p in client.result("plugin.list")["plugins"] if p["name"] == "accounts"]
+    client.result("plugin.enable", {"name": "accounts", "consent": row["consent"]})
+
+    def call(name: str, params: dict[str, Any]) -> dict[str, Any]:
+        found = client.call("plugin.call", {"plugin": "accounts", "name": name, "params": params})
+        if "error" in found:
+            return {"error": found["error"]["message"]}
+        return found["result"]["result"]
+
+    deadline = time.monotonic() + WAIT
+    while "error" in call("route", {"conversation": "none"}):
+        assert time.monotonic() < deadline, "the accounts plugin never ran"
+        time.sleep(0.05)
+    return call
+
+
 def test_an_executors_other_accounts_over_the_socket(
     serve: Serve, tmp_path: Path, work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Step 16h: another account added from the app is one row more, logged in by Claude Code
-    itself in its own folder; a folder's account starts its sessions there, every screen is told,
-    and a session goes back to the main account in a copy."""
+    """Step 16h, by the accounts plugin since step 22: another account added from the app is one
+    row more, logged in by Claude Code itself in its own folder; a folder's account starts its
+    sessions there, every screen is told, and a session goes back to the main account in a
+    copy."""
     script = tmp_path / "claude-script.json"
     steps = [{"account": True}, {"usage": [0.5, 0.3]}, {"result": "Ok."}]
     script.write_text(json.dumps(steps), encoding="utf-8")
@@ -1966,16 +2021,17 @@ def test_an_executors_other_accounts_over_the_socket(
     with server.client() as client:
         [row] = client.result("workbench.list", {})["executors"]
         assert (row["accounts"], row["account_folders"], row["base"]) == (True, True, "")
-        refused = client.call(
-            "executor.add_account", {"executor": "claude-code", "nickname": "a b"}
-        )
-        assert "nickname of letters" in refused["error"]["message"]
-        added = client.result(
-            "executor.add_account", {"executor": "claude-code", "nickname": "work"}
-        )
-        assert (added["nickname"], added["logged_in"]) == ("work", False)
-        assert Path(added["folder"]) == Path.home() / ".claude-work"
+        assert not client.result("executor.accounts", {"executor": "claude-code"})["can_add"]
+        call = _accounts_on(client)
+        refused = call("add", {"executor": "claude-code", "nickname": "a b"})
+        assert "nickname of letters" in refused["error"]
+        added = call("add", {"executor": "claude-code", "nickname": "work"})
         assert client.event("executor.accounts")["payload"] == {"executor": "claude-code"}
+        listed = client.result("executor.accounts", {"executor": "claude-code"})
+        [account] = [a for a in listed["accounts"] if a["account_id"] == added["account_id"]]
+        assert (account["nickname"], account["logged_in"]) == ("work", False)
+        assert Path(account["folder"]) == Path.home() / ".claude-work"
+        assert listed["can_add"]
         rows = client.result("workbench.list", {})["executors"]
         assert [(r["name"], r["base"], r["nickname"], r["title"]) for r in rows] == [
             ("claude-code", "", "", "Claude Code"),
@@ -1988,10 +2044,9 @@ def test_an_executors_other_accounts_over_the_socket(
             ("", "someone@example.com"),
             (added["account_id"], "other@example.com"),
         ]
-        assert listed["can_add"]
-        client.result(
-            "executor.folder_account",
-            {"executor": "claude-code", "folder": str(work), "account_id": added["account_id"]},
+        call(
+            "set_folder",
+            {"executor": "claude-code", "folder": str(work), "account": added["account_id"]},
         )
         client.event("executor.accounts")
         card = client.result("workbench.start", {"executor": "claude-code", "folder": str(work)})
@@ -2022,10 +2077,8 @@ def test_an_executors_other_accounts_over_the_socket(
         )
         assert "no longer keeps" in missing["error"]["message"]
         client.result("workbench.stop", {"instance_id": card["instance_id"]})
-        client.result(
-            "executor.remove_account",
-            {"executor": "claude-code", "account_id": added["account_id"]},
-        )
+        call("remove", {"executor": "claude-code", "account": added["account_id"]})
+        client.event("executor.accounts")
         after = client.result("executor.accounts", {"executor": "claude-code"})
         assert [a["account_id"] for a in after["accounts"]] == [""]
         assert [r["name"] for r in client.result("workbench.list", {})["executors"]] == [
@@ -2036,49 +2089,41 @@ def test_an_executors_other_accounts_over_the_socket(
 def test_a_sessions_route_over_the_socket(
     serve: Serve, tmp_path: Path, work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A session's route (asked for by the user on 21/10/2026): set from the app, each
-    destination an executor and its account with how the user knows it, one Atlas does not know
-    refused, and read back for the card."""
+    """A session's route (asked for by the user on 21/10/2026; the accounts plugin's since step
+    22): set from the app, each destination an executor and its account with how the user knows
+    it, one Atlas does not know refused, and read back for the card."""
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(tmp_path / "claude-log.jsonl"))
     monkeypatch.setenv("FAKE_CLAUDE_AUTH", str(tmp_path / "auth.json"))
     server = serve(executors={"claude-code": claude_code()})
     with server.client() as client:
-        added = client.result(
-            "executor.add_account", {"executor": "claude-code", "nickname": "work"}
-        )
+        call = _accounts_on(client)
+        added = call("add", {"executor": "claude-code", "nickname": "work"})
         card = client.result("workbench.start", {"executor": "claude-code", "folder": str(work)})
-        instance = card["instance_id"]
-        assert client.result("workbench.route", {"instance_id": instance}) == {
-            "instance_id": instance,
+        conversation = card["transcript_id"]
+        assert call("route", {"conversation": conversation}) == {
             "stops": [],
             "enabled": True,
             "compact": True,
         }
-        refused = client.call(
-            "workbench.set_route",
-            {"instance_id": instance, "targets": [{"executor": "codex"}]},
+        refused = call(
+            "set_route", {"conversation": conversation, "stops": [{"executor": "codex"}]}
         )
-        assert "not installed" in refused["error"]["message"]
-        unknown = client.call(
-            "workbench.set_route",
-            {"instance_id": instance, "targets": [{"executor": "claude-code", "effort": "turbo"}]},
-        )
-        assert "no effort 'turbo'" in unknown["error"]["message"]
-        targets = [
+        assert "not installed" in refused["error"]
+        stops = [
             {
                 "executor": "claude-code",
-                "account_id": added["account_id"],
+                "account": added["account_id"],
                 "model": "opus",
                 "effort": "high",
             },
             {"executor": "claude-code"},
         ]
-        route = client.result(
-            "workbench.set_route",
-            {"instance_id": instance, "targets": targets, "enabled": True, "compact": False},
+        route = call(
+            "set_route",
+            {"conversation": conversation, "stops": stops, "enabled": True, "compact": False},
         )
-        read = client.result("workbench.route", {"instance_id": instance})
-        client.result("workbench.stop", {"instance_id": instance})
+        read = call("route", {"conversation": conversation})
+        client.result("workbench.stop", {"instance_id": card["instance_id"]})
 
     assert route == read
     assert route["compact"] is False, "compacting first turned off, and kept"
@@ -2089,3 +2134,58 @@ def test_a_sessions_route_over_the_socket(
         (added["name"], "Claude Code", "work", True, "opus", "high"),
         ("claude-code", "Claude Code", "", True, None, None),
     ]
+
+
+def test_the_app_makes_and_changes_a_prompt_routine_and_every_client_hears_it(
+    serve: Serve, tmp_path: Path
+) -> None:
+    """Step 25: the Routines screen's form, `routine.save`."""
+    folder = str(tmp_path)
+    server = serve()
+    with server.client() as client, server.client() as other:
+        made = client.result(
+            "routine.save",
+            {
+                "name": "sweep",
+                "schedule": "every monday 9am",
+                "prompt": "Sweep the dependencies.",
+                "model": "openrouter/fake-model",
+                "effort": "high",
+                "executor": {
+                    "name": "claude-code",
+                    "folder": folder,
+                    "auto": False,
+                    "workspace": True,
+                    "draft": False,
+                },
+            },
+        )
+        heard = other.event("routines.changed")["payload"]
+        changed = client.result(
+            "routine.save",
+            {
+                "routine_id": made["id"],
+                "name": "sweep",
+                "schedule": "every day at 9am",
+                "prompt": "Sweep the dependencies, and list them.",
+                "probe": "python new-advisories.py",
+            },
+        )
+        refused = client.call(
+            "routine.save", {"name": "x", "schedule": "every 1h", "prompt": "", "bot": ""}
+        )
+
+    assert (made["model"], made["effort"], made["created_by"]) == (
+        "openrouter/fake-model",
+        "high",
+        "user",
+    )
+    assert made["executor"]["workspace"] is True
+    assert heard == {"count": 1}
+    assert (changed["schedule"], changed["probe"], changed["executor"], changed["model"]) == (
+        "every day at 9am",
+        "python new-advisories.py",
+        None,
+        "",
+    )
+    assert refused["error"]["code"] == -32602

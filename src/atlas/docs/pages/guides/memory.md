@@ -35,13 +35,30 @@ too.
 ## Your profile and the agent's notes
 
 - **`USER.md`, your profile:** who you are. Persona, preferences, how you communicate and work,
-  personal details you shared, and how you expect the agent to behave. **1,375 characters.**
+  personal details you shared, and how you expect the agent to behave. **1,375 characters** by
+  default.
 - **`MEMORY.md`, the agent's notes:** facts about the environment it works in. Tool quirks,
-  conventions, configuration gotchas, paths and endpoints that matter. **2,200 characters.**
+  conventions, configuration gotchas, paths and endpoints that matter. **2,200 characters** by
+  default.
 
 A fact goes to one file, never both. The limits count characters, the `§` lines included, so they
-do not depend on the model, and no setting changes them. Together, at most 3,575 characters,
-roughly a thousand tokens, ride on every call.
+do not depend on the model. By default, together, at most 3,575 characters, roughly a thousand
+tokens, ride on every call.
+
+**Changing the limits.** Settings → Personalization has a field under each file, or set them in
+`config.toml` (the [settings reference](/docs/reference/settings/#memory)):
+
+```toml
+[memory]
+user_limit = 2000     # USER.md, from 500 to 20,000
+memory_limit = 4000   # MEMORY.md, from 500 to 20,000
+```
+
+A larger limit is paid on every call, in tokens and in the model's attention. The agent's next
+write meets the new limit at once; the limit shown in its instructions changes from the next
+conversation. Lowering a limit under what a file holds cuts nothing: the agent must make room
+before it adds again. A bot's notes take the same limit as the main agent's. A plugin may read the
+limits (`ctx.memory_limits()`), never change them.
 
 Each file is a list of entries, separated by a line holding only `§`:
 
@@ -305,7 +322,6 @@ None of it is ever in the repository.
   new conversation to have it at once.
 - **The review needs 10 of your messages.** A shorter conversation is never reviewed: ask the agent
   to remember what matters.
-- **The limits are fixed:** 1,375 characters for your profile, 2,200 for the notes.
 - **Conversations cannot be deleted.** They are kept for good.
 - **The terminal cannot apply a bot's memory proposal.** `atlas memory proposals` marks it as one
   that cannot apply, saying the bot cannot be reached, and `approve` refuses it, though the bot is

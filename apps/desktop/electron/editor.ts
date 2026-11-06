@@ -24,16 +24,10 @@ export function vscodeLink(folder: string): string {
  * else why not. Only a folder of this machine, given in full, goes.
  */
 export async function openInEditor(folder: unknown, open: (link: string) => Promise<void>): Promise<string> {
-  if (typeof folder !== 'string' || !path.isAbsolute(folder)) {
-    return 'Not a full path to a folder.'
-  }
+  const refused = notAFolder(folder)
 
-  try {
-    if (!statSync(folder).isDirectory()) {
-      return `${folder} is not a folder.`
-    }
-  } catch {
-    return `${folder} is not on this machine.`
+  if (refused !== null || typeof folder !== 'string') {
+    return refused ?? ''
   }
 
   try {
@@ -43,4 +37,33 @@ export async function openInEditor(folder: unknown, open: (link: string) => Prom
   }
 
   return ''
+}
+
+/**
+ * Open `folder` in the system's file manager with `open` (Electron's `shell.openPath`, which says
+ * why not, or nothing): the title bar's "Open the folder" (step 18g). The same folders as VS Code.
+ */
+export async function openFolder(folder: unknown, open: (folder: string) => Promise<string>): Promise<string> {
+  const refused = notAFolder(folder)
+
+  if (refused !== null || typeof folder !== 'string') {
+    return refused ?? ''
+  }
+
+  const failed = await open(folder)
+
+  return failed ? `The folder did not open: ${failed}` : ''
+}
+
+/** Why `folder` is not a folder of this machine given in full; `null` when it is. */
+function notAFolder(folder: unknown): null | string {
+  if (typeof folder !== 'string' || !path.isAbsolute(folder)) {
+    return 'Not a full path to a folder.'
+  }
+
+  try {
+    return statSync(folder).isDirectory() ? null : `${folder} is not a folder.`
+  } catch {
+    return `${folder} is not on this machine.`
+  }
 }

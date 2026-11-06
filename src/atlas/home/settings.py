@@ -37,24 +37,33 @@ from atlas.home.errors import SettingsError
 from atlas.home.files import replace_file
 from atlas.home.model import (
     ARCHIVE_URL,
+    CLAUDE_PLUGINS_REPOSITORY,
     CONFIG_FILE,
     DEFAULT_HOST,
     DEFAULT_PORT,
+    GITHUB_API_URL,
     LOG_LEVELS,
     MARKETPLACE_REPOSITORY,
     RAW_URL,
+    REGISTRY_URL,
+    SKILLS_URL,
+    TRANSCRIPTIONS,
+    BackupSettings,
     BrowserSettings,
     Home,
     LogLevel,
     LogSettings,
     MarketplaceSettings,
+    MemorySettings,
     ModelSettings,
+    RelaySettings,
     SecretText,
     ServerSettings,
     Settings,
     TimeSettings,
     TrustSettings,
     VaultSettings,
+    VoiceSettings,
     WorkspaceSettings,
 )
 
@@ -99,6 +108,11 @@ def resolve_home(environ: Mapping[str, str]) -> Path:
     return home
 
 
+#: What a memory limit may be, in characters: below, a store holds a couple of entries; above,
+#: every model call carries some 5,000 tokens of it.
+MEMORY_LIMIT_RANGE = {"minimum": 500, "maximum": 20_000}
+
+
 def load_settings(environ: Mapping[str, str]) -> LoadedSettings:
     """Every setting, from the defaults, the home's `config.toml` and the environment."""
     home = resolve_home(environ)
@@ -135,14 +149,38 @@ def _settings(home: Path, source: "_Source") -> LoadedSettings:
                 "trust", "approval_timeout", 300, minimum=10, maximum=86_400
             ),
         ),
+        memory=MemorySettings(
+            user_limit=source.integer(
+                "memory", "user_limit", MemorySettings().user_limit, **MEMORY_LIMIT_RANGE
+            ),
+            memory_limit=source.integer(
+                "memory", "memory_limit", MemorySettings().memory_limit, **MEMORY_LIMIT_RANGE
+            ),
+        ),
         workspace=WorkspaceSettings(folder=source.path("workspace", "folder")),
         time=TimeSettings(zone=source.zone("time", "zone")),
         browser=BrowserSettings(chrome=source.text_list("browser", "chrome")),
+        relay=RelaySettings(url=source.optional_text("relay", "url")),
+        backup=BackupSettings(
+            folder=source.path("backup", "folder"),
+            every_hours=source.integer("backup", "every_hours", 24, minimum=1, maximum=24 * 30),
+            keep=source.integer("backup", "keep", 3, minimum=0, maximum=1000),
+        ),
         marketplace=MarketplaceSettings(
             repository=source.text("marketplace", "repository", MARKETPLACE_REPOSITORY),
             branch=source.text("marketplace", "branch", "main"),
             archive_url=source.text("marketplace", "archive_url", ARCHIVE_URL),
             raw_url=source.text("marketplace", "raw_url", RAW_URL),
+            outside=source.boolean("marketplace", "outside", default=True),
+            registry_url=source.text("marketplace", "registry_url", REGISTRY_URL),
+            skills_url=source.text("marketplace", "skills_url", SKILLS_URL),
+            github_api_url=source.text("marketplace", "github_api_url", GITHUB_API_URL),
+            claude_plugins=source.text("marketplace", "claude_plugins", CLAUDE_PLUGINS_REPOSITORY),
+        ),
+        voice=VoiceSettings(
+            transcription=source.one_of(
+                "voice", "transcription", VoiceSettings().transcription, TRANSCRIPTIONS
+            ),
         ),
     )
     moved = source.refuse_unknown_keys()
@@ -257,8 +295,11 @@ EDITABLE = (
     Editable("trust", "ask", "lines"),
     Editable("trust", "ask_skip", "lines"),
     Editable("trust", "approval_timeout", "number"),
+    Editable("memory", "user_limit", "number"),
+    Editable("memory", "memory_limit", "number"),
     Editable("workspace", "folder", "path"),
     Editable("time", "zone", "zone"),
+    Editable("voice", "transcription", "text"),
 )
 
 
@@ -554,6 +595,15 @@ class _Source:
         raise SettingsError(
             f"{where}={value!r} is not a log level. Use one of: {', '.join(LOG_LEVELS)}."
         )
+
+    def one_of(self, section: str, key: str, default: str, choices: tuple[str, ...]) -> str:
+        """One of a few names, given in any case."""
+        value = self.optional_text(section, key)
+        if value is None:
+            return default
+        if value.lower() not in choices:
+            raise SettingsError(f"[{section}] {key}={value!r} is not one of: {', '.join(choices)}.")
+        return value.lower()
 
     def zone(self, section: str, key: str) -> str | None:
         """An IANA time zone's name, refused when the zone database does not know it."""

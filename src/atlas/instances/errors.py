@@ -8,3 +8,12 @@ class InstancesError(Exception):
 
 class CodeError(InstancesError):
     """A connection code that is not one, or comes from a newer Atlas."""
+
+
+class TunnelError(InstancesError):
+    """A connection through the relay that cannot be trusted: the other end lacks the code's key,
+    or the relay changed what it carried (step 20)."""
+
+
+class RelayGoneError(InstancesError):
+    """A connection through the relay closed while a frame was sent."""

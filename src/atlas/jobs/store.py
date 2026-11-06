@@ -17,7 +17,12 @@ harness's own folder for it, and the account each folder's sessions start on
 kept in the database as the approvals kept for good are. No credential is kept: each account's
 login is the harness's, in its folder. With them, the order the accounts take over in when one
 reaches its plan's limit (`jobs_account_failover`), asked for by the user on 21/10/2026, and each
-session's own route across executors (`jobs_session_routes`), asked for the same day."""
+session's own route across executors (`jobs_session_routes`), asked for the same day.
+
+Since step 22 (03/11/2026) the accounts plugin keeps all four, in its own data folder: these
+tables are read once, by `AccountStore.export`, when an update finds them filled, and written no
+more. They stay in the database, unread: taking a table back is a riskier migration than a table
+left behind."""
 
 import dataclasses
 import json
@@ -46,8 +51,10 @@ from atlas.jobs.model import (
     ExecutorAccount,
     InstanceRecord,
     Lateness,
+    ProbeState,
     RouteTarget,
     Routine,
+    RoutineExecutor,
     Run,
     RunStatus,
     Schedule,
@@ -265,6 +272,31 @@ CREATE TABLE jobs_session_routes (
 ALTER TABLE jobs_session_routes ADD COLUMN compact INTEGER NOT NULL DEFAULT 1;
 """,
         ),
+        Migration(
+            12,
+            "a routine's probe, what it heard last, and the event that woke a run (step 23)",
+            """
+ALTER TABLE jobs_routines ADD COLUMN probe TEXT;
+ALTER TABLE jobs_runs ADD COLUMN event TEXT NOT NULL DEFAULT '';
+CREATE TABLE jobs_probes (
+    routine_id TEXT PRIMARY KEY REFERENCES jobs_routines (id) ON DELETE CASCADE,
+    digest TEXT NOT NULL DEFAULT '',
+    failures INTEGER NOT NULL DEFAULT 0,
+    warned INTEGER NOT NULL DEFAULT 0
+) STRICT;
+""",
+        ),
+        Migration(
+            13,
+            "the executor a routine runs in, its folder, its mode and its workspaces (step 25)",
+            """
+ALTER TABLE jobs_routines ADD COLUMN executor TEXT;
+ALTER TABLE jobs_routines ADD COLUMN folder TEXT NOT NULL DEFAULT '';
+ALTER TABLE jobs_routines ADD COLUMN executor_auto INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs_routines ADD COLUMN workspace INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs_routines ADD COLUMN draft INTEGER NOT NULL DEFAULT 0;
+""",
+        ),
     ),
 )
 
@@ -274,10 +306,11 @@ _ID_TRIES = 8
 _ROUTINE_COLUMNS = (
     "id, name, schedule_kind, schedule_display, minutes, expr, run_at, prompt, command, enabled, "
     "created_at, created_by, next_run_at, last_run_at, last_status, model_provider, model_name, "
-    "model_effort, run_now, bot"
+    "model_effort, run_now, bot, probe, executor, folder, executor_auto, workspace, draft"
 )
 _RUN_COLUMNS = (
-    "number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error"
+    "number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error, "
+    "event"
 )
 _SUBAGENT_COLUMNS = (
     "id, delegation_id, parent_id, conversation_id, task_index, task_count, goal, context, model, "
@@ -303,7 +336,7 @@ class RoutineStore:
                     with transaction(connection):
                         connection.execute(
                             f"INSERT INTO jobs_routines ({_ROUTINE_COLUMNS}) "  # noqa: S608
-                            f"VALUES ({', '.join('?' * 20)})",
+                            f"VALUES ({', '.join('?' * 26)})",
                             _routine_row(made),
                         )
                 except sqlite3.IntegrityError as error:
@@ -327,7 +360,8 @@ class RoutineStore:
                     "minutes = ?, expr = ?, run_at = ?, prompt = ?, command = ?, enabled = ?, "
                     "created_at = ?, created_by = ?, next_run_at = ?, last_run_at = ?, "
                     "last_status = ?, model_provider = ?, model_name = ?, model_effort = ?, "
-                    "run_now = ?, bot = ? WHERE id = ?",
+                    "run_now = ?, bot = ?, probe = ?, executor = ?, folder = ?, "
+                    "executor_auto = ?, workspace = ?, draft = ? WHERE id = ?",
                     (*_routine_row(routine)[1:], routine.id),
                 ).rowcount
         except sqlite3.IntegrityError as error:
@@ -372,7 +406,50 @@ class RoutineStore:
         finally:
             connection.close()
 
-    def start_run(self, routine: Routine, started: datetime, lateness: Lateness) -> Run:
+    def advance(self, routine: Routine) -> None:
+        """Write when the routine looks next and when it last did, with no run: its probe ran
+        and heard nothing new (step 23)."""
+        connection = self._database.connect()
+        try:
+            with transaction(connection):
+                connection.execute(
+                    "UPDATE jobs_routines SET next_run_at = ?, last_run_at = ?, run_now = 0 "
+                    "WHERE id = ?",
+                    (_text(routine.next_run_at), _text(routine.last_run_at), routine.id),
+                )
+        finally:
+            connection.close()
+
+    def probe_state(self, routine_id: str) -> ProbeState:
+        connection = self._database.connect()
+        try:
+            row = connection.execute(
+                "SELECT digest, failures, warned FROM jobs_probes WHERE routine_id = ?",
+                (routine_id,),
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is None:
+            return ProbeState(routine_id)
+        return ProbeState(routine_id, str(row[0]), int(row[1]), bool(row[2]))
+
+    def save_probe_state(self, state: ProbeState) -> None:
+        connection = self._database.connect()
+        try:
+            with transaction(connection):
+                connection.execute(
+                    "INSERT INTO jobs_probes (routine_id, digest, failures, warned) "
+                    "VALUES (?, ?, ?, ?) ON CONFLICT (routine_id) DO UPDATE SET "
+                    "digest = excluded.digest, failures = excluded.failures, "
+                    "warned = excluded.warned",
+                    (state.routine_id, state.digest, state.failures, int(state.warned)),
+                )
+        finally:
+            connection.close()
+
+    def start_run(
+        self, routine: Routine, started: datetime, lateness: Lateness, event: str = ""
+    ) -> Run:
         """Write the routine as advanced (its next run, its last) and its run as begun, together:
         the row exists before the run does anything (V3's `execution_jobs`: "a linha nasce antes da
         execução")."""
@@ -390,9 +467,15 @@ class RoutineStore:
                     ),
                 )
                 cursor = connection.execute(
-                    "INSERT INTO jobs_runs (routine_id, started_at, lateness, status) "
-                    "VALUES (?, ?, ?, ?)",
-                    (routine.id, format_utc(started), lateness.value, RunStatus.RUNNING.value),
+                    "INSERT INTO jobs_runs (routine_id, started_at, lateness, status, event) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        routine.id,
+                        format_utc(started),
+                        lateness.value,
+                        RunStatus.RUNNING.value,
+                        event,
+                    ),
                 )
                 number = cursor.lastrowid
                 connection.execute(
@@ -404,7 +487,7 @@ class RoutineStore:
             connection.close()
         if number is None:  # pragma: no cover - an INSERT always has a row id
             raise DatabaseError("SQLite gave no number to a routine run.")
-        return Run(number, routine.id, started, lateness)
+        return Run(number, routine.id, started, lateness, event=event)
 
     def finish_run(self, run: Run) -> None:
         """Write how a run ended, and the routine's last status."""
@@ -429,6 +512,18 @@ class RoutineStore:
                 )
         finally:
             connection.close()
+
+    def statuses_since(self, moment: datetime) -> dict[RunStatus, int]:
+        """How many runs of every routine started since `moment` ended each way."""
+        connection = self._database.connect()
+        try:
+            rows = connection.execute(
+                "SELECT status, COUNT(*) FROM jobs_runs WHERE started_at >= ? GROUP BY status",
+                (format_utc(moment),),
+            ).fetchall()
+        finally:
+            connection.close()
+        return {RunStatus(str(status)): int(count) for status, count in rows}
 
     def runs(self, routine_id: str, limit: int = RUNS_KEPT) -> list[Run]:
         """A routine's runs, newest first."""
@@ -490,6 +585,63 @@ class AccountStore:
 
     def __init__(self, database: Database) -> None:
         self._database = database
+
+    def export(self) -> dict[str, object] | None:
+        """Everything kept here, as the accounts plugin reads it the first time it starts (step
+        22): each executor's accounts, the order they take over in and its folders' accounts, and
+        each session's route; `None` when no account was ever added."""
+        connection = self._database.connect()
+        try:
+            executors = [
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT DISTINCT executor FROM jobs_executor_accounts ORDER BY executor"
+                )
+            ]
+            routes = connection.execute("SELECT conversation FROM jobs_session_routes").fetchall()
+        finally:
+            connection.close()
+        if not executors:
+            return None
+        kept: dict[str, object] = {}
+        for executor in executors:
+            failover = self.failover(executor)
+            kept[executor] = {
+                "accounts": [
+                    {
+                        "id": account.id,
+                        "nickname": account.name,
+                        "folder": account.folder,
+                        "added_at": format_utc(account.added_at),
+                    }
+                    for account in self.accounts(executor)
+                ],
+                "hand_over": {
+                    "enabled": failover.enabled,
+                    "compact": failover.compact,
+                    "order": list(failover.order),
+                },
+                "folders": self.folder_accounts(executor),
+            }
+        routed: dict[str, object] = {}
+        for (conversation,) in routes:
+            route = self.route(str(conversation))
+            if route is None:
+                continue
+            routed[route.conversation] = {
+                "enabled": route.enabled,
+                "compact": route.compact,
+                "stops": [
+                    {
+                        "executor": target.executor,
+                        "account": target.account,
+                        **({"model": target.model} if target.model else {}),
+                        **({"effort": target.effort} if target.effort else {}),
+                    }
+                    for target in route.targets
+                ],
+            }
+        return {"version": 1, "executors": kept, "routes": routed}
 
     def accounts(self, executor: str) -> list[ExecutorAccount]:
         """`executor`'s other accounts, the oldest first."""
@@ -1141,6 +1293,7 @@ def _moment(value: object) -> datetime | None:
 
 def _routine_row(routine: Routine) -> tuple[object, ...]:
     schedule = routine.schedule
+    executor = routine.executor
     return (
         routine.id,
         routine.name,
@@ -1162,6 +1315,12 @@ def _routine_row(routine: Routine) -> tuple[object, ...]:
         routine.model_effort,
         int(routine.run_now),
         routine.bot,
+        routine.probe,
+        None if executor is None else executor.name,
+        "" if executor is None else executor.folder,
+        int(executor is not None and executor.auto),
+        int(executor is not None and executor.workspace),
+        int(executor is not None and executor.draft),
     )
 
 
@@ -1169,7 +1328,7 @@ def _routine(row: Sequence[object]) -> Routine:
     (
         routine_id, name, kind, display, minutes, expr, run_at, prompt, command, enabled,
         created_at, created_by, next_run_at, last_run_at, last_status, provider, model, effort,
-        run_now, bot,
+        run_now, bot, probe, executor, folder, auto, workspace, draft,
     ) = row  # fmt: skip
     schedule = Schedule(
         ScheduleKind(str(kind)),
@@ -1198,11 +1357,18 @@ def _routine(row: Sequence[object]) -> Routine:
         model_effort=None if effort is None else str(effort),
         run_now=bool(run_now),
         bot=None if bot is None else str(bot),
+        probe=None if probe is None else str(probe),
+        executor=None
+        if executor is None
+        else RoutineExecutor(str(executor), str(folder), bool(auto), bool(workspace), bool(draft)),
     )
 
 
 def _run(row: Sequence[object]) -> Run:
-    number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error = row
+    (
+        number, routine_id, started_at, lateness, status, ended_at, conversation_id, output, error,
+        event,
+    ) = row  # fmt: skip
     started = _moment(started_at)
     if started is None:  # pragma: no cover - NOT NULL
         raise DatabaseError(f"Run {number} has no start time.")
@@ -1216,6 +1382,7 @@ def _run(row: Sequence[object]) -> Run:
         conversation_id=None if conversation_id is None else str(conversation_id),
         output=str(output),
         error=None if error is None else str(error),
+        event=str(event),
     )
 
 

@@ -36,10 +36,8 @@ from pathlib import Path
 from atlas.home import utc_now
 from atlas.plugins.model import MANIFEST
 from atlas.plugins.service import PluginError, Plugins
-from atlas.plugins.store import Found, read_plugin
+from atlas.plugins.store import INSTALLED_FILE, OFFICIAL_SOURCE, Found, read_plugin
 
-#: Where the plugins installed by address are recorded, in the plugins folder.
-INSTALLED_FILE = ".install-metadata.json"
 #: Where an install is put together before it takes its place, skipped by the plugin search.
 _STAGING = ".installing"
 #: How long a clone may take.
@@ -152,7 +150,7 @@ def install(
     the same name the user installed. Raises `PluginError`."""
     address = parse_address(text, ref)
     found, revision = _fetch(plugins, address, git, replacing=None, force=force)
-    _record(plugins.folder, found.name, Installed(text.strip(), address.url, address.subdir,
+    keep_record(plugins.folder, found.name, Installed(text.strip(), address.url, address.subdir,
             address.ref, revision, clock().isoformat()))  # fmt: skip
     _logger.info("A plugin was installed.", extra={"plugin": found.name})
     return found
@@ -174,8 +172,10 @@ def update(plugins: Plugins, name: str, *, git: str = "git") -> tuple[Found, boo
     address = Address(record.url, record.subdir, record.ref, folder=not record.revision)
     found, revision = _fetch(plugins, address, git, replacing=name, force=True)
     changed = address.folder or revision != record.revision
-    _record(plugins.folder, name, Installed(record.source, record.url, record.subdir, record.ref,
-            revision, record.installed_at))  # fmt: skip
+    kept = Installed(
+        record.source, record.url, record.subdir, record.ref, revision, record.installed_at
+    )
+    keep_record(plugins.folder, name, kept)
     return found, changed
 
 
@@ -187,7 +187,7 @@ def place(
     `replacing` names the installed plugin it updates. Raises `PluginError`."""
     address = Address(str(folder), folder=True)
     found, _ = _fetch(plugins, address, "git", replacing=replacing, force=bool(replacing))
-    _record(plugins.folder, found.name, record)
+    keep_record(plugins.folder, found.name, record)
     _logger.info("A plugin was put in place.", extra={"plugin": found.name})
     return found
 
@@ -202,10 +202,10 @@ def remove(plugins: Plugins, name: str) -> Path:
     view = plugins.view(name)
     if view.enabled:
         plugins.disable(name)
-    _remove_tree(view.folder)
-    records = installed(plugins.folder)
-    records.pop(name, None)
-    _write(plugins.folder, records)
+    if not installed(plugins.folder)[name].source.startswith(OFFICIAL_SOURCE):
+        # One of Atlas's own (step 26) keeps its files in the installation: only its record goes.
+        _remove_tree(view.folder)
+    forget(plugins.folder, name)
     _logger.info("A plugin was removed.", extra={"plugin": name})
     return plugins.data_folder(name)
 
@@ -235,12 +235,18 @@ def _fetch(
         if replacing is not None and name != replacing:
             raise PluginError(f"{address.url} now holds the plugin {name}, not {replacing}.")
         staged = work / "plugin" / name
-        shutil.copytree(source, staged, ignore=shutil.ignore_patterns(".git"), symlinks=True)
+        shutil.copytree(
+            source, staged, ignore=shutil.ignore_patterns(".git", "__pycache__"), symlinks=True
+        )
         found = read_plugin(staged, bundled=False)
         if found.manifest is None:
             raise PluginError(f"{address.url} holds no plugin Atlas loads: {found.problem}")
-        if any(view.name == name and view.bundled for view in plugins.all()):
-            raise PluginError(f"Atlas ships a plugin named {name}; this one cannot replace it.")
+        if replacing is None and any(
+            view.name == name and view.bundled and view.installed for view in plugins.all()
+        ):
+            raise PluginError(
+                f"Atlas's own plugin {name} is installed; this one cannot replace it."
+            )
         target = folder / name
         if target.exists():
             ours = name in installed(folder)
@@ -309,13 +315,22 @@ def _name(folder: Path) -> str:
     return name
 
 
-def _record(plugins_folder: Path, name: str, record: Installed) -> None:
+def keep_record(plugins_folder: Path, name: str, kept: Installed) -> None:
+    """Record where the plugin `name` came from."""
     records = installed(plugins_folder)
-    records[name] = record
+    records[name] = kept
+    _write(plugins_folder, records)
+
+
+def forget(plugins_folder: Path, name: str) -> None:
+    """Forget where the plugin `name` came from."""
+    records = installed(plugins_folder)
+    records.pop(name, None)
     _write(plugins_folder, records)
 
 
 def _write(plugins_folder: Path, records: dict[str, Installed]) -> None:
+    plugins_folder.mkdir(parents=True, exist_ok=True)
     file = plugins_folder / INSTALLED_FILE
     text = json.dumps({n: asdict(r) for n, r in sorted(records.items())}, indent=2) + "\n"
     file.write_text(text, encoding="utf-8", newline="\n")

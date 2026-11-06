@@ -34,7 +34,8 @@ The gate looks at a command in this order, and the first rule that applies decid
 5. Anything else runs.
 
 The checks read the whole command line: each part of a compound command, what runs inside `$(...)`,
-`sh -c` and `eval`, and the scripts a command names, so wrapping a command does not slip it past
+`sh -c` and `eval`, the program behind variable assignments (`X=1 reboot`) or a wrapper such as
+`timeout` or `nice`, and the scripts a command names, so wrapping a command does not slip it past
 the gate.
 
 ## When it asks you

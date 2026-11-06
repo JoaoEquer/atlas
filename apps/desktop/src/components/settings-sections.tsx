@@ -9,12 +9,15 @@ import {
   $modelOptions,
   $proposals,
   $remote,
+  $speech,
   readSettings,
+  readSpeech,
   serverVersion,
   showProposals,
   writeSettings
 } from '@/store/app'
 import { closeSettings } from '@/store/settings'
+import { openFirstRun } from '@/store/setup'
 import { $pluginThemes, $themeChoice, setTheme, type ThemeChoice, themeKey } from '@/store/theme'
 import { $update, $updateOpen } from '@/store/updates'
 
@@ -22,6 +25,7 @@ import { Providers } from './key-screen'
 import { MemoryEntries } from './memory-entries'
 import { withCurrent } from './model-picker'
 import { SoulSection } from './soul-view'
+import { SpeechModel } from './speech-view'
 
 /**
  * The settings screen's sections (step 15b, docs/ARCHITECTURE.md, The settings screen): a change
@@ -269,6 +273,20 @@ export function GeneralSection() {
         ]}
         testId="setting-theme"
       />
+      <section className="space-y-2" data-testid="settings-first-run">
+        <Heading hint={t.settings.firstRunHint}>{t.settings.firstRun}</Heading>
+        <button
+          className={SECONDARY}
+          data-testid="settings-first-run-open"
+          onClick={() => {
+            closeSettings()
+            openFirstRun($home.get(), true)
+          }}
+          type="button"
+        >
+          {t.settings.firstRunOpen}
+        </button>
+      </section>
       <section className="space-y-2" data-testid="settings-about">
         <Heading>{t.settings.about}</Heading>
         <p className="text-sm">{version ? t.settings.version(version) : '…'}</p>
@@ -478,13 +496,45 @@ function DefaultModel({
 
 export function PersonalizationSection() {
   const proposals = useStore($proposals)
+  const { error, rows, save, status } = useSettings()
+
+  const limit = (key: string) => {
+    const row = rows?.[id('memory', key)]
+
+    return (
+      row && (
+        <TextSetting
+          hint={t.settings.limitHint}
+          label={t.settings.limit}
+          row={row}
+          save={save}
+          status={status[id('memory', key)]}
+        />
+      )
+    )
+  }
 
   return (
     <div className="space-y-8">
       <p className="text-sm text-muted-foreground">{t.settings.appliesNext}</p>
+      <Failure error={error} />
       <SoulSection />
-      <MemoryEntries hint={t.settings.aboutYouHint} target="user" title={t.settings.aboutYou} />
-      <MemoryEntries hint={t.settings.memoryHint} target="memory" title={t.settings.memory} />
+      <MemoryEntries
+        hint={t.settings.aboutYouHint}
+        limit={rows?.['memory.user_limit']?.value}
+        target="user"
+        title={t.settings.aboutYou}
+      >
+        {limit('user_limit')}
+      </MemoryEntries>
+      <MemoryEntries
+        hint={t.settings.memoryHint}
+        limit={rows?.['memory.memory_limit']?.value}
+        target="memory"
+        title={t.settings.memory}
+      >
+        {limit('memory_limit')}
+      </MemoryEntries>
       {proposals.length > 0 && (
         <button
           className="link text-sm"
@@ -595,6 +645,44 @@ export function WorkspaceSection() {
           status={status['time.zone']}
         />
       )}
+    </div>
+  )
+}
+
+// -- Voice --------------------------------------------------------------------------------------
+
+/** Who writes down recordings (step 26): this computer, a provider with its key, or nobody. */
+export function VoiceSection() {
+  const { error, rows, save, status } = useSettings()
+  const speech = useStore($speech)
+  const row = rows?.['voice.transcription']
+
+  return (
+    <div className="space-y-6">
+      <Failure error={error} />
+      {row && (
+        <div className="space-y-1.5">
+          <Choice
+            current={row.value ?? 'local'}
+            hint={t.speech.transcriptionHint}
+            label={t.speech.transcription}
+            onChange={next => {
+              void save('voice.transcription', [
+                { key: 'transcription', section: 'voice', value: next === 'local' ? null : next }
+              ]).then(saved => (saved ? readSpeech() : undefined))
+            }}
+            options={[
+              ['local', t.speech.local],
+              ['openai', 'OpenAI'],
+              ['gemini', 'Gemini'],
+              ['off', t.speech.off]
+            ]}
+            testId="setting-voice.transcription"
+          />
+          <StatusLine status={status['voice.transcription']} variable={row.variable} />
+        </div>
+      )}
+      {speech && (row?.value ?? 'local') === 'local' && <SpeechModel speech={speech} />}
     </div>
   )
 }

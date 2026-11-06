@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { type CSSProperties, useEffect } from 'react'
+import { Activity, type CSSProperties, useEffect } from 'react'
 
 import { t } from '@/i18n'
 import { PluginPage } from '@/plugins/view'
@@ -9,6 +9,7 @@ import {
   $bots,
   $cards,
   $connection,
+  $home,
   $keyLater,
   $keyNotice,
   $modelOptions,
@@ -17,24 +18,32 @@ import {
   $selected,
   $sending,
   $session,
+  $tabs,
   $threads,
   $view,
+  $workbench,
+  type Card,
   currentFolder,
   DRAFT,
   keyScreenShown
 } from '@/store/app'
 import { $panelWidth, $sidebarWidth, toggleSidebar } from '@/store/layout'
+import { $firstRun, firstRunOf } from '@/store/setup'
 import { $terminals, openTerminal, refreshTerminalAvailable, terminalAvailable, togglePanel } from '@/store/terminals'
 import { EMPTY_THREAD } from '@/store/thread'
 import { waitingCalls } from '@/store/waiting'
+import { offerWork } from '@/store/work'
 
 import { ApprovalCard } from './approval-card'
 import { AskCard } from './ask-card'
 import { BotDialogHost } from './bot-dialog'
 import { BotEmpty, BotHeader } from './bot-header'
 import { Composer } from './composer'
+import { DictationsView } from './dictation'
+import { ExtensionsView } from './extensions-view'
+import { FirstRun, FirstRunBand } from './first-run'
 import { HomeDialogHost } from './home-dialog'
-import { KeyBand, KeyScreen } from './key-screen'
+import { KeyBand } from './key-screen'
 import { MarketplaceView } from './marketplace-view'
 import { PreviewLinks } from './preview-links'
 import { ProposalCard } from './proposal-card'
@@ -45,6 +54,8 @@ import { SessionView } from './session-view'
 import { SettingsView } from './settings-view'
 import { SidePanel } from './side-panel'
 import { Sidebar } from './sidebar'
+import { SpeechBand } from './speech-view'
+import { StartScreen } from './start-screen'
 import { TabStrip } from './tab-strip'
 import { ThreadView } from './thread-view'
 
@@ -58,15 +69,23 @@ export function App() {
   const thread = (selected ? threads[selected] : undefined) ?? EMPTY_THREAD
   // A conversation opened for the first time is read before it shows: never as an empty one.
   const reading = selected !== null && threads[selected] === undefined
-  const sending = useStore($sending)[selected ?? DRAFT]
+  const sendingAll = useStore($sending)
+  const sending = sendingAll[selected ?? DRAFT]
   const read = useStore($read)
-  // An executor's cards are in its session's conversation, in the executors tab (step 16f).
-  const shown = cards.filter(
-    (card): card is Extract<typeof card, { kind: 'approval' | 'ask' | 'secret' }> =>
-      card.conversationId === selected && (card.kind === 'ask' || card.kind === 'approval' || card.kind === 'secret')
-  )
+  const shown = cardsOf(cards, selected)
   // The calls those cards hold wait for the user on the trail; they do not run.
   const waiting = waitingCalls(shown, thread.items)
+  // Every conversation open in a tab and read keeps its thread drawn, hidden while another shows:
+  // going back to one only shows it. Drawn again, a long conversation's Markdown held the click for
+  // about a second (found by the user on 01/11/2026). The one on screen comes last, as the only one
+  // the page reads.
+  const place = selected ?? DRAFT
+  const kept = useStore($tabs).flatMap(({ place: held }) => {
+    const other = held.kind === 'conversation' && held.conversationId !== selected ? held.conversationId : null
+    const loaded = other === null ? undefined : threads[other]
+
+    return other !== null && loaded ? [{ place: other, thread: loaded }] : []
+  })
   // A proposal shows in the conversation its review read, until it is decided.
   const fromHere = (proposal: { conversation_id: null | string }) =>
     selected !== null && proposal.conversation_id === selected
@@ -81,8 +100,24 @@ export function App() {
   const options = useStore($modelOptions)
   const later = useStore($keyLater)
   const notice = useStore($keyNotice)
-  // With no provider's key, the app opens on the key screen; after "choose later", a band.
-  const keyScreen = state === 'open' && keyScreenShown(options, later, notice)
+  // With no provider's key, the app opens on the first run; left with none stored, a band. Opened
+  // from the settings, it shows until it is left.
+  const home = useStore($home)
+  const setup = firstRunOf(useStore($firstRun), home)
+  // Stepped away from for a conversation it opened, it waits a band away.
+  const setupAway = setup.open && setup.away === true
+  const firstRun = state === 'open' && ((setup.open && !setupAway) || keyScreenShown(options, later, notice))
+  // A home that had its key before the first run existed is offered "Bring your work" once.
+  const keyed = options !== null && !keyScreenShown(options, false, null)
+  const executorsOn = useStore($workbench)
+    .executors.filter(row => row.enabled && row.installed && row.supported)
+    .map(row => row.name)
+    .join('\n')
+  useEffect(() => {
+    if (state === 'open' && keyed && read.workbench) {
+      void offerWork(home, executorsOn ? executorsOn.split('\n') : [])
+    }
+  }, [executorsOn, home, keyed, read.workbench, state])
   const keyBand = state === 'open' && later && keyScreenShown(options, false, null)
   // The rails' widths, which styles.css gives the sidebar and the side panel.
   const panelWidth = useStore($panelWidth)
@@ -130,36 +165,66 @@ export function App() {
     }
   }, [])
 
+  if (firstRun) {
+    return (
+      <div className="relative flex h-full bg-background text-foreground" data-connection={state}>
+        <FirstRun />
+        <SettingsView />
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-full bg-background text-foreground" data-connection={state} style={widths}>
       <Sidebar />
       <main className="main-pane flex min-w-0 flex-1 flex-col">
-        {!keyScreen && <TabStrip />}
+        <TabStrip />
         <ConnectionBand />
         {keyBand && <KeyBand />}
-        {keyScreen ? (
-          <KeyScreen />
-        ) : view === 'proposals' ? (
+        {setupAway && <FirstRunBand step={setup.step} />}
+        {state === 'open' && <SpeechBand />}
+        {view === 'proposals' ? (
           <ProposalsView />
         ) : view === 'routines' ? (
           <RoutinesView />
+        ) : view === 'dictations' ? (
+          <DictationsView />
         ) : view === 'marketplace' ? (
           <MarketplaceView />
+        ) : view === 'extensions' ? (
+          <ExtensionsView />
         ) : view === 'plugin' ? (
           <PluginPage />
         ) : view === 'session' ? (
           <SessionView />
+        ) : view === 'start' ? (
+          <StartScreen />
         ) : (
           <>
             {bot && <BotHeader bot={bot} />}
-            <ThreadView
-              empty={opening ? <Opening /> : bot ? <BotEmpty bot={bot} /> : undefined}
-              loading={reading}
-              place={selected ?? DRAFT}
-              sending={sending}
-              thread={thread}
-              waiting={waiting}
-            />
+            {/* One list, keyed by conversation, so a thread hidden or shown again is the same one. */}
+            {[
+              ...kept.map(other => (
+                <Activity key={other.place} mode="hidden">
+                  <ThreadView
+                    place={other.place}
+                    sending={sendingAll[other.place]}
+                    thread={other.thread}
+                    waiting={waitingCalls(cardsOf(cards, other.place), other.thread.items)}
+                  />
+                </Activity>
+              )),
+              <Activity key={place} mode="visible">
+                <ThreadView
+                  empty={opening ? <Opening /> : bot ? <BotEmpty bot={bot} /> : undefined}
+                  loading={reading}
+                  place={place}
+                  sending={sending}
+                  thread={thread}
+                  waiting={waiting}
+                />
+              </Activity>
+            ]}
             {shown.length + proposed.length + done.length > 0 && (
               <div className="mx-auto max-h-[50vh] w-full max-w-3xl space-y-3 overflow-y-auto px-6 pb-3">
                 {shown.map(card => {
@@ -190,6 +255,19 @@ export function App() {
       <HomeDialogHost />
       <SettingsView />
     </div>
+  )
+}
+
+/** The cards that wait for the user in a conversation's thread. An executor's are in its session's
+ * conversation, in the executors tab (step 16f). */
+function cardsOf(
+  cards: readonly Card[],
+  conversationId: null | string
+): Extract<Card, { kind: 'approval' | 'ask' | 'secret' }>[] {
+  return cards.filter(
+    (card): card is Extract<Card, { kind: 'approval' | 'ask' | 'secret' }> =>
+      card.conversationId === conversationId &&
+      (card.kind === 'ask' || card.kind === 'approval' || card.kind === 'secret')
   )
 }
 

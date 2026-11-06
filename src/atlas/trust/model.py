@@ -234,10 +234,15 @@ def refused_message(answer: ApprovalAnswer, *, command: bool) -> str:
     return f"[Atlas: BLOCKED: {what} denied by the user.{said}{stop}]"
 
 
+#: What every refusal for want of someone to approve says, by which a routine's run that met
+#: one is counted as one that needed the user (step 25).
+NOBODY_TO_APPROVE = "but nobody is here to approve it"
+
+
 def unattended_message(reason: str, *, command: bool) -> str:
     what = "Command flagged as dangerous" if command else "This action needs approval"
     return (
-        f"[Atlas: BLOCKED: {what} ({reason}) but nobody is here to approve it. Find an "
+        f"[Atlas: BLOCKED: {what} ({reason}) {NOBODY_TO_APPROVE}. Find an "
         "alternative approach that avoids it.]"
     )
 

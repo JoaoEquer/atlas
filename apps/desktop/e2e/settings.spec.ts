@@ -17,7 +17,7 @@ async function asked(): Promise<string[]> {
   return ((await desktop?.model.requests()) ?? []).map(request => JSON.stringify(request.body))
 }
 
-test('a rule and an entry saved on the settings screen apply without a restart', async () => {
+test('a rule, an entry and a limit saved on the settings screen apply without a restart', async () => {
   desktop = await launch()
   const { folder, home, model, page } = desktop
   const config = () => readFileSync(path.join(home, 'config.toml'), 'utf8')
@@ -59,6 +59,12 @@ test('a rule and an entry saved on the settings screen apply without a restart',
   await expect(about.getByTestId('memory-entry')).toHaveText('Prefers answers in two lines.')
   await expect(about.getByTestId('memory-used')).toHaveText('29 of 1,375 characters')
   expect(readFileSync(path.join(home, 'memory', 'USER.md'), 'utf8')).toContain('Prefers answers in two lines.')
+  // Its limit, saved on Enter: the count reads it at once.
+  const limit = about.getByTestId('setting-memory.user_limit')
+  await limit.fill('800')
+  await limit.press('Enter')
+  await expect(about.getByTestId('memory-used')).toHaveText('29 of 800 characters')
+  expect(config()).toContain('user_limit = 800')
 
   // Workspace: the starting folder, saved on Enter.
   settings = await openSettings(page, 'workspace')
@@ -75,9 +81,11 @@ test('a rule and an entry saved on the settings screen apply without a restart',
   await page.getByRole('button', { name: 'New conversation' }).click()
   await model.reply({ text: 'Two lines, then.' })
   await say(page, 'Who am I?')
-  await expect(page.getByTestId('assistant-message')).toHaveText('Two lines, then.')
+  // The conversation before stays drawn in its tab, hidden.
+  await expect(page.getByTestId('assistant-message').filter({ visible: true })).toHaveText('Two lines, then.')
   const last = (await asked()).at(-1) ?? ''
   expect(last).toContain('Prefers answers in two lines.')
+  expect(last).toContain('29/800 chars')
   expect(last).toContain(JSON.stringify(elsewhere).slice(1, -1))
 })
 
@@ -107,9 +115,8 @@ test('each section opens from the left, a variable locks its setting, and the la
     'Set by ATLAS_TIME_ZONE, which wins over config.toml.'
   )
 
-  // Extensions and Machines are sections too; Extensions opens on its plugins.
-  await openSettings(page, 'extensions')
-  await expect(settings.getByTestId('plugins-view')).toBeVisible()
+  // Machines is a section too; Extensions is not, it is in the sidebar.
+  await expect(settings.getByTestId('settings-nav-extensions')).toHaveCount(0)
   await openSettings(page, 'machines')
   await expect(settings.getByTestId('this-machine')).toBeVisible()
 

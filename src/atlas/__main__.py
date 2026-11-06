@@ -9,6 +9,7 @@ the settings to whoever needs them.
 
 import argparse
 import asyncio
+import dataclasses
 import getpass
 import importlib
 import importlib.util
@@ -112,25 +113,31 @@ from atlas.instances import (
     AlwaysOnHome,
     AlwaysOnServices,
     InstancesError,
+    RelayAddress,
     Tailnet,
     encode_code,
     read_always_on,
     tailnet,
 )
 from atlas.jobs import SCHEMA as JOBS_SCHEMA
-from atlas.jobs import JobsError, Routine, Routines, RoutineStore
+from atlas.jobs import JobsError, Routine, RoutineExecutor, Routines, RoutineStore
 from atlas.marketplace import (
     Kind,
     Marketplace,
     MarketplaceError,
     MarketplaceStore,
     Row,
+    Source,
     State,
+    check_outside,
+    fetch,
+    outside_sources,
+    outside_text,
     shipped_names,
 )
 from atlas.marketplace import check as check_marketplace
 from atlas.memory import SCHEMA as MEMORY_SCHEMA
-from atlas.memory import Action, MemoryFiles, Operation, Proposals, ProposalStore
+from atlas.memory import Action, MemoryFiles, Operation, Proposals, ProposalStore, limits_of
 from atlas.models import SCHEMA as MODELS_SCHEMA
 from atlas.models import (
     CallLedger,
@@ -158,11 +165,13 @@ from atlas.server import (
     KEPT_TOKEN,
     POLL_SECONDS,
     READY_LINE,
+    RELAY_KEY,
     Gateway,
     Parent,
     create_app,
     is_loopback,
     kept_token,
+    relay_room,
 )
 from atlas.skills import SCHEMA as SKILLS_SCHEMA
 from atlas.skills import (
@@ -177,6 +186,7 @@ from atlas.skills import (
 )
 from atlas.skills import share as share_skill
 from atlas.trust import SCHEMA as TRUST_SCHEMA
+from atlas.workspaces import SCHEMA as WORKSPACES_SCHEMA
 
 __all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "SCHEMAS", "build_parser", "listen_address", "main"]
 
@@ -190,6 +200,7 @@ SCHEMAS: tuple[Schema, ...] = (
     MEMORY_SCHEMA,
     JOBS_SCHEMA,
     PLUGINS_SCHEMA,
+    WORKSPACES_SCHEMA,
 )
 
 _logger = logging.getLogger("atlas.cli")
@@ -272,6 +283,12 @@ def build_parser() -> argparse.ArgumentParser:
         "code",
         help="Print the connection code another machine's app opens this home with. A secret: it "
         "holds the token.",
+    )
+    code.add_argument(
+        "--relay",
+        action="store_true",
+        help="Also through the relay set as [relay] url (step 20): the app reaches the home from "
+        "anywhere, with no port open, and only it and the home read what crosses.",
     )
     code.add_argument(
         "--port",
@@ -383,6 +400,34 @@ def build_parser() -> argparse.ArgumentParser:
         "--bot",
         metavar="NAME",
         help="The bot the prompt runs as; its result enters the bot's fixed conversation.",
+    )
+    make.add_argument(
+        "--probe",
+        metavar="COMMAND",
+        help="With --prompt and a schedule that repeats: a command run first, with no model; the "
+        "prompt runs only when it prints something new, which the prompt receives.",
+    )
+    make.add_argument(
+        "--executor",
+        metavar="NAME",
+        help="With --prompt and --folder: the outside executor that runs the prompt there, as a "
+        "session of its own each run (claude-code, codex...).",
+    )
+    make.add_argument("--folder", type=Path, help="The folder the executor works in.")
+    make.add_argument(
+        "--auto",
+        action="store_true",
+        help="Run the executor in its automatic mode; otherwise its first question stops a run.",
+    )
+    make.add_argument(
+        "--workspace",
+        action="store_true",
+        help="Each run in a new workspace of the folder, archived when it changed nothing.",
+    )
+    make.add_argument(
+        "--draft",
+        action="store_true",
+        help="With --workspace: open a draft pull request of what a run changed (GitHub plugin).",
     )
     for name, text in (
         ("pause", "Stop a routine firing until resumed."),
@@ -581,6 +626,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     market_list.add_argument("--kind", choices=[kind.value for kind in Kind])
     market_list.add_argument("--refresh", action="store_true", help="Read the marketplace now.")
+    market_list.add_argument(
+        "--search",
+        metavar="TEXT",
+        default="",
+        help="Search the outside catalogs (the MCP Registry) for TEXT too.",
+    )
     market_show = market_actions.add_parser(
         "show", help="An item's page: its README, and what it needs here."
     )
@@ -621,6 +672,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also load each plugin's Python, in a home thrown away after: only where foreign "
         "code may run, as the marketplace's CI.",
+    )
+    market_check.add_argument(
+        "--base",
+        type=Path,
+        help="The marketplace as it is on its branch: refuse what only its owner changes (an "
+        "official mark, removed.yaml, outside.yaml), for a pull request of someone else.",
+    )
+
+    market_outside = market_actions.add_parser(
+        "outside",
+        help="Check every plugin of Claude Code's directory as Atlas reads one, running none, and "
+        "write what does not work in Atlas, as the marketplace's nightly check does.",
+    )
+    market_outside.add_argument(
+        "--out", type=Path, help="Write outside.yaml here; by default, print it."
     )
 
     pairing = commands.add_parser("pairing", help="Who may talk to Atlas through a channel.")
@@ -707,7 +773,7 @@ def main(
         if args.command == "skills":
             return _skills(args, home)
         if args.command == "memory":
-            return _memory(args, home)
+            return _memory(args, home, loaded.settings)
         if args.command == "backup":
             return _backup(args, home)
         if args.command == "restore":
@@ -867,6 +933,16 @@ def _server(args: argparse.Namespace, home: Home, settings: Settings, vault: Vau
         return 0
     port: int = settings.server.port if args.port is None else args.port
     code = AlwaysOnHome(home).code(kept_token(vault), port)
+    if args.relay:
+        url = settings.relay.url
+        if url is None:
+            sys.stderr.write(
+                "atlas: no relay is set: give its address as [relay] url in config.toml, or "
+                "ATLAS_RELAY_URL.\n"
+            )
+            return 1
+        room = relay_room(vault, url)
+        code = dataclasses.replace(code, relay=RelayAddress(room.url, room.room, room.key))
     sys.stdout.write(f"{encode_code(code)}\n")
     return 0
 
@@ -1030,7 +1106,14 @@ def _serve_held(
         },
     )
     tailnet_names: set[str] = set()
-    app = create_app(gateway, token=token, bound_host=host, tailnet_names=tailnet_names)
+    relay = (
+        None
+        if settings.relay.url is None or vault.get(RELAY_KEY) is None
+        else relay_room(vault, settings.relay.url)
+    )
+    app = create_app(
+        gateway, token=token, bound_host=host, tailnet_names=tailnet_names, relay=relay
+    )
     opening = (
         None if always_on is None or not always_on.open else _Tailnet(app, port, tailnet_names)
     )
@@ -1310,6 +1393,16 @@ def _routines(args: argparse.Namespace, home: Home, settings: Settings) -> int:
                 command=args.shell_command,
                 model=model,
                 bot=args.bot or None,
+                probe=args.probe,
+                executor=None
+                if not args.executor
+                else RoutineExecutor(
+                    args.executor,
+                    str(args.folder.expanduser().resolve()) if args.folder else "",
+                    auto=args.auto,
+                    workspace=args.workspace,
+                    draft=args.draft,
+                ),
             )
             out.write(f"Made {made.id}  {made.name}  {_routine_line(made, routines)}\n")
             return 0
@@ -1352,7 +1445,9 @@ def _routine_line(routine: Routine, routines: Routines) -> str:
     )
     last = "" if routine.last_status is None else f", last {routine.last_status.value}"
     whose = "" if routine.bot is None else f", as the bot {routine.bot}"
-    return f"{routine.schedule.display}, {state}, {upcoming}{last}{whose}"
+    probe = "" if routine.probe is None else ", woken by its probe"
+    runs = "" if routine.executor is None else f", run by {routine.executor.name}"
+    return f"{routine.schedule.display}, {state}, {upcoming}{last}{whose}{probe}{runs}"
 
 
 def _installation(args: argparse.Namespace, home: Home, environ: Mapping[str, str]) -> int:
@@ -1529,11 +1624,12 @@ def _list_skills(library: SkillLibrary, usage: SkillUsage, bots: Bots) -> int:
     return 0
 
 
-def _memory(args: argparse.Namespace, home: Home) -> int:
+def _memory(args: argparse.Namespace, home: Home, settings: Settings) -> int:
     """The review's memory proposals: list them, approve one or discard one."""
     try:
         database = _migrate(home)
-        proposals = Proposals(MemoryFiles(home.memory_folder), ProposalStore(database))
+        files = MemoryFiles(home.memory_folder, limits_of(settings.memory))
+        proposals = Proposals(files, ProposalStore(database))
         if args.action == "proposals":
             listed = proposals.checked()
             if not listed:
@@ -1833,7 +1929,7 @@ def _plugin_new(parent: Path, name: str) -> int:
         return 1
     sys.stdout.write(
         f"{name} is in {folder}. Change its manifest, __init__.py and skill, check it with "
-        f"`atlas plugins validate {folder}`, and turn it on in the app: Settings, Extensions, "
+        f"`atlas plugins validate {folder}`, and turn it on in the app: Extensions, "
         "Plugins.\n"
     )
     return 0
@@ -1873,7 +1969,7 @@ def _marketplace(args: argparse.Namespace, home: Home, settings: Settings, vault
         root: Path = args.root
         items: list[Path] = args.items or sorted((root / "items").glob("*.yaml"))
         problems = check_marketplace(
-            items, store, root=root, shipped=shipped_names(), load=args.load
+            items, store, root=root, shipped=shipped_names(), load=args.load, base=args.base
         )
         lines = [line for problem in problems for line in problem.splitlines()]
         for line in lines:
@@ -1887,6 +1983,18 @@ def _marketplace(args: argparse.Namespace, home: Home, settings: Settings, vault
         else:
             sys.stdout.write("No items yet: the marketplace's own files read well.\n")
         return 1 if lines else 0
+    if action == "outside":
+        sources = outside_sources(settings.marketplace, fetch)
+        if sources is None:
+            sys.stdout.write("The outside sources are off ([marketplace] outside = false).\n")
+            return 1
+        text = outside_text(check_outside(sources, store))
+        out: Path | None = args.out
+        if out is None:
+            sys.stdout.write(text)
+        else:
+            out.write_bytes(text.encode("utf-8"))
+        return 0
     database = _migrate(home)
     market = Marketplace(
         home,
@@ -1894,11 +2002,14 @@ def _marketplace(args: argparse.Namespace, home: Home, settings: Settings, vault
         Plugins(home, database, vault),
         SkillLibrary(home.skills_folder, SkillUsage(database)),
         stored=vault.names,
+        sources=outside_sources(settings.marketplace, fetch, home.marketplace_folder),
     )
     if action == "list":
-        listing = market.listing(refresh=args.refresh)
+        listing = market.listing(refresh=args.refresh, query=args.search)
         if listing.problem:
             sys.stdout.write(f"The marketplace could not be read now: {listing.problem}\n")
+        for problem in listing.source_problems:
+            sys.stdout.write(f"{problem}\n")
         for kind in Kind:
             if args.kind and kind.value != args.kind:
                 continue
@@ -1952,6 +2063,8 @@ def _market_line(row: Row) -> str:
         marks.append("official")
     if row.update:
         marks.append("update")
+    if row.source is not Source.ATLAS:
+        marks.append(f"from {row.source.value}")
     version = f" {row.version}" if row.version else ""
     line = f"  {row.name}{version}  {row.title} by {row.author}  ({', '.join(marks)})\n"
     if row.summary:

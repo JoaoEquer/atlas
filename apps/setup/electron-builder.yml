@@ -1,0 +1,47 @@
+# The three files of the Setup (docs/ARCHITECTURE.md, The Setup), unsigned. Built by
+# .github/workflows/setup.yml, each on its own system.
+appId: com.atlasv4.setup
+productName: Atlas Setup
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+# The installer of the commit the Setup is built from, as the line runs it.
+extraResources:
+  - from: ../../scripts/install.ps1
+    to: install.ps1
+  - from: ../../scripts/install.sh
+    to: install.sh
+publish: null
+
+win:
+  icon: ../desktop/resources/icon.ico
+  target:
+    - target: portable
+      arch: [x64]
+# It unpacks and runs, and installs nothing of its own.
+portable:
+  artifactName: Atlas-Setup.exe
+
+mac:
+  icon: ../desktop/resources/icon.png
+  category: public.app-category.productivity
+  # Ad-hoc: no certificate, but Apple Silicon runs nothing unsigned.
+  identity: '-'
+  # The hardened runtime is for notarizing (18c); ad-hoc under it refuses Electron's own libraries.
+  hardenedRuntime: false
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+dmg:
+  artifactName: Atlas-Setup-${arch}.dmg
+
+linux:
+  icon: ../desktop/resources/icon.png
+  category: Utility
+  target:
+    - target: AppImage
+      arch: [x64]
+appImage:
+  artifactName: Atlas-Setup-${arch}.AppImage

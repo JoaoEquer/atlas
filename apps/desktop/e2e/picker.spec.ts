@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 
-import { expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 
 import { cleanEnvironment, type Desktop, launch, ROOT, say } from './harness'
 
@@ -26,6 +26,25 @@ efforts = ["low", "high"]
 
 let desktop: Desktop | undefined
 
+/** Pick a model from the composer's pill, by its name. */
+async function pickModel(page: Page, name: string): Promise<void> {
+  await page.getByTestId('model-select').click()
+  await page.getByTestId('model-menu').getByTestId('model-option').filter({ hasText: name }).first().click()
+  await expect(page.getByTestId('model-menu')).toBeHidden()
+}
+
+/** Pick an effort from the pill's Effort menu, by the keyboard: the pointer moved at once from the
+ * menu's row to an option of the submenu not placed yet left its grace area on a busy runner, and
+ * the submenu closed under it (found by the CI on 03/11/2026). */
+async function pickEffort(page: Page, label: string): Promise<void> {
+  await page.getByTestId('model-select').click()
+  await page.getByTestId('effort-menu').press('ArrowRight')
+  const option = page.getByTestId('effort-option').filter({ hasText: label })
+  await option.focus()
+  await option.press('Enter')
+  await expect(page.getByTestId('model-menu')).toBeHidden()
+}
+
 test.afterEach(async () => {
   await desktop?.close()
   desktop = undefined
@@ -34,22 +53,31 @@ test.afterEach(async () => {
 test('a conversation picks another model and effort, and its next turn runs on them', async () => {
   desktop = await launch({ models: MODELS })
   const { model, page } = desktop
-  const picker = page.getByRole('combobox', { name: /^Model/ })
-  const effort = page.getByRole('combobox', { name: /^Effort/ })
-  await expect(picker).toHaveValue('vllm\u0000fake-model')
-  // The default model and Atlas's default effort, medium onto what the model takes, are marked.
-  await expect(picker.locator('option')).toHaveText(['Fake · default', 'Fake Other'])
-  await expect(effort).toHaveValue('low')
-  await expect(effort.locator('option')).toHaveText(['Low · default', 'High'])
+  const name = page.getByTestId('model-name')
+  const effort = page.getByTestId('model-effort')
+  // One pill says both: the default model, and Atlas's default effort, medium onto what it takes.
+  await expect(name).toHaveText('Fake')
+  await expect(effort).toHaveText('Low')
+  // Its menu numbers the provider's models and marks the default and the current one.
+  await page.getByTestId('model-select').click()
+  const options = page.getByTestId('model-menu').getByTestId('model-option')
+  await expect(options).toHaveText([/^FakeDefault$/, /^Fake Other2$/])
+  await expect(options.first()).toHaveAttribute('data-current', 'true')
+  // The keyboard opens the submenu: a click raced the pointer's own opening of it (pickEffort).
+  await page.getByTestId('effort-menu').press('ArrowRight')
+  await expect(page.getByTestId('effort-option')).toHaveText(['LowDefault', 'High'])
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('model-menu')).toBeHidden()
 
   await model.reply({ text: 'On the default.' }, { text: 'On the other.' })
   await say(page, 'Hello')
   await expect(page.getByTestId('assistant-message')).toContainText('On the default.')
 
-  await picker.selectOption({ label: 'Fake Other' })
-  await expect(picker).toHaveValue('vllm\u0000fake-other')
-  await effort.selectOption({ label: 'High' })
-  await expect(effort).toHaveValue('high')
+  await pickModel(page, 'Fake Other')
+  await expect(name).toHaveText('Fake Other')
+  await pickEffort(page, 'High')
+  await expect(effort).toHaveText('High')
   await say(page, 'And now?')
   await expect(page.getByTestId('assistant-message').last()).toContainText('On the other.')
 
@@ -64,9 +92,14 @@ test('a conversation picks another model and effort, and its next turn runs on t
 
   // A new conversation starts from the default again.
   await page.getByRole('button', { name: 'New conversation' }).click()
-  await expect(picker).toHaveValue('vllm\u0000fake-model')
+  await expect(name).toHaveText('Fake')
   await page.getByTestId('conversation-row').filter({ hasText: 'Hello' }).click()
-  await expect(picker).toHaveValue('vllm\u0000fake-other')
+  await expect(name).toHaveText('Fake Other')
+
+  // The keys pick by number.
+  await page.getByTestId('model-select').click()
+  await page.keyboard.press('1')
+  await expect(name).toHaveText('Fake')
 })
 
 test('the window speaks Portuguese on a system in Portuguese', async () => {
@@ -96,11 +129,11 @@ function stored(home: string): number {
 test('a new conversation is made by its first message, not by a pick or "Auto" before it', async () => {
   desktop = await launch({ models: MODELS })
   const { home, model, page } = desktop
-  const picker = page.getByRole('combobox', { name: /^Model/ })
+  const name = page.getByTestId('model-name')
   const auto = page.getByRole('button', { name: 'Auto mode' })
 
   await page.getByRole('button', { name: 'New conversation' }).click()
-  await picker.selectOption({ label: 'Fake Other' })
+  await pickModel(page, 'Fake Other')
   // On from the start (20/10/2026): turned off before the first message, it stays off.
   await expect(auto).toHaveAttribute('aria-pressed', 'true')
   await auto.click()
@@ -114,11 +147,11 @@ test('a new conversation is made by its first message, not by a pick or "Auto" b
   expect(stored(home)).toBe(1)
   const requests = await model.requests()
   expect((requests[0]?.body as { model?: string }).model).toBe('fake-other')
-  await expect(picker).toHaveValue('vllm\u0000fake-other')
+  await expect(name).toHaveText('Fake Other')
   await expect(auto).toHaveAttribute('aria-pressed', 'false')
 
   await page.getByRole('button', { name: 'New conversation' }).click()
-  await expect(picker).toHaveValue('vllm\u0000fake-model')
+  await expect(name).toHaveText('Fake')
   await expect(auto).toHaveAttribute('aria-pressed', 'true')
   expect(stored(home)).toBe(1)
 })

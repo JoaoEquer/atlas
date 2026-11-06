@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AtlasClient } from '@/protocol/client'
 import type { ExecutorRow } from '@/protocol/protocol.generated'
-import { current, openHome, showSidebarTab, startApp } from '@/store/app'
-import { $extensionsTab, $settings, $settingsSection } from '@/store/settings'
+import { $extensionsTab, $view, current, openHome, showSidebarTab, startApp } from '@/store/app'
 
 import { ExecutorOffers } from './executor-offers'
 import { ExecutorsList } from './executors-list'
@@ -12,14 +11,17 @@ import { ExecutorsList } from './executors-list'
 const ROW: ExecutorRow = {
   account: '',
   account_folders: false,
+  modes: [],
   files: false,
   account_id: '',
   accounts: true,
   base: '',
   consent: 'fingerprint',
+  consent_again: false,
   declaration: ['Adds the executor claude-code'],
   enabled: true,
   installed: false,
+  latest: '',
   logged_in: false,
   minimum: '2.1.140',
   name: 'claude-code',
@@ -29,6 +31,8 @@ const ROW: ExecutorRow = {
   problem: 'Claude Code is not installed. Install it, in PowerShell: irm https://claude.ai/install.ps1 | iex',
   supported: false,
   title: 'Claude Code',
+  update: '',
+  updating: false,
   version: ''
 }
 
@@ -86,14 +90,13 @@ describe('the harnesses on this computer', () => {
     expect(screen.getByTestId('executor-card').textContent).toContain('Claude Code')
   })
 
-  it('leaves turning one on to Settings when none is on, and leads there', async () => {
+  it('leaves turning one on to Extensions when none is on, and leads there', async () => {
     await app(() => new Promise(() => undefined), [{ ...FOUND, enabled: false }, ROW])
     render(<ExecutorsList />)
 
     expect(screen.queryByTestId('executor-offers')).toBeNull()
-    fireEvent.click(screen.getByTestId('executors-open-settings'))
-    expect($settings.get()).toBe(true)
-    expect($settingsSection.get()).toBe('extensions')
+    fireEvent.click(screen.getByTestId('executors-open-extensions'))
+    expect($view.get()).toBe('extensions')
     expect($extensionsTab.get()).toBe('executor')
   })
 

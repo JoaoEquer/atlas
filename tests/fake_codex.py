@@ -101,7 +101,18 @@ def _credits() -> dict[str, Any]:
 
 
 def save(threads: dict[str, Any]) -> None:
-    threads_file().write_text(json.dumps(threads), encoding="utf-8")
+    """Written whole and then swapped in, so another fake Codex reading it at that moment (a
+    resume in the next process) never finds it half written and the thread missing."""
+    path = threads_file()
+    part = path.with_name(f"{path.name}.{os.getpid()}")
+    part.write_text(json.dumps(threads), encoding="utf-8")
+    for _ in range(50):
+        try:
+            part.replace(path)
+            return
+        except PermissionError:  # Windows, while another process has it open to read
+            time.sleep(0.02)
+    part.replace(path)
 
 
 def auth() -> dict[str, Any] | None:
@@ -235,6 +246,8 @@ class Server:
     def on_thread_resume(self, params: dict[str, Any]) -> dict[str, Any]:
         thread = params["threadId"]
         if thread not in self.threads:
+            self.threads = load()
+        if thread not in self.threads:
             raise LookupError(f"no rollout found for thread id {thread}")
         return self.opened(thread, params)
 
@@ -245,7 +258,7 @@ class Server:
             file, _, source = str(path).partition("#")
             original = load(Path(file)).get(source)
         else:
-            original = self.threads.get(source)
+            original = self.threads.get(source) or load().get(source)
         if original is None:
             raise LookupError(f"no rollout found for thread id {source}")
         thread = str(uuid.uuid4())
@@ -264,6 +277,8 @@ class Server:
 
     def on_thread_read(self, params: dict[str, Any]) -> dict[str, Any]:
         thread = params["threadId"]
+        if thread not in self.threads:
+            self.threads = load()
         if thread not in self.threads:
             raise LookupError(f"thread not found: {thread}")
         return {"thread": {"id": thread, "path": f"{threads_file()}#{thread}"}}

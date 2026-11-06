@@ -102,6 +102,11 @@ it stays once you send a message there or double-click it. **Ctrl+1** to **Ctrl+
 tabs say how many, and a click takes you there. The app reopens on the tabs you left, and a closed
 tab stays closed.
 
+The **+** after the tabs opens the start screen: three cards side by side, Atlas, your bots and your
+coding agents, each with its list. Start a new conversation, a bot or a session there, or open one
+you had; it opens in that tab. A new conversation with Atlas opens on its name, drawn in moving
+characters as on the website.
+
 ## How do I find an older conversation?
 
 Scroll down the list of conversations. It shows the fifty with the latest activity first, and reads

@@ -4,7 +4,8 @@
 #
 # One line gives a machine with nothing on it the installation the user runs every day, its app
 # built and opened. Run again, it repairs and updates it. Everything it needs comes pinned and
-# checked by its SHA-256 (uv, Python through uv, Node, gh, Git), never what the machine has.
+# checked by its SHA-256 (uv, Python through uv, Node, Git), never what the machine has. GitHub's
+# gh is not among them: the GitHub plugin fetches it when the user connects GitHub.
 #
 # Each defect a Windows install is known to meet is a rule here, and
 # tests/installation/test_install_ps1.py holds it.
@@ -69,20 +70,6 @@ $script:Pins = @{
         Sha256 = "8779b1bde1d39f8d420e3b57aa657b39891af434d3de44a919044cec06785921"
         Archive = "zip"
         Programs = [ordered]@{ "node" = "node-v24.21.0-win-arm64/node.exe"; "npm" = "node-v24.21.0-win-arm64/npm.cmd"; "npx" = "node-v24.21.0-win-arm64/npx.cmd" }
-    }
-    "gh/win32-x64" = @{
-        Version = "2.101.0"
-        Url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_windows_amd64.zip"
-        Sha256 = "bc6c814367b193cd8e713611d61e36013c0ef843b8f516458fe3eda039192794"
-        Archive = "zip"
-        Programs = [ordered]@{ "gh" = "bin/gh.exe" }
-    }
-    "gh/win32-arm64" = @{
-        Version = "2.101.0"
-        Url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_windows_arm64.zip"
-        Sha256 = "e6cbb2d4afdad3e70f3d38b8d1ebaa3a0870a897cfc0e4cf569826710b96b4fd"
-        Archive = "zip"
-        Programs = [ordered]@{ "gh" = "bin/gh.exe" }
     }
     "git/win32-x64" = @{
         Version = "2.55.0.5"
@@ -657,7 +644,7 @@ function Install-Atlas {
 
     $target = Get-Target
     $installed = @{}
-    foreach ($tool in @('git', 'uv', 'node', 'gh')) { $installed[$tool] = Install-Tool $tool $target }
+    foreach ($tool in @('git', 'uv', 'node')) { $installed[$tool] = Install-Tool $tool $target }
     Write-Toolchain $installed $target
     $git = Get-ToolPath 'git' $installed['git'] 'git'
     $uv = Get-ToolPath 'uv' $installed['uv'] 'uv'

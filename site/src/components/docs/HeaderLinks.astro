@@ -1,13 +1,17 @@
 ---
-// The rest of the site, beside the GitHub link.
+// The rest of the site, beside the GitHub link. The news and the changelog are in English only.
 import Default from '@astrojs/starlight/components/SocialIcons.astro'
+
+import { WORDS } from '../../lib/i18n'
+
+const words = WORDS[Astro.locals.starlightRoute.locale === 'pt-br' ? 'pt-br' : 'en'].nav
 ---
 
 <a class="link" href="/news/">
-  News
+  {words.news}
 </a>
 <a class="link" href="/changelog/">
-  Changelog
+  {words.changelog}
 </a>
 <Default />
 

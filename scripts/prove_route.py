@@ -5,9 +5,11 @@
     uv run python scripts/prove_route.py --steps 1,2,3 --yes
     uv run python scripts/prove_route.py --steps 1,4 --yes   # once Codex has room again
 
-No account is driven to its limit on purpose: the proof waits for one of the user's Claude Code
-accounts to be at its limit already (its usage says so, or `--limited` names it), and the turn
-sent there stops at once, spending nothing of it. Atlas's own model takes no part: no Atlas credit.
+The accounts are the accounts plugin's (step 22): the proof runs it on a data folder of its own,
+with the user's accounts by their nicknames. No account is driven to its limit on purpose: the
+proof waits for one of the user's Claude Code accounts to be at its limit already (its usage says
+so, or `--limited` names it), and the turn sent there stops at once, spending nothing of it.
+Atlas's own model takes no part: no Atlas credit.
 
 1. **What is there, and where a route goes (free).** Each account of Claude Code the user's home
    keeps, and Codex: who it is logged in as, its plan's usage, whether past its limits it bills
@@ -18,8 +20,8 @@ sent there stops at once, spending nothing of it. Atlas's own model takes no par
    word to keep (one short turn), and switched to the account at its limit in a copy. There, the
    route [at its limit, with room] takes the next prompt, which stops at the limit at once: the
    session goes on in a copy on the account with room, and writes the word to a file (one short
-   turn). Each session a copy replaced is deleted (asked for by the user on 22/10/2026): the
-   folder keeps the one session that goes on, on the account with room, and none on the other.
+   turn). Atlas deletes no session (decided with the user on 03/11/2026): each account keeps the
+   sessions it had.
 3. **The account's own hand-over** (`b748cef`), the same with no route: the executor's own order.
 4. **A route to Codex.** As step 2, the route [at its limit, Codex]: a new Codex session, its
    first prompt the handoff packet, writes the word it read there (one short Codex turn).
@@ -29,8 +31,6 @@ sent there stops at once, spending nothing of it. Atlas's own model takes no par
 6. **16h's leak (#80580).** On the account with room, which has no `CLAUDE.md` of its own, a
    session is asked for the first line of the user-level memory it was given (one short turn): the
    main account's (`~/.claude/CLAUDE.md` and what it imports) reaching it is the leak.
-
-Step 2 also deletes the copy on the account at its limit, and the first account's file stays.
 
 Steps 2 to 4 run only with `--yes`, after step 1, and refuse an account whose extra usage is on,
 or, without `--accept-unknown-extra`, one that does not say. The sessions the proof made are
@@ -47,10 +47,17 @@ import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from atlas.__main__ import SCHEMAS
-from atlas.assistant import HANDOFF_MARK, Assistant, InstanceChanged, WorkbenchEvent
-from atlas.assistant.executors import account_name
+from atlas.assistant import (
+    HANDOFF_MARK,
+    Assistant,
+    InstanceChanged,
+    WorkbenchEvent,
+    other_accounts,
+)
+from atlas.assistant.plugin_host import AssistantPluginHost
 from atlas.home import (
     Database,
     ModelSettings,
@@ -62,13 +69,14 @@ from atlas.home import (
     migrate,
     open_home,
 )
-from atlas.jobs import AccountStore, RouteTarget, SessionRoute
+from atlas.jobs import AccountStore
 from atlas.models import Models, UserMessage, load_catalog
 from atlas.plugins import (
-    BUNDLED_FOLDER,
+    OFFICIAL_FOLDER,
     Answers,
     Executor,
     ExecutorError,
+    NextStop,
     Permission,
     Question,
     Verdict,
@@ -112,7 +120,7 @@ class Desk:
 
 def executor(plugin: str, program: str) -> Executor:
     """The plugin's executor, as Atlas makes it, on `program` (a JSON list) or the one found."""
-    package = import_plugin(BUNDLED_FOLDER / plugin, plugin)
+    package = import_plugin(OFFICIAL_FOLDER / plugin, plugin)
     made: Executor = (package.ClaudeCode if plugin == CLAUDE else package.Codex)(
         package.program(program), logger=logging.getLogger(f"prove_route.{plugin}")
     )
@@ -135,7 +143,7 @@ def main() -> int:
     redactor = Redactor()
     configure_logging("WARNING", redactor)
     # The user's accounts as their home keeps them, read only: the proof's home is its own.
-    kept = AccountStore(Database(real.database_file)).accounts(CLAUDE)
+    kept = _nicknames(real.plugin_data_folder / "accounts" / "accounts.json", real.database_file)
     vault = Vault(real.secrets_folder, settings.vault, redactor)
     models = Models(load_catalog(real.models_file), vault, ModelSettings())
     with tempfile.TemporaryDirectory(prefix="atlas-prove-route-") as folder:
@@ -145,7 +153,7 @@ def main() -> int:
                 models,
                 vault,
                 (executor(CLAUDE, args.claude), executor(CODEX, args.codex)),
-                [account.name for account in kept],
+                kept,
                 {int(step) for step in args.steps.split(",") if step.strip()},
                 yes=args.yes,
                 limited=args.limited,
@@ -189,7 +197,11 @@ async def prove(
         executors={CLAUDE: claude, CODEX: codex},
         on_workbench=heard.append,
     )
-    proof = _Proof(assistant, heard, work)
+    plugin = import_plugin(OFFICIAL_FOLDER / "accounts", "accounts")
+    host = AssistantPluginHost(assistant).workbench()
+    accounts = plugin.PluginAccounts(plugin.Book(root / "accounts.json"), lambda: host)
+    assistant.set_accounts(accounts)
+    proof = _Proof(assistant, heard, work, plugin.Calls(accounts, lambda: host))
     results: dict[str, bool] = {}
     try:
         if os.environ.get("CLAUDE_CONFIG_DIR"):
@@ -200,8 +212,8 @@ async def prove(
         for nickname in nicknames:
             # The same folder as the user's own account of that nickname, as Atlas names it.
             try:
-                await assistant.workbench.add_account(CLAUDE, nickname)
-            except ExecutorError as error:
+                await proof.calls.add({"executor": CLAUDE, "nickname": nickname})
+            except Exception as error:  # noqa: BLE001 - the plugin's refusal, told
                 say(f"  the account {nickname} is left out: {error}")
         ready = await proof.look(limited, spare)
         if 1 in steps:
@@ -237,8 +249,12 @@ async def prove(
 
 
 class _Proof:
-    def __init__(self, assistant: Assistant, heard: list[WorkbenchEvent], work: Path) -> None:
+    def __init__(
+        self, assistant: Assistant, heard: list[WorkbenchEvent], work: Path, calls: Any
+    ) -> None:
         self.assistant = assistant
+        #: The accounts plugin's calls, as its screen makes them.
+        self.calls = calls
         self.workbench = assistant.workbench
         self.heard = heard
         self.work = work
@@ -253,8 +269,8 @@ class _Proof:
     async def look(self, limited: str, spare: str) -> bool:
         """Each account, read with no prompt; the one at its limit and the one with room."""
         workbench = self.workbench
-        kept = self.assistant.account_store.accounts(CLAUDE)
-        self.accounts = {"main": CLAUDE, **{a.name: account_name(CLAUDE, a.id) for a in kept}}
+        kept = other_accounts(self.assistant.accounts, CLAUDE)
+        self.accounts = {"main": CLAUDE, **{a.nickname: f"{CLAUDE}@{a.id}" for a in kept}}
         say("Accounts:")
         for label, name in [*self.accounts.items(), ("codex", CODEX)]:
             found = self.assistant.executor(name)
@@ -294,13 +310,14 @@ class _Proof:
         source = self.limited or CLAUDE
         others = [n for n in self.accounts.values() if n != source]
         after = self.spare or (others[0] if others else "")
-        route = SessionRoute("", (_target(source), RouteTarget(CODEX), _target(after)))
-        target = await self.workbench.next_target(source, route)
+        stops = [_target(source), _target(CODEX), _target(after)]
+        await self.calls.set_route({"conversation": "proof-route", "stops": stops})
+        target = await self.workbench.next_stop(source, "proof-route")
         codex_full = self.workbench.limited(CODEX)
         wanted = after if codex_full else CODEX
-        went = "" if target is None else account_name(target.executor, target.account)
+        went = target.executor if isinstance(target, NextStop) else ""
         say(f"  from {source}, Codex at its limit: {codex_full}; the route goes to {went}")
-        return went == wanted or (not after and codex_full and target is None)
+        return went == wanted or (not after and codex_full and not went)
 
     def billing_checked(self, unknown: bool) -> bool:
         """No account the proof prompts bills past its limits."""
@@ -334,7 +351,7 @@ class _Proof:
         say(f"  the first account's session file: {original}")
         if route:
             stops = [_target(self.limited), _target(self.spare)]
-            await workbench.set_route(run.id, stops, enabled=True)
+            await self.calls.set_route({"conversation": run.transcript.id, "stops": stops})
         await self._turn(run.id, WRITE, handed="account")
         moved = workbench.get(run.id)
         written = _read(project / "prova.txt")
@@ -342,18 +359,18 @@ class _Proof:
         await self._replaced()
         there = [view.session_id for view in await workbench.sessions(self.limited, str(project))]
         here = [view.session_id for view in await workbench.sessions(moved.name, str(project))]
-        single = not there and here == [moved.session_id]
-        say(f"  the sessions the copies replaced deleted, one left: {single}")
+        kept = bool(there) and moved.session_id in here
+        say(f"  each account keeps its sessions, none deleted: {kept}")
         say(f"    on {self.limited}: {there}; on {moved.name}: {here}")
         return (
             moved.name != self.limited
             and (not route or moved.name == self.spare)
             and WORD in written.lower()
-            and single
+            and kept
         )
 
     async def _replaced(self) -> None:
-        """Until the deletions of the sessions the copies replaced are done."""
+        """Until the hand-overs under way are done."""
         await asyncio.sleep(0.1)
         while self.workbench._handing:  # pyright: ignore[reportPrivateUsage]
             await asyncio.sleep(0.05)
@@ -368,7 +385,8 @@ class _Proof:
         run = await workbench.start(self.spare, project, auto=True)
         await self._turn(run.id, KEEP)
         await workbench.use_account(run.id, _account(self.limited))
-        await workbench.set_route(run.id, [_target(self.limited), RouteTarget(CODEX)], enabled=True)
+        stops = [_target(self.limited), _target(CODEX)]
+        await self.calls.set_route({"conversation": run.transcript.id, "stops": stops})
         await self._turn(run.id, WRITE, handed="route")
         moved = workbench.get(run.id)
         prompts = [m.text for m in moved.history if isinstance(m, UserMessage)]
@@ -381,7 +399,8 @@ class _Proof:
         """16h: a folder's sessions start on its account; the switch says what the other lacks."""
         workbench = self.workbench
         project = self._project("folder")
-        await workbench.set_folder_account(CLAUDE, str(project), _account(self.spare))
+        folder = {"executor": CLAUDE, "folder": str(project), "account": _account(self.spare)}
+        await self.calls.set_folder(folder)
         run = await workbench.start(CLAUDE, project, auto=True)
         check = await workbench.account_switch(run.id, "")
         await workbench.stop(run.id)
@@ -495,9 +514,19 @@ def _account(name: str) -> str:
     return name.partition("@")[2]
 
 
-def _target(name: str) -> RouteTarget:
+def _target(name: str) -> dict[str, str]:
+    """A stop of a route, as the accounts plugin's screen sends it."""
     executor, _, account = name.partition("@")
-    return RouteTarget(executor, account)
+    return {"executor": executor, "account": account}
+
+
+def _nicknames(book: Path, database: Path) -> list[str]:
+    """The nicknames of the user's other Claude Code accounts: the accounts plugin's file, or,
+    before an update moved them there, what Atlas kept itself."""
+    if book.exists():
+        kept = json.loads(book.read_text(encoding="utf-8")).get("executors", {}).get(CLAUDE, {})
+        return [str(account.get("nickname", "")) for account in kept.get("accounts", [])]
+    return [account.name for account in AccountStore(Database(database)).accounts(CLAUDE)]
 
 
 def _transcript(folder: Path, session: str) -> Path | None:

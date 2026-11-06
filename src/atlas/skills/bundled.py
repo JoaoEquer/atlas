@@ -151,6 +151,29 @@ def sync_bundled(library: SkillLibrary, source: Path = BUNDLED_FOLDER) -> SyncRe
     return result
 
 
+def retire_bundled(library: SkillLibrary, names: set[str]) -> tuple[list[str], list[str]]:
+    """Skills Atlas shipped that a plugin of Atlas's brings now (step 26: `github` and the `gws-*`
+    ones, in the GitHub and Google Workspace plugins): a copy the user never changed is archived,
+    `atlas skills restore` bringing it back; one they changed stays, theirs now. Either leaves the
+    manifest. The archived and the kept, by name."""
+    manifest = read_manifest(library.folder)
+    archived: list[str] = []
+    kept: list[str] = []
+    for name in sorted(names & manifest.keys()):
+        if changed(library, name, manifest) is False:
+            try:
+                library.archive(name)
+            except SkillChangeError as error:
+                _logger.warning("A skill a plugin brings now was not archived: %s", error)
+                continue
+            archived.append(name)
+        else:
+            kept.append(name)
+        del manifest[name]
+    _write_manifest(library.folder, manifest)
+    return archived, kept
+
+
 def reset_bundled(library: SkillLibrary, name: str, source: Path = BUNDLED_FOLDER) -> None:
     """Put a bundled skill back as Atlas ships it, so it receives updates again. What the copy
     held is kept as a version."""

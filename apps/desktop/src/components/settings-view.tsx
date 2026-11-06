@@ -26,23 +26,35 @@ import {
   showSection
 } from '@/store/settings'
 
-import { ExtensionsSection } from './extensions-view'
 import {
   GeneralSection,
   ModelSection,
   PersonalizationSection,
   SafetySection,
+  VoiceSection,
   WorkspaceSection
 } from './settings-sections'
-import { Adjustments, Close, Computer, Copy, Cpu, Folder, Key, Machine, Plug, Plus, Shield, Sparkles } from './ui/icons'
+import {
+  Adjustments,
+  Close,
+  Computer,
+  Copy,
+  Cpu,
+  Folder,
+  Key,
+  Machine,
+  Microphone,
+  Plus,
+  Shield,
+  Sparkles
+} from './ui/icons'
 import { ICON_BUTTON } from './ui/tip'
 
 /**
  * The settings screen (step 15b, docs/ARCHITECTURE.md, The settings screen): one large screen with
  * its sections on the left, each opening on
- * the right. General, Model, Personalization, Safety, Workspace, Extensions (the plugins, skills,
- * MCP servers and executors, a tab each, since 28/10/2026; the executors out of the sidebar since
- * 22/10/2026), and Machines, which step 15
+ * the right. General, Model, Personalization, Safety, Workspace, Voice (step 26; Extensions, here from 28/10/2026,
+ * is a screen of its own in the sidebar since 01/11/2026), and Machines, which step 15
  * began with: this machine's home always on and open to the user's
  * machines, with its connection code and a new password; and the other machines, each with Test,
  * Rename and Remove, and Add from a code.
@@ -107,12 +119,12 @@ export function SettingsView() {
 }
 
 const ICONS = {
-  extensions: Plug,
   general: Adjustments,
   machines: Machine,
   model: Cpu,
   personalization: Sparkles,
   safety: Shield,
+  voice: Microphone,
   workspace: Folder
 } satisfies Record<SettingsSection, unknown>
 
@@ -128,8 +140,8 @@ function Section({ section }: { section: SettingsSection }) {
       return <SafetySection />
     case 'workspace':
       return <WorkspaceSection />
-    case 'extensions':
-      return <ExtensionsSection />
+    case 'voice':
+      return <VoiceSection />
     case 'machines':
       return (
         <>
@@ -332,7 +344,9 @@ function MachineItem({ machine }: { machine: MachineRow }) {
   const where =
     machine.transport === 'tailscale'
       ? `${t.machines.viaTailscale} · ${machine.host ?? ''}`
-      : `${t.machines.viaSsh} · ${machine.sshHost ?? ''}`
+      : machine.transport === 'relay'
+        ? `${t.machines.viaRelay} · ${machine.relay?.url ?? ''}`
+        : `${t.machines.viaSsh} · ${machine.sshHost ?? ''}`
 
   return (
     <li className="space-y-1 rounded-md bg-subtle px-2 py-1.5" data-machine={machine.name} data-testid="machine-row">
@@ -517,7 +531,7 @@ function AddMachine({ onDone }: { onDone: () => void }) {
       <fieldset className="space-y-1 text-xs">
         <legend>{t.machines.transport}</legend>
         <div className="flex gap-4">
-          {(['tailscale', 'ssh'] as const).map(each => (
+          {(['tailscale', 'ssh', 'relay'] as const).map(each => (
             <label className="flex items-center gap-1.5" key={each}>
               <input
                 checked={transport === each}
@@ -528,7 +542,11 @@ function AddMachine({ onDone }: { onDone: () => void }) {
                 }}
                 type="radio"
               />
-              {each === 'tailscale' ? t.machines.viaTailscale : t.machines.viaSsh}
+              {each === 'tailscale'
+                ? t.machines.viaTailscale
+                : each === 'ssh'
+                  ? t.machines.viaSsh
+                  : t.machines.viaRelay}
             </label>
           ))}
         </div>

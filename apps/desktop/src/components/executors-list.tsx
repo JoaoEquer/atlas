@@ -3,6 +3,7 @@ import { DropdownMenu } from 'radix-ui'
 import { type DragEvent, useRef, useState } from 'react'
 
 import { t } from '@/i18n'
+import { PlaceContributions } from '@/plugins/view'
 import type { ExecutorRow, SessionFolderRow, SessionRow } from '@/protocol/protocol.generated'
 import {
   $home,
@@ -25,23 +26,26 @@ import {
   openSession,
   refreshFolders,
   refreshSessions,
+  showExtensions,
+  showPluginConsent,
   toggleExecutor,
-  toggleFolder
+  toggleFolder,
+  updateExecutor
 } from '@/store/app'
 import {
   $archived,
   $archivedSessions,
   $showArchived,
   archiveKey,
+  isArchived,
   setArchived,
   setSessionArchived,
   setShowArchived
 } from '@/store/archive'
 import { $executorOrder, inOrder, moveBlock, setExecutorOrder } from '@/store/order'
-import { openSettings } from '@/store/settings'
 import { byLastUse, instanceKey, lastUse } from '@/store/status'
 
-import { AddAccount, FolderAccount, LoginForm, RemoveAccount } from './executor-accounts'
+import { LoginForm } from './executor-accounts'
 import { ExecutorAvatar } from './executor-avatar'
 import { ReadFailed } from './read-failed'
 import { rowDot, StatusDot, useInstancesDot, useSessionDot, useSessionInstance } from './status-dot'
@@ -62,6 +66,7 @@ import {
 import { SkeletonRows } from './ui/skeleton'
 import { ICON_BUTTON, IconButton } from './ui/tip'
 import { when } from './when'
+import { WorkspacesList } from './workspaces-list'
 
 /**
  * The executors tab (step 16f, decided with the user on 15/10/2026): one row per executor on and
@@ -79,7 +84,9 @@ import { when } from './when'
  * user on 22/10/2026, where any work moved every level). A folder archived leaves the
  * list for the executor's "Archived" (store/archive.ts), and a session for its folder's. Each other
  * account is a row of its own (step 16h), with its own folders and sessions; a session is deleted
- * there, on that account alone, after a yes (asked for by the user on 19/10/2026).
+ * there, on that account alone, after a yes (asked for by the user on 19/10/2026). One whose plugin
+ * waits for the user's consent again after an update stays in the list, saying so, with the way to
+ * that consent (found on 01/11/2026, when an update dropped Claude Code from it with no word).
  */
 export function ExecutorsList() {
   const { executors } = useStore($workbench)
@@ -92,7 +99,9 @@ export function ExecutorsList() {
     row => row.name,
     order
   )
-  const takeAccounts = on.filter(row => row.account_folders && !row.base)
+  const waiting = executors.filter(row => row.consent_again && !row.base)
+  // Turned on and found, but older than its plugin drives: said, with its update when there is one.
+  const old = executors.filter(row => row.enabled && row.installed && !row.supported && !row.base)
   const harnesses = [...new Set(on.map(harnessOf))].map(name => on.filter(row => harnessOf(row) === name))
   const reorder = useReorder(home, harnesses)
 
@@ -101,13 +110,18 @@ export function ExecutorsList() {
       {on.length > 0 && (
         <div className="space-y-1.5 px-3 pb-2">
           <NewSessionTop executors={on} />
-          {/* Above the executors' list too (asked for by the user on 19/10/2026). */}
-          {takeAccounts.length > 0 && <AddAccount executors={takeAccounts} />}
         </div>
       )}
       <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
+        <WorkspacesList executors={on} />
         {harnesses.map(rows => (
           <Harness key={rows[0] ? harnessOf(rows[0]) : ''} reorder={reorder} rows={rows} />
+        ))}
+        {waiting.map(row => (
+          <ConsentAgain key={row.name} row={row} />
+        ))}
+        {old.map(row => (
+          <TooOld key={row.name} row={row} />
         ))}
         {!read &&
           on.length === 0 &&
@@ -116,23 +130,129 @@ export function ExecutorsList() {
           ) : (
             <SkeletonRows count={2} label={t.executors.reading} />
           ))}
-        {read && on.length === 0 && (
+        {read && on.length === 0 && waiting.length === 0 && old.length === 0 && (
           <div className="space-y-1 px-2 py-1 text-sm text-muted-foreground">
             <p>{t.executors.noneOn}</p>
             <button
               className="link"
-              data-testid="executors-open-settings"
+              data-testid="executors-open-extensions"
               onClick={() => {
-                openSettings('extensions', 'executor')
+                showExtensions('executor')
               }}
               type="button"
             >
-              {t.executors.openSettings}
+              {t.executors.openExtensions}
             </button>
           </div>
         )}
       </div>
     </>
+  )
+}
+
+/** An executor whose plugin was on and waits for the user's consent again, an update having changed
+ * what it declares (`consent again`): why it is not running, and the way to its plugin's consent in
+ * Extensions. The sidebar shows it in its place, and so does a tab of one of its sessions. */
+export function ConsentAgain({ row }: { row: ExecutorRow }) {
+  return (
+    <div
+      className="space-y-1 rounded-md bg-subtle px-2 py-1.5 text-sm"
+      data-executor={row.name}
+      data-testid="executor-consent-again"
+    >
+      <div className="flex items-center gap-2">
+        <ExecutorAvatar row={row} />
+        <p className="min-w-0 flex-1 font-medium text-waiting-text">{t.executors.consentAgain(row.title)}</p>
+      </div>
+      <p className="text-xs text-muted-foreground">{t.executors.consentAgainBody}</p>
+      <button
+        className="link text-xs"
+        data-testid="executor-review-consent"
+        onClick={() => {
+          showPluginConsent(row.plugin)
+        }}
+        type="button"
+      >
+        {t.executors.reviewConsent}
+      </button>
+    </div>
+  )
+}
+
+/** An executor turned on and found, but older than its plugin drives: it does not run until it is
+ * updated, so the sidebar says why, and offers its update when Atlas knows how it updates. */
+export function TooOld({ row }: { row: ExecutorRow }) {
+  return (
+    <div
+      className="space-y-1 rounded-md bg-subtle px-2 py-1.5 text-sm"
+      data-executor={row.name}
+      data-testid="executor-too-old"
+    >
+      <div className="flex items-center gap-2">
+        <ExecutorAvatar row={row} />
+        <p className="min-w-0 flex-1 font-medium text-waiting-text">{t.executors.tooOld(row.title, row.version)}</p>
+      </div>
+      <p className="text-xs break-words text-muted-foreground select-text">{row.problem}</p>
+      <ExecutorUpdate row={row} />
+    </div>
+  )
+}
+
+/** A newer version of an executor's harness than the one installed, where its install updates
+ * from, and its update at the user's click (asked for by the user on 01/11/2026): the command runs
+ * on this computer, so only the user's click runs it, never the agent. While it runs the row says
+ * so; once it ends the harness is looked for again, and a failure shows the end of its output. */
+export function ExecutorUpdate({ className = '', row }: { className?: string; row: ExecutorRow }) {
+  const failed = useStore($workbenchError)[`update:${row.name}`]
+  const [running, setRunning] = useState(false)
+  const [updated, setUpdated] = useState(false)
+  const updating = running || row.updating
+
+  if (!row.latest && !failed && !updated) {
+    return null
+  }
+
+  return (
+    <div className={`space-y-1 text-xs ${className}`} data-executor={row.name} data-testid="executor-update">
+      {row.latest ? (
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 text-soft" data-testid="executor-update-version">
+            {updating ? t.executors.updating(row.latest) : t.executors.updateAvailable(row.version, row.latest)}
+          </span>
+          <button
+            className="link shrink-0"
+            data-testid="executor-update-run"
+            disabled={updating}
+            onClick={() => {
+              setRunning(true)
+              setUpdated(false)
+              void updateExecutor(row.name).then(done => {
+                setRunning(false)
+                setUpdated(done)
+              })
+            }}
+            title={t.executors.updateHint(row.update)}
+            type="button"
+          >
+            {t.executors.update}
+          </button>
+        </div>
+      ) : (
+        updated && (
+          <p className="text-muted-foreground" data-testid="executor-updated">
+            {t.executors.updated(row.version)}
+          </p>
+        )
+      )}
+      {failed && (
+        <pre
+          className="max-h-32 overflow-auto font-mono break-words whitespace-pre-wrap text-failed-text select-text"
+          role="alert"
+        >
+          {failed}
+        </pre>
+      )}
+    </div>
   )
 }
 
@@ -285,7 +405,7 @@ function ExecutorNode({
   const dragged = account && reorder.drag?.account === true && reorder.drag.names[0] === row.name
   const open = useStore($openExecutors)[row.name] === true
   const dot = useInstancesDot(instance => instance.executor === row.name)
-  const [doing, setDoing] = useState<'' | 'login' | 'new' | 'remove'>('')
+  const [doing, setDoing] = useState<'' | 'login' | 'new'>('')
   const Chevron = open ? ChevronDown : ChevronRight
   const title = account ? row.nickname || t.accounts.mainAccount : row.title
   const detail = [account ? '' : row.version, row.logged_in ? '' : t.executors.notLoggedIn].filter(Boolean).join(' · ')
@@ -352,20 +472,41 @@ function ExecutorNode({
           onNewSession={() => {
             setDoing('new')
           }}
-          onRemove={() => {
-            setDoing('remove')
-          }}
           row={row}
           title={title}
         />
       </div>
+      {/* Not logged in (never, or its login expired): the way to log in is on the row, not only in
+          its menu, since until then a turn fails. */}
+      {!row.base && <ExecutorUpdate className="pb-1 pl-14 pr-2" row={row} />}
+      {!row.logged_in && doing === '' && (
+        <div className="pb-1 pl-14">
+          <button
+            className="link text-xs"
+            data-testid="executor-log-in"
+            onClick={() => {
+              setDoing('login')
+            }}
+            type="button"
+          >
+            {t.executors.logIn}
+          </button>
+        </div>
+      )}
       {doing === 'new' && (
         <div className="px-2 pb-1">
           <NewSession executor={row.name} onDone={done} />
         </div>
       )}
       {doing === 'login' && <LoginForm executor={row} onDone={done} />}
-      {doing === 'remove' && <RemoveAccount executor={row} onDone={done} />}
+      {/* The accounts plugin's part (step 22), atop its tree once opened: its accounts, added and
+          removed there. */}
+      {open && (
+        <PlaceContributions
+          area="executor"
+          place={{ account: row.account_id, base: row.base || row.name, executor: row.name, title: row.title }}
+        />
+      )}
       {open && <ExecutorTree executor={row} />}
     </section>
   )
@@ -374,17 +515,15 @@ function ExecutorNode({
 /** A row's menu, behind its three dots (asked for by the user on 21/10/2026, to keep the sidebar
  * clean): who it is logged in as, a new session (asked for by the user on 22/10/2026, where it was a
  * row of its tree), the switch to another login, whether its archived folders and sessions are
- * listed (off until turned on), and an account's removal, in red. */
+ * listed (off until turned on). An account's removal is the accounts plugin's (step 22). */
 function ExecutorMenu({
   onLogin,
   onNewSession,
-  onRemove,
   row,
   title
 }: {
   onLogin: () => void
   onNewSession: () => void
-  onRemove: () => void
   row: ExecutorRow
   title: string
 }) {
@@ -465,19 +604,6 @@ function ExecutorMenu({
               <Check aria-hidden size={14} stroke={2} />
             </DropdownMenu.ItemIndicator>
           </DropdownMenu.CheckboxItem>
-          {row.base && (
-            <>
-              <DropdownMenu.Separator className={SEPARATOR} />
-              <DropdownMenu.Item
-                className={`${MENU_ITEM} text-failed-text data-highlighted:bg-failed/10`}
-                data-testid="remove-account"
-                onSelect={onRemove}
-              >
-                <Trash aria-hidden size={15} stroke={1.75} />
-                {t.accounts.remove(row.nickname)}
-              </DropdownMenu.Item>
-            </>
-          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -492,14 +618,14 @@ const SEPARATOR = 'my-1 h-px bg-selected'
 function ExecutorTree({ executor }: { executor: ExecutorRow }) {
   const read = useStore($sessionFolders)[executor.name]
   const home = useStore($home)
-  const archived = useStore($archived)[archiveKey(home, executor.name)] ?? []
+  const archived = useStore($archived)[archiveKey(home, executor.name)]
   const shown = useStore($showArchived)[archiveKey(home, executor.name)] === true
   const [showArchived, setShowArchived] = useState(false)
   const used = useStore($used)
   const folders = read?.folders ?? null
-  const kept = folders?.filter(row => !archived.includes(row.folder)) ?? null
+  const kept = folders?.filter(row => !isArchived(archived, row.folder, row.updated_at)) ?? null
   const listed = kept && byLastUse(kept, row => lastUse(row.updated_at, used[folderKey(executor.name, row.folder)]))
-  const hidden = folders?.filter(row => archived.includes(row.folder)) ?? []
+  const hidden = folders?.filter(row => isArchived(archived, row.folder, row.updated_at)) ?? []
 
   return (
     <div className="ml-3 space-y-1 border-l border-border pt-1 pl-2" data-testid="executor-tree">
@@ -575,14 +701,14 @@ function Folder({ executor: node, row }: { executor: ExecutorRow; row: SessionFo
   const read = useStore($sessions)[key]
   const dot = useInstancesDot(instance => instance.executor === executor && instance.folder === row.folder)
   const home = useStore($home)
-  const archived = useStore($archivedSessions)[archiveKey(home, executor)] ?? []
+  const archived = useStore($archivedSessions)[archiveKey(home, executor)]
   const shown = useStore($showArchived)[archiveKey(home, executor)] === true
   const used = useStore($used)
   const [showArchived, setShowArchived] = useState(false)
   const all = read?.sessions ?? null
-  const kept = all?.filter(found => !archived.includes(found.session_id)) ?? null
+  const kept = all?.filter(found => !isArchived(archived, found.session_id, found.updated_at)) ?? null
   const sessions = kept && byLastUse(kept, found => lastUse(found.updated_at, used[instanceKey(found.instance_id)]))
-  const hidden = all?.filter(found => found.session_id && archived.includes(found.session_id)) ?? []
+  const hidden = all?.filter(found => isArchived(archived, found.session_id, found.updated_at)) ?? []
   const Chevron = open ? ChevronDown : ChevronRight
 
   return (
@@ -603,10 +729,8 @@ function Folder({ executor: node, row }: { executor: ExecutorRow; row: SessionFo
           <span className="truncate font-medium">{baseName(row.folder)}</span>
           {!open && <StatusDot dot={dot} />}
         </button>
-        {row.account_id && <FolderAccount account={row.account_id} executor={node} folder={row.folder} />}
         <span className={`shrink-0 text-xs text-muted-foreground ${HIDE_ON_HOVER}`}>{when(row.updated_at)}</span>
         <span className={`${ROW_ACTIONS} top-1/2 -translate-y-1/2 bg-muted`}>
-          {!row.account_id && <FolderAccount account={row.account_id} executor={node} folder={row.folder} />}
           <IconButton
             icon={Archive}
             label={t.executors.archive(baseName(row.folder))}

@@ -8,6 +8,7 @@ import {
   $connection,
   $openSession,
   $read,
+  $remote,
   $selected,
   $tabs,
   $view,
@@ -15,14 +16,17 @@ import {
   closeTab,
   keepTab,
   moveTab,
-  newConversation,
   openWaiting,
+  showStart,
   showTab
 } from '@/store/app'
 import { away, named, samePlace, screenPlace, type Tab } from '@/store/tabs'
+import { $terminals, openTerminal, terminalAvailable, togglePanel } from '@/store/terminals'
 
+import { PanelShow, usePanelState } from './side-panel'
 import { rowDot, StatusDot, useConversationDot, useSessionDot } from './status-dot'
-import { Close, Plus, Robot, Terminal } from './ui/icons'
+import { Close, Folder, Plus, Robot, Terminal, VsCode } from './ui/icons'
+import { IconButton } from './ui/tip'
 
 /** What a dragged tab carries, so a drop takes only a tab. */
 const DRAGGED = 'application/x-atlas-tab'
@@ -30,8 +34,10 @@ const DRAGGED = 'application/x-atlas-tab'
 /**
  * The tabs above the central area (store/tabs.ts): each conversation, bot and session open in this
  * home, with its state's dot and its title, in italic for the passing tab and in bold while what
- * it ended with is unseen; a new conversation at the end; and, on the right, how many cards wait
- * for the user away from the screen. Ctrl+1 to 8 show a tab and Ctrl+9 the last, Ctrl+Tab the next,
+ * it ended with is unseen; what is not made yet at the end, the start screen a new tab opens on
+ * included; and, on the right, how many cards wait
+ * for the user away from the screen and the hidden side panel's switch. Where the window has no
+ * title bar (Windows), the strip is its top and moves it (styles.css). Ctrl+1 to 8 show a tab and Ctrl+9 the last, Ctrl+Tab the next,
  * Ctrl+W closes the one on screen (in the terminal they stay its shell's); a tab is dragged to
  * another place, and a middle click closes it.
  */
@@ -49,10 +55,20 @@ export function TabStrip() {
   // answered: while Atlas opens, the tabs it kept are still on their way.
   const opening = state !== 'open' && !read.conversations
   const draft =
-    !opening && (view === 'conversation' ? selected === null : view === 'session' && open !== null && !named(open))
+    !opening &&
+    (view === 'start' ||
+      (view === 'conversation' ? selected === null : view === 'session' && open !== null && !named(open)))
   const waiting = away(cards, view, selected, open)
   const list = useRef<HTMLDivElement>(null)
-  const [dropAt, setDropAt] = useState<null | number>(null)
+  const [dropAt, setDropAtState] = useState<null | number>(null)
+  // Where a drop lands, as the last drag over a tab said: kept apart from the render too, since a
+  // quick hand drops before the frame that shows the mark, and the drop read the place before it.
+  const dropping = useRef<null | number>(null)
+  const setDropAt = (at: null | number) => {
+    dropping.current = at
+    setDropAtState(at)
+  }
+  const panel = usePanelState()
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -118,18 +134,24 @@ export function TabStrip() {
 
   const drop = (event: DragEvent<HTMLElement>) => {
     const id = event.dataTransfer.getData(DRAGGED)
+    const at = dropping.current
 
-    if (id && dropAt !== null) {
+    if (id && at !== null) {
       event.preventDefault()
       const from = tabs.findIndex(tab => tab.id === id)
-      moveTab(id, from >= 0 && from < dropAt ? dropAt - 1 : dropAt)
+      moveTab(id, from >= 0 && from < at ? at - 1 : at)
     }
 
     setDropAt(null)
   }
 
   return (
-    <div className="flex h-9 shrink-0 items-stretch border-b border-border bg-subtle" data-testid="tab-strip">
+    <div
+      className={`title-bar flex h-9 shrink-0 items-stretch border-b border-border bg-subtle ${
+        panel === 'open' ? '' : 'title-bar-end'
+      }`}
+      data-testid="tab-strip"
+    >
       <div
         aria-label={t.tabs.label}
         className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none]"
@@ -172,14 +194,16 @@ export function TabStrip() {
             role="tab"
             tabIndex={-1}
           >
-            <span className="truncate">{view === 'session' ? t.executors.newSession : t.conversations.new}</span>
+            <span className="truncate">
+              {view === 'start' ? t.tabs.new : view === 'session' ? t.executors.newSession : t.conversations.new}
+            </span>
           </div>
         )}
         <button
           aria-label={t.tabs.new}
           className="grid w-9 shrink-0 place-items-center text-muted-foreground hover:bg-hover hover:text-foreground"
           data-testid="tab-new"
-          onClick={newConversation}
+          onClick={showStart}
           title={t.tabs.new}
           type="button"
         >
@@ -197,6 +221,8 @@ export function TabStrip() {
           {t.tabs.waiting(waiting.length)}
         </button>
       )}
+      <TitleActions />
+      {panel === 'offered' && <PanelShow />}
     </div>
   )
 }
@@ -353,4 +379,58 @@ function useTabDot(tab: Tab) {
   )
 
   return place.kind === 'conversation' ? conversation : session
+}
+
+/**
+ * The session on screen's folder from the title bar (step 18g, asked for by the user on
+ * 01/11/2026): in the system's file manager, in VS Code, and in a terminal, which shows or hides
+ * the terminals once one is open, as Ctrl+` does. Only a folder of this machine: one of another
+ * machine's is not here to open. What went wrong is said where the button's name is.
+ */
+function TitleActions() {
+  const view = useStore($view)
+  const open = useStore($openSession)
+  const remote = useStore($remote)
+  const [failed, setFailed] = useState('')
+
+  if (view !== 'session' || !open?.folder || remote) {
+    return null
+  }
+
+  const folder = open.folder
+  const said = (done: string) => {
+    setFailed(done)
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 px-1.5" data-testid="title-actions">
+      <IconButton
+        icon={Folder}
+        label={failed || t.tabs.openFolder}
+        onClick={() => void window.atlas.openFolder(folder).then(said)}
+        side="bottom"
+        testId="title-open-folder"
+      />
+      <IconButton
+        icon={VsCode}
+        label={failed || t.executors.openInEditor}
+        onClick={() => void window.atlas.openInEditor(folder).then(said)}
+        side="bottom"
+        testId="title-open-editor"
+      />
+      <IconButton
+        icon={Terminal}
+        label={t.tabs.terminal}
+        onClick={() => {
+          if ($terminals.get().length === 0) {
+            void terminalAvailable().then(found => (found ? openTerminal(folder) : undefined))
+          } else {
+            togglePanel()
+          }
+        }}
+        side="bottom"
+        testId="title-terminal"
+      />
+    </div>
+  )
 }

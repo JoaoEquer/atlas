@@ -7,13 +7,13 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-from atlas.plugins import BUNDLED_FOLDER, Executor
+from atlas.plugins import OFFICIAL_FOLDER, Executor
 from atlas.plugins.store import import_plugin
 
 #: The fake `claude`, as the plugin's `program` setting names a program and its arguments.
 FAKE = [sys.executable, str(Path(__file__).parent / "fake_claude.py")]
 #: Where the plugin sits.
-FOLDER = BUNDLED_FOLDER / "claude-code"
+FOLDER = OFFICIAL_FOLDER / "claude-code"
 
 
 def plugin_module(name: str) -> ModuleType:
