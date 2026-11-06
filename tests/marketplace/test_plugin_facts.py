@@ -5,7 +5,14 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from atlas.marketplace import MarketplaceError
-from atlas.marketplace.sources import Sources, plugins_installs, plugins_item
+from atlas.marketplace.sources import (
+    Sources,
+    plugins_installs,
+    plugins_item,
+    publisher_picture,
+    registry_item,
+    skills_item,
+)
 
 DIRECTORY = "example/plugins-directory"
 CATALOG = "https://example.com/catalog.json"
@@ -132,3 +139,63 @@ def test_with_no_count_to_read_the_plugins_stay_listed_by_title() -> None:
         plugins = [(item.target, item.installs) for item in found.items if item.target]
 
         assert plugins == [("alpha", None), ("beta", None)]
+
+
+def test_a_plugin_s_picture_is_its_publisher_s_only_when_the_catalog_says_who_that_is() -> None:
+    own_repository = plugins_item(
+        {
+            "name": "tool",
+            "source": {"source": "url", "url": "https://github.com/someone/tool.git"},
+        },
+        DIRECTORY,
+    )
+    by_the_maker = plugins_item(_plugin("notes", author={"name": "Example"}), DIRECTORY, "Example")
+    by_another = plugins_item(_plugin("notes", author={"name": "Other"}), DIRECTORY, "Example")
+    by_nobody = plugins_item(_plugin("notes"), DIRECTORY, "Example")
+
+    assert own_repository is not None
+    assert own_repository.image == "https://github.com/someone.png?size=96"
+    assert by_the_maker is not None
+    assert by_the_maker.image == "https://github.com/example.png?size=96"
+    assert by_another is not None
+    assert by_another.image == ""
+    assert by_nobody is not None
+    assert by_nobody.image == ""
+
+
+def _server(**more: object) -> dict[str, object]:
+    return {
+        "server": {
+            "name": "io.github.someone/notes",
+            "description": "Notes.",
+            "version": "1.0.0",
+            "remotes": [{"type": "streamable-http", "url": "https://example.com/mcp"}],
+            **more,
+        }
+    }
+
+
+def test_a_server_s_own_icon_comes_first_then_the_github_account_it_names() -> None:
+    icon = "https://example.com/icon.png"
+    published = registry_item(_server(icons=[{"src": "http://example.com/a.png"}, {"src": icon}]))
+    plain = registry_item(_server())
+    linked = registry_item(_server(repository={"url": "https://github.com/acme/notes"}))
+
+    assert published is not None
+    assert published.image == icon
+    assert plain is not None
+    assert plain.image == "https://github.com/someone.png?size=96"
+    assert linked is not None
+    assert linked.image == "https://github.com/acme.png?size=96"
+
+
+def test_a_skill_s_picture_is_its_repository_s_owner() -> None:
+    skill = skills_item({"source": "someone/tools", "skillId": "notes"})
+
+    assert skill is not None
+    assert skill.image == "https://github.com/someone.png?size=96"
+
+
+def test_an_item_with_no_picture_shows_who_owns_its_repository() -> None:
+    assert publisher_picture("cloudflare/skills") == "https://github.com/cloudflare.png?size=96"
+    assert publisher_picture("") == ""

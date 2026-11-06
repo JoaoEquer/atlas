@@ -59,7 +59,7 @@ from atlas.marketplace.model import (
     parse_meta,
     parse_removed,
 )
-from atlas.marketplace.sources import Sources
+from atlas.marketplace.sources import Sources, publisher_picture
 from atlas.marketplace.store import (
     MarketplaceStore,
     McpFile,
@@ -676,7 +676,8 @@ class Marketplace:
             update=record is not None
             and state not in (State.AVAILABLE, State.RETIRED)
             and self._revision(item) not in (None, record.revision),
-            image=item.image,
+            image=item.image
+            or (publisher_picture(item.repo) if item.source is Source.ATLAS else ""),
             source_url=item.source_url,
             problem=problem,
             source=item.source,

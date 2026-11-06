@@ -16,7 +16,8 @@ and no copy, beside its own repository.
   plugin. Atlas's marketplace marks the ones that do not work in Atlas (`outside.yaml`), which do
   not install. A card says what the directory says: its name, its display name when it gives one,
   its category, and the installs a branch of its repository counts, the most first. That count is
-  not documented, so when it cannot be read a plugin shows no number; nothing is guessed.
+  not documented, so when it cannot be read a plugin shows no number; nothing is guessed. Its
+  picture is its publisher's GitHub avatar, when the catalog says who that is.
 - **skills.sh**, whose search gives each skill's installs. Opening the tab is one search (the most
   installed for "skill"), and each search another; its API is not documented, so the last opening
   list read is kept, and stands in, said, when the search breaks. A skill installs from its GitHub
@@ -89,6 +90,9 @@ _PLAIN = frozenset({"mcp", "server", "mcp-server", "mcpserver", "remote", "api"}
 _VARIABLE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _SECRET_NAME = re.compile(r"[^A-Z0-9_]")
 
+#: A GitHub account's avatar: what says who published an outside item, not the item itself.
+AVATAR = "https://github.com/{owner}.png?size=96"
+
 _logger = logging.getLogger("atlas.marketplace")
 
 # -- the MCP Registry -----------------------------------------------------------------------------
@@ -137,6 +141,34 @@ def registry_items(data: bytes) -> list[Item]:
     return found
 
 
+def _avatar(owner: str) -> str:
+    return AVATAR.format(owner=owner) if owner else ""
+
+
+def publisher_picture(repo: str) -> str:
+    """The avatar of who owns `repo`, for an item that brings no picture of its own."""
+    return _avatar(repo.split("/", 1)[0])
+
+
+def _registry_picture(server: Mapping[str, Any], namespace: str, repository: str) -> str:
+    """The icon a server publishes, or the avatar of the GitHub account it names."""
+    icons = server.get("icons")
+    for icon in cast("list[object]", icons) if isinstance(icons, list) else []:
+        source = (
+            _text(cast("Mapping[str, Any]", icon).get("src")) if isinstance(icon, Mapping) else ""
+        )
+        if source.startswith("https://"):
+            return source
+    match = _GITHUB_URL.match(repository)
+    if match is not None:
+        return _avatar(match.group(1).split("/", 1)[0])
+    return (
+        _avatar(namespace.removeprefix(_GITHUB_NAMESPACE))
+        if namespace.startswith(_GITHUB_NAMESPACE)
+        else ""
+    )
+
+
 def registry_item(entry: object) -> Item | None:
     """One server of the registry as an item, or `None` when it is not active or not one."""
     if not isinstance(entry, Mapping):
@@ -169,6 +201,7 @@ def registry_item(entry: object) -> Item | None:
         author=_author(namespace),
         license="",
         version=_text(server.get("version")),
+        image=_registry_picture(server, namespace, _text(repository.get("url"))),
         homepage=homepage if homepage.startswith("https://") else "",
         server=entry_,
         secrets=secrets,
@@ -375,6 +408,7 @@ def skills_item(entry: object) -> Item | None:
         author=repo.split("/", 1)[0],
         license="",
         repo=repo,
+        image=_avatar(repo.split("/", 1)[0]),
         source=Source.SKILLS_SH,
         target=target,
         installs=installs if isinstance(installs, int) else None,
@@ -426,7 +460,11 @@ def plugins_items(data: bytes, repository: str) -> list[Item]:
     plugins = fields.get("plugins")
     if not isinstance(plugins, list):
         raise MarketplaceError("The plugin directory lists no plugins.")
-    found = [plugins_item(entry, repository) for entry in cast("list[object]", plugins)]
+    owner: object = fields.get("owner")
+    maker = (
+        _text(cast("Mapping[str, Any]", owner).get("name")) if isinstance(owner, Mapping) else ""
+    )
+    found = [plugins_item(entry, repository, maker) for entry in cast("list[object]", plugins)]
     return sorted((item for item in found if item is not None), key=lambda item: item.title.lower())
 
 
@@ -454,7 +492,7 @@ def plugins_installs(data: bytes, repository: str) -> dict[str, int]:
     return found
 
 
-def plugins_item(entry: object, repository: str) -> Item | None:
+def plugins_item(entry: object, repository: str, maker: str = "") -> Item | None:
     """One plugin of the directory as an item: its repository, its folder in it, and the commit
     the catalog pins (none when it pins none)."""
     if not isinstance(entry, Mapping):
@@ -487,16 +525,20 @@ def plugins_item(entry: object, repository: str) -> Item | None:
     # A plugin in the directory's own folders is not by whoever owns the directory, so only a
     # repository of its own says whose it is when the catalog does not.
     owner = repo.split("/", 1)[0] if repo != repository else ""
+    named = (
+        _text(cast("Mapping[str, Any]", author).get("name")) if isinstance(author, Mapping) else ""
+    )
+    # There, the catalog naming the directory's own maker as the author is what says it is theirs.
+    publisher = owner or (repository.split("/", 1)[0] if maker and named == maker else "")
     return Item(
         name=f"{Source.CLAUDE_PLUGINS.value}:{name}",
         kind=Kind.PLUGIN,
         title=(_text(fields.get("displayName")) or name)[:TITLE_CHARS],
         summary=_cut(" ".join(_text(fields.get("description")).split()), SUMMARY_CHARS),
-        author=(_text(cast("Mapping[str, Any]", author).get("name")) or owner)
-        if isinstance(author, Mapping)
-        else owner,
+        author=named or owner,
         license="",
         version=_text(fields.get("version")),
+        image=_avatar(publisher),
         repo=repo,
         sha=sha if COMMIT.fullmatch(sha) else "",
         path=path,

@@ -113,11 +113,55 @@ export function shown(
   }
 }
 
-/** The categories a tab's items are filed under, as their sources write them. */
-export function categories(list: MarketplaceList | null, kind: MarketKind): string[] {
-  const found = (list?.items ?? []).filter(row => row.kind === kind && row.category).map(row => row.category)
+/** The categories a tab's items are filed under, as their sources write them, the fullest first. */
+export function categories(list: MarketplaceList | null, kind: MarketKind): { count: number; name: string }[] {
+  const found = new Map<string, number>()
 
-  return [...new Set(found)].sort((a, b) => a.localeCompare(b))
+  for (const row of list?.items ?? []) {
+    if (row.kind === kind && row.category) {
+      found.set(row.category, (found.get(row.category) ?? 0) + 1)
+    }
+  }
+
+  return [...found]
+    .map(([name, count]) => ({ count, name }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+}
+
+/** How many plugins lead a catalog, and how many each category shows before its whole list. */
+const MOST_INSTALLED = 12
+const CATEGORY_PREVIEW = 6
+
+/**
+ * A catalog with categories as it opens: the most installed, then a shelf per category, the fullest
+ * first, each a short look at the rest. An item that cannot install comes after the ones that can,
+ * and one with no category keeps a shelf, so every item is reachable.
+ */
+export function organized(rows: MarketplaceRow[]): {
+  groups: { category: string; rows: MarketplaceRow[]; total: number }[]
+  top: MarketplaceRow[]
+  unfiled: MarketplaceRow[]
+} {
+  const ready = [...rows].sort((a, b) => Number(actionOf(a) === 'unavailable') - Number(actionOf(b) === 'unavailable'))
+  const top = ready.slice(0, MOST_INSTALLED)
+  const rest = ready.slice(MOST_INSTALLED)
+  const totals = new Map<string, number>()
+
+  for (const row of ready) {
+    if (row.category) {
+      totals.set(row.category, (totals.get(row.category) ?? 0) + 1)
+    }
+  }
+
+  const groups = [...totals]
+    .sort(([a, one], [b, other]) => other - one || a.localeCompare(b))
+    .map(([category, total]) => ({
+      category,
+      rows: rest.filter(row => row.category === category).slice(0, CATEGORY_PREVIEW),
+      total
+    }))
+
+  return { groups, top, unfiled: rest.filter(row => !row.category) }
 }
 
 /** How many items each tab holds, for its label. */

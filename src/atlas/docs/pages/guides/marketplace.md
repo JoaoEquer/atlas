@@ -51,7 +51,9 @@ When GitHub cannot be reached, the marketplace shows the last list it read, and 
 ## The public catalogs
 
 After the marketplace's own items, each tab lists what a public catalog offers, read straight from
-it: nothing there was reviewed for Atlas, and each card says where it comes from.
+it: nothing there was reviewed for Atlas, and each card says where it comes from. A card's picture
+is the icon its source publishes, or else the GitHub avatar of who published it, which shows the
+publisher rather than the item; with neither, the kind's own icon.
 
 - **MCP servers, from the MCP Registry**, the official catalog of MCP servers. With no search, it
   lists the servers updated in the last month: the ones the vendor itself published first (a name

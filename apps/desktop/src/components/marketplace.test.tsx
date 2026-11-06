@@ -155,13 +155,35 @@ describe('the plugin directory says what it gives', () => {
 
     expect(cards()).toEqual(['claude-plugins:audit', 'claude-plugins:sketch'])
     expect(screen.getAllByTestId('marketplace-card-meta')[0]?.textContent).toBe('1,200 installs')
-    fireEvent.change(screen.getByTestId('marketplace-category'), { target: { value: 'design' } })
+    const chip = (value: string) => screen.getAllByTestId('marketplace-category').find(c => c.dataset.value === value)
+    fireEvent.click(chip('design') as HTMLElement)
     expect(cards()).toEqual(['claude-plugins:sketch'])
+    expect(chip('design')?.getAttribute('aria-pressed')).toBe('true')
 
     fireEvent.click(screen.getByTestId('marketplace-tab-skill'))
     expect(screen.queryByTestId('marketplace-category')).toBeNull()
     fireEvent.click(screen.getByTestId('marketplace-tab-plugin'))
     expect(cards()).toEqual(['claude-plugins:audit', 'claude-plugins:sketch'])
+  })
+
+  it("opens on the most installed, and a category's whole list is a click away", async () => {
+    const filed = Array.from({ length: 15 }, (_, at) => plugin(`p${String(at)}`, { category: 'design' }))
+    await open(() => listing(filed))
+
+    expect(cards()).toHaveLength(15)
+    expect(screen.getByText('Most installed')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('marketplace-see-all'))
+
+    expect(screen.queryByTestId('marketplace-directory')).toBeNull()
+    expect(cards()).toHaveLength(15)
+  })
+
+  it("leaves the kind's own icon when a picture does not load", async () => {
+    await open(() => listing([plugin('notes', { image: 'https://github.com/someone.png?size=96' })]))
+
+    fireEvent.error(screen.getByTestId('marketplace-picture'))
+
+    expect(screen.queryByTestId('marketplace-picture')).toBeNull()
   })
 
   it('shows no author line when nobody is named, and no number it was not given', async () => {
