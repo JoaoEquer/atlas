@@ -89,8 +89,10 @@ export function resetsIn(resetsAt: string, now: number, locale?: string): string
   }
 
   if (left < 24 * HOUR_MS) {
-    const hours = Math.floor(left / HOUR_MS)
-    const minutes = Math.max(1, Math.round((left % HOUR_MS) / 60_000))
+    // Rounded as a whole, so 1 h 59 min 45 s reads 2 h 0 min, never 1 h 60 min.
+    const total = Math.max(1, Math.round(left / 60_000))
+    const hours = Math.floor(total / 60)
+    const minutes = total % 60
 
     return hours > 0 ? `${String(hours)} h ${String(minutes)} min` : `${String(minutes)} min`
   }

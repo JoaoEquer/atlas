@@ -43,6 +43,8 @@ describe('a plan window on screen', () => {
   it('says its reset in hours within a day, nothing when past or unknown', () => {
     expect(resetsIn('2026-10-18T14:10:00Z', NOW)).toBe('2 h 10 min')
     expect(resetsIn('2026-10-18T12:00:20Z', NOW)).toBe('1 min')
+    expect(resetsIn('2026-10-18T13:59:45Z', NOW)).toBe('2 h 0 min')
+    expect(resetsIn('2026-10-18T12:59:40Z', NOW)).toBe('1 h 0 min')
     expect(resetsIn('2026-10-18T11:00:00Z', NOW)).toBe('')
     expect(resetsIn('', NOW)).toBe('')
     expect(resetsIn('2026-10-23T08:00:00Z', NOW, 'en')).not.toBe('')

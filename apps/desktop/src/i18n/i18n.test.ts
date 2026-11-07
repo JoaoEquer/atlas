@@ -38,4 +38,23 @@ describe('the screen language', () => {
     expect(messagesFor('en').composer.effortLevel('none')).toBe('Off')
     expect(messagesFor('en').composer.effortLevel('ultra')).toBe('ultra')
   })
+
+  it("says a tool's time in the unit it reads in once rounded, never 1000ms, 10.0s or 60s", () => {
+    const { duration } = messagesFor('en')
+    expect([duration(0.012), duration(0.9996), duration(4.24), duration(9.97)]).toEqual(['12ms', '1.0s', '4.2s', '10s'])
+    expect([duration(25), duration(59.6), duration(65)]).toEqual(['25s', '1m 0s', '1m 5s'])
+    const pt = messagesFor('pt-BR').duration
+    expect([pt(0.9996), pt(4.24), pt(9.97), pt(59.6)]).toEqual(['1,0s', '4,2s', '10s', '1min 0s'])
+  })
+
+  it("says a file's size in the unit it reads in once rounded, never 1024 KB", () => {
+    const { size } = messagesFor('en').attachments
+    expect([size(500), size(2048), size(1024 * 1024 - 100), size(5 * 1024 * 1024)]).toEqual([
+      '500 B',
+      '2 KB',
+      '1.0 MB',
+      '5.0 MB'
+    ])
+    expect(messagesFor('pt-BR').attachments.size(1024 * 1024 - 100)).toBe('1,0 MB')
+  })
 })
