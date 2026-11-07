@@ -14,7 +14,7 @@ from atlas.__main__ import SCHEMAS
 from atlas.home import Home, Redactor, VaultSettings, check_backup, utc_now
 from atlas.secrets import Vault
 from fake_model import FakeModelServer, FakeReply
-from server_support import Client, Serve
+from server_support import WAIT, Client, Serve
 
 #: JSON-RPC's invalid params: what the server answers a request it refuses.
 INVALID_PARAMS = -32602
@@ -193,7 +193,7 @@ def test_a_backup_comes_down_the_connection_in_parts(
         left = other.result("home.backup_download")
         other.result("home.backup_part", {"id": left["id"], "offset": 0})
     folders = list(Path(tempfile.gettempdir()).glob("atlas-backup-*"))
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + WAIT
     while any(folder.exists() for folder in folders) and time.monotonic() < deadline:
         time.sleep(0.05)
     assert not any(folder.exists() for folder in folders)

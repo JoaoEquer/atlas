@@ -585,6 +585,21 @@ class ProviderConnected:
 
 
 @dataclass(frozen=True, slots=True)
+class RoutineExecutorRow:
+    """Where a routine's prompt runs when an outside executor runs it (step 25)."""
+
+    name: str
+    #: The folder it works in, whole.
+    folder: str
+    #: In the executor's automatic mode; otherwise its first question stops a run for the user.
+    auto: bool
+    #: Each run in a new workspace of the folder, archived when it changed nothing.
+    workspace: bool
+    #: A run that changed something opens a draft pull request (the GitHub plugin's).
+    draft: bool
+
+
+@dataclass(frozen=True, slots=True)
 class RoutineRow:
     """A routine, as the screen lists it. Times are UTC text."""
 
@@ -605,11 +620,68 @@ class RoutineRow:
     running: bool
     #: The bot it runs as, whose fixed conversation reads its result; `null`, the main agent.
     bot: str | None = None
+    #: The command whose new output wakes its prompt (step 23); `null`, its schedule does.
+    probe: str | None = None
+    #: The executor its prompt runs in (step 25); `null`, Atlas's model.
+    executor: RoutineExecutorRow | None = None
+    #: The model pinned on it, `provider/model`, and its effort; empty, the settings' (step 25).
+    model: str = ""
+    effort: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class RoutineSave:
+    """A prompt routine as the app's form writes it (step 25): made when `routine_id` is empty,
+    changed otherwise."""
+
+    name: str
+    #: As `atlas routines create --schedule` takes it: `every day at 9am`, `every 30m`.
+    schedule: str
+    prompt: str
+    routine_id: str = ""
+    #: A command whose new output wakes the prompt (step 23); empty, its schedule does.
+    probe: str = ""
+    #: The bot it runs as; empty, the main agent.
+    bot: str = ""
+    #: `provider/model` and its effort; empty, the settings'.
+    model: str = ""
+    effort: str = ""
+    #: The executor that runs it in a folder; `null`, Atlas's model.
+    executor: RoutineExecutorRow | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Activity:
+    """What the home does now, for a host that puts it to sleep when idle and wakes it in time
+    (Atlas Cloud, step 20). Times are UTC text."""
+
+    #: A turn, a review, a routine or an executor works now.
+    working: bool
+    #: The clients connected now (the app, a channel's bridge).
+    clients: int
+    #: Since when nothing worked and no client was connected; `null` while something is.
+    idle_since: str | None
+    #: When the next routine comes due; `null` when none will.
+    next_wake: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ScoreboardRow:
+    """This week's runs of every routine (step 25): since Monday at midnight, the user's time."""
+
+    since: str
+    #: Ended with nothing asked: answered, or silent.
+    alone: int
+    #: Stopped at a question or an approval nobody gave.
+    needed: int
+    failed: int
 
 
 @dataclass(frozen=True, slots=True)
 class RoutineList:
     routines: list[RoutineRow]
+    #: This week's runs, at the top of the screen (step 25).
+    scoreboard: ScoreboardRow | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -632,6 +704,9 @@ class RunRow:
     #: The reply or the command's output, cut to its first 2,000 characters.
     output: str
     error: str | None
+    #: What its probe heard, which woke it, cut to its first 2,000 characters; empty when its
+    #: schedule fired it.
+    event: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -857,6 +932,7 @@ type MarketplaceKind = Literal["skill", "mcp", "plugin", "executor"]
 #: `installed` for a skill or an MCP server in the home; `off` and `on` for a plugin or an
 #: executor; `retired` for an item the marketplace pulled after it was installed, now stopped.
 type MarketplaceState = Literal["available", "installed", "off", "on", "retired"]
+type MarketplaceSource = Literal["atlas", "mcp-registry", "claude-plugins", "skills.sh"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -884,6 +960,13 @@ class MarketplaceRow:
     source_url: str
     #: What keeps it from installing or running, or why it was retired.
     problem: str | None
+    #: Where it comes from (step 24): `atlas`, the marketplace's own repository, or an outside
+    #: catalog read directly, `mcp-registry`, `claude-plugins` or `skills.sh`.
+    source: MarketplaceSource = "atlas"
+    #: When its source last published it, `YYYY-MM-DD`; empty when the source does not say.
+    updated: str = ""
+    #: The installs its source counts; `null` when it counts none.
+    installs: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -895,12 +978,17 @@ class MarketplaceList:
     read_at: str | None
     #: Why it could not be read now: the last read stands in, or nothing does.
     problem: str | None
+    #: The outside catalogs that could not be read for this list, a line each (step 24).
+    source_problems: list[str] = field(default_factory=lambda: list[str]())
 
 
 @dataclass(frozen=True, slots=True)
 class MarketplaceListParams:
     #: Read the marketplace again now, not only once the last read is an hour old.
     refresh: bool = False
+    #: What the user searches for: the outside catalogs are searched for it (step 24); empty,
+    #: they list what they list first.
+    query: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1083,6 +1171,69 @@ class ConversationsChanged:
 class PluginsChanged:
     #: How many people wait with a code.
     waiting: int
+
+
+@dataclass(frozen=True, slots=True)
+class SpeechState:
+    """Who writes down recordings, and the model on this computer (step 26)."""
+
+    #: `local`, `openai`, `gemini` or `off`: `[voice] transcription`.
+    transcription: str
+    #: The model is on this computer, whole.
+    present: bool
+    #: Its download's size, in bytes.
+    size: int
+    #: The bytes downloaded so far while a download runs; `None` when none does.
+    downloading: int | None
+    #: A recording came for the model before it was there: the app asks once to download it.
+    wanted: bool
+    #: The user said no to the download, for every home of this machine.
+    declined: bool
+    #: Why the last download failed; empty when it did not.
+    error: str
+    #: Whose the model is, and its license, said where it is offered.
+    credit: str
+
+
+@dataclass(frozen=True, slots=True)
+class DictationRow:
+    """One dictation kept in the home (step 26): its recording, and what it said."""
+
+    id: str
+    #: When it was recorded, ISO 8601 in the server's time zone.
+    at: str
+    text: str
+    media_type: str
+    #: `box`, the conversation's microphone, or `anywhere`, the shortcut in any program.
+    where: str
+    #: Why it was not written down, when it was not; the recording is kept all the same.
+    error: str
+
+
+@dataclass(frozen=True, slots=True)
+class DictationWrite:
+    #: The recording, base64, 10 MB at most.
+    audio: str
+    media_type: str = "audio/webm"
+    where: str = "box"
+
+
+@dataclass(frozen=True, slots=True)
+class DictationList:
+    #: Newest first, the last 500.
+    dictations: list[DictationRow]
+
+
+@dataclass(frozen=True, slots=True)
+class DictationRef:
+    id: str
+
+
+@dataclass(frozen=True, slots=True)
+class DictationAudio:
+    #: The recording, base64.
+    audio: str
+    media_type: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -1430,6 +1581,10 @@ class InstanceRow:
     #: The other account it runs on (step 16h, `executor.accounts`); empty, the main account.
     #: `executor` is then its executor on that account (`claude-code@1a2b3c4d`).
     account_id: str = ""
+    #: The permission mode it runs in, one of `modes`, its harness's, its default first
+    #: (`workbench.mode`); both empty for a harness that has only its automatic mode.
+    mode: str = ""
+    modes: list[str] = field(default_factory=list[str])
 
 
 @dataclass(frozen=True, slots=True)
@@ -1454,6 +1609,9 @@ class ExecutorRow:
     enabled: bool = True
     declaration: list[str] = field(default_factory=list[str])
     consent: str = ""
+    #: Its plugin was turned on, but an update changed what it declares, so it waits, off, for
+    #: the user's consent again (`consent again`): the sidebar and its sessions' tabs say so.
+    consent_again: bool = False
     #: It switches accounts (`executor.account`), from its place in the sidebar.
     accounts: bool = False
     #: Someone is logged in to its harness: until then a turn fails, so the screen asks for a
@@ -1468,6 +1626,16 @@ class ExecutorRow:
     nickname: str = ""
     #: Its prompts take files (`workbench.prompt`'s `attachments`, step 16i).
     files: bool = False
+    #: A newer version than `version`, where its install updates from, and the command that
+    #: installs it, as the user would type it (`executor.update`); empty when there is none, or
+    #: Atlas does not know how this install updates. Only on the executor's own row.
+    latest: str = ""
+    update: str = ""
+    #: Its update runs now, at the user's click.
+    updating: bool = False
+    #: Its harness's permission modes, its default first, for a session not started yet; empty,
+    #: it has only its automatic mode.
+    modes: list[str] = field(default_factory=list[str])
 
 
 @dataclass(frozen=True, slots=True)
@@ -1486,6 +1654,187 @@ class WorkbenchList:
 @dataclass(frozen=True, slots=True)
 class InstanceRef:
     instance_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class FolderRef:
+    #: A project folder; a relative one is the workspace's.
+    folder: str
+
+
+@dataclass(frozen=True, slots=True)
+class FolderGit:
+    """A folder's git, for a session's environment (step 18g); `repository` false outside one."""
+
+    folder: str
+    repository: bool
+    branch: str = ""
+    #: The repository's top folder, the worktree's own for a worktree.
+    root: str = ""
+    #: The folder is a worktree of another repository's folder.
+    worktree: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class WorktreeParams:
+    #: A folder in the repository the worktree is of.
+    folder: str
+    #: Its name: its folder is `<repository>-<name>`, beside the repository, on a new branch
+    #: `atlas/<name>` from the one checked out.
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceRow:
+    """A workspace (step 21): a task of a project, a worktree on a branch of its own."""
+
+    id: str
+    #: The project's main folder, which its workspaces group under.
+    project_root: str
+    name: str
+    branch: str
+    #: The branch it was made from, where its work goes back.
+    base: str
+    folder: str
+    #: `ready`, `preparing`, `setup_failed` or `archived`.
+    state: str
+    created_at: str
+    #: Its ports, `4000-4009`, when its project names a range; empty otherwise.
+    ports: str
+    #: The setup script's last words, when it ran.
+    setup_output: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceListParams:
+    #: A folder of a project, for that project's workspaces; empty for every one.
+    folder: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceList:
+    workspaces: list[WorkspaceRow]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceCreate:
+    #: Any folder of the project.
+    folder: str
+    name: str
+    #: The branch to start from; empty for the one the project has checked out.
+    base: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceRef:
+    id: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceDelete:
+    id: str
+    #: The user said yes to deleting work not delivered.
+    force: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class DiffLineRow:
+    #: `same`, `plus`, `minus`, or `gap` between two hunks.
+    kind: str
+    text: str
+    #: Its number in the file before and after; 0 where it has none.
+    old: int
+    new: int
+
+
+@dataclass(frozen=True, slots=True)
+class DiffFileRow:
+    path: str
+    #: `added`, `modified`, `deleted` or `renamed`.
+    status: str
+    added: int
+    removed: int
+    binary: bool
+    #: Its lines were cut: the rest is not shown.
+    truncated: bool
+    lines: list[DiffLineRow]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceDiff:
+    """What a workspace changed since it left its branch of origin (step 21, A2)."""
+
+    files: list[DiffFileRow]
+    #: More files changed than are listed.
+    more: bool
+    #: It holds changes not committed (A4).
+    uncommitted: bool
+    #: The commits its branch has that its branch of origin has not.
+    ahead: int
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointRow:
+    """A workspace's folder as it was before a prompt (step 21, A3)."""
+
+    commit: str
+    #: The prompt it was kept before, or why it was kept.
+    label: str
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointList:
+    #: The newest first.
+    checkpoints: list[CheckpointRow]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceCommit:
+    id: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspacePushed:
+    #: What git said.
+    said: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceRestore:
+    id: str
+    #: One of its checkpoints.
+    commit: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectRow:
+    """How a project prepares a new workspace."""
+
+    root: str
+    setup_script: str
+    #: The first port of its workspaces, 0 for none, and how many each gets.
+    ports_start: int
+    ports_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectSettings:
+    #: Any folder of the project.
+    folder: str
+    setup_script: str
+    ports_start: int
+    ports_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class SessionContext:
+    """How full a session's context is (step 18g): its tokens, when its harness says, and the
+    window of the model it runs as, when the models' catalog knows it."""
+
+    tokens: int | None
+    window: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1659,6 +2008,13 @@ class WorkbenchSwitchParams:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkbenchModeParams:
+    instance_id: str
+    #: One of the instance's `modes`.
+    mode: str
+
+
+@dataclass(frozen=True, slots=True)
 class WorkbenchFolderParams:
     instance_id: str
     folder: str
@@ -1677,60 +2033,6 @@ class WorkbenchUseAccountParams:
     instance_id: str
     #: An `executor.accounts` id; empty, the main account.
     account_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class RouteTargetParams:
-    """One destination of a session's route: an executor's own name and one of its
-    `executor.accounts` ids (empty, the main account), and the model (an `executor.models` id)
-    and the effort the session goes on with there; `None`, the ones it ran on."""
-
-    executor: str
-    account_id: str = ""
-    model: str | None = None
-    effort: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class WorkbenchRouteParams:
-    instance_id: str
-    #: In the order the session goes on to them at a plan's limit; empty, none.
-    targets: list[RouteTargetParams]
-    enabled: bool = True
-    #: A copy on another account of the same executor compacts first, where its harness has
-    #: `/compact` (on by default).
-    compact: bool = True
-
-
-@dataclass(frozen=True, slots=True)
-class RouteStopRow:
-    executor: str
-    account_id: str
-    #: Its executor on that account, as `workbench.executors` names it.
-    name: str
-    title: str
-    #: The account's nickname; empty for the main account.
-    nickname: str = ""
-    #: Its executor is installed here; one that is not is passed over.
-    installed: bool = True
-    #: The model and the effort the session goes on with there; `None`, the ones it ran on.
-    model: str | None = None
-    effort: str | None = None
-    #: It reached its plan's limit and has not reset: passed over until it does.
-    limited: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class SessionRouteRow:
-    """A session's route (asked for by the user on 21/10/2026): where it goes on, in order, when
-    the destination it runs on reaches its plan's limit. With none, or `enabled` off, its
-    executor's own accounts take over (`executor.failover`)."""
-
-    instance_id: str
-    stops: list[RouteStopRow] = field(default_factory=list[RouteStopRow])
-    enabled: bool = True
-    #: A copy on another account compacts first, where its harness has `/compact`.
-    compact: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -1784,44 +2086,12 @@ class ExecutorAccounts:
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutorFailoverParams:
-    executor: str
-    #: Every account's `executor.accounts` id in the order they take over in, the main one as
-    #: empty; one left out comes after.
-    order: list[str]
-    enabled: bool
-    compact: bool
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutorAddAccountParams:
-    executor: str
-    #: The user's nickname for it ("company-b"), which names its folder too.
-    nickname: str
-
-
-@dataclass(frozen=True, slots=True)
 class SessionDeleteParams:
     #: An `ExecutorRow.name`: the executor on the account that keeps the session.
     executor: str
     session_id: str
     #: As `executor.sessions` names it.
     folder: str
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutorAccountRef:
-    executor: str
-    account_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class ExecutorFolderAccountParams:
-    executor: str
-    #: As `executor.folders` names it.
-    folder: str
-    #: An `executor.accounts` id; empty, the main account.
-    account_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -1854,6 +2124,14 @@ class InstanceActivityPayload:
 class ExecutorRef:
     #: The executor's name (`claude-code`).
     executor: str
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutorUpdated:
+    """How an executor's update ended: its output's end, to show when it failed."""
+
+    updated: bool
+    output: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -2269,6 +2547,126 @@ METHODS: Mapping[str, Method] = {
             "without a restart; a refused value writes nothing.",
         ),
         Method(
+            "speech.status",
+            Empty,
+            SpeechState,
+            "Who writes down recordings (step 26), and whether the model is on this computer.",
+        ),
+        Method(
+            "speech.download",
+            Empty,
+            SpeechState,
+            "Download the speech model in the background, its progress told by speech.changed; "
+            "it takes back an earlier no.",
+        ),
+        Method(
+            "speech.decline",
+            Empty,
+            SpeechState,
+            "The user's no to the model's download: the app does not ask again on this machine.",
+        ),
+        Method(
+            "dictation.write",
+            DictationWrite,
+            DictationRow,
+            "Keep a recording the user dictated, then write it down as [voice] transcription "
+            "says; one that could not be is kept with why.",
+        ),
+        Method("dictation.list", Empty, DictationList, "The home's dictations, newest first."),
+        Method("dictation.audio", DictationRef, DictationAudio, "A dictation's recording."),
+        Method(
+            "dictation.again",
+            DictationRef,
+            DictationRow,
+            "Write a kept dictation down again, as [voice] transcription says now.",
+        ),
+        Method("dictation.delete", DictationRef, Empty, "Delete a dictation and its recording."),
+        Method(
+            "workspace.list",
+            WorkspaceListParams,
+            WorkspaceList,
+            "The workspaces of the home, or of a folder's project (step 21).",
+        ),
+        Method(
+            "workspace.create",
+            WorkspaceCreate,
+            WorkspaceRow,
+            "Make a workspace of a folder's project: a worktree in the home on a branch of its "
+            "own, the listed files copied; its setup script runs after, told by "
+            "workspaces.changed.",
+        ),
+        Method(
+            "workspace.archive",
+            WorkspaceRef,
+            WorkspaceRow,
+            "Keep a workspace's work in a commit on its branch and remove its folder.",
+        ),
+        Method(
+            "workspace.unarchive",
+            WorkspaceRef,
+            WorkspaceRow,
+            "Bring an archived workspace's folder back, its work as it was.",
+        ),
+        Method(
+            "workspace.delete",
+            WorkspaceDelete,
+            Empty,
+            "Delete a workspace, its folder and its branch; one with work not delivered only "
+            "with force.",
+        ),
+        Method(
+            "workspace.diff",
+            WorkspaceRef,
+            WorkspaceDiff,
+            "What a workspace changed since it left its branch of origin, committed or not, line "
+            "by line with each line's numbers, for the user to comment on.",
+        ),
+        Method(
+            "workspace.checkpoints",
+            WorkspaceRef,
+            CheckpointList,
+            "A workspace's checkpoints, its folder as it was before each prompt, the newest first.",
+        ),
+        Method(
+            "workspace.restore",
+            WorkspaceRestore,
+            WorkspaceRow,
+            "Put a workspace's files back as they were at one of its checkpoints, what they are "
+            "now kept first as another; refused while a session works in it.",
+        ),
+        Method(
+            "workspace.commit",
+            WorkspaceCommit,
+            WorkspaceRow,
+            "Commit every change in a workspace on its branch, as the user's own commit.",
+        ),
+        Method(
+            "workspace.merge",
+            WorkspaceRef,
+            WorkspaceRow,
+            "Merge a workspace's branch into its branch of origin, the user's yes given in the "
+            "app; refused with changes not committed, or when it does not merge cleanly.",
+        ),
+        Method(
+            "workspace.push",
+            WorkspaceRef,
+            WorkspacePushed,
+            "Send a workspace's branch to the project's remote origin, the user's yes given in the "
+            "app.",
+        ),
+        Method(
+            "workspace.project",
+            FolderRef,
+            ProjectRow,
+            "How a folder's project prepares a new workspace.",
+        ),
+        Method(
+            "workspace.set_project",
+            ProjectSettings,
+            ProjectRow,
+            "Set how a folder's project prepares a new workspace: its setup script and ports.",
+        ),
+        Method(
             "memory.entries",
             MemoryEntriesParams,
             MemoryEntries,
@@ -2453,6 +2851,21 @@ METHODS: Mapping[str, Method] = {
             "only and applies from its next turn; a new conversation starts from config.toml.",
         ),
         Method("routine.list", Empty, RoutineList, "The home's routines, by name."),
+        Method(
+            "server.activity",
+            Empty,
+            Activity,
+            "What the home does now (step 20): whether anything works, the clients connected, "
+            "since when it is idle and when the next routine comes due. Also at GET /activity, "
+            "with the token, for the host that sleeps it.",
+        ),
+        Method(
+            "routine.save",
+            RoutineSave,
+            RoutineRow,
+            "Make a prompt routine, or change one (step 25): its name, its schedule or its probe, "
+            "who runs it (Atlas, a bot or an executor in a folder), and its model.",
+        ),
         Method(
             "routine.runs", RoutineRef, RunList, "A routine's runs, the newest first, at most 50."
         ),
@@ -2647,6 +3060,13 @@ METHODS: Mapping[str, Method] = {
             "The instance's own mode that asks no permission, on or off.",
         ),
         Method(
+            "workbench.mode",
+            WorkbenchModeParams,
+            InstanceRow,
+            "The instance's permission mode, one its harness lists: `auto` is its automatic mode, "
+            "as workbench.auto turns on.",
+        ),
+        Method(
             "workbench.model",
             WorkbenchModelParams,
             InstanceRow,
@@ -2659,6 +3079,26 @@ METHODS: Mapping[str, Method] = {
             InstanceRow,
             "Whether Atlas answers what the instance asks: the guardian for permissions, a model "
             "for questions; what either is unsure of still reaches the user.",
+        ),
+        Method(
+            "workbench.git",
+            FolderRef,
+            FolderGit,
+            "A project folder's git: the branch checked out, its repository, and whether it is a "
+            "worktree.",
+        ),
+        Method(
+            "workbench.worktree",
+            WorktreeParams,
+            FolderGit,
+            "A new workspace of the folder's repository, in the home on a new branch from the one "
+            "checked out, for a session apart from the folder; nothing in the folder changes.",
+        ),
+        Method(
+            "workbench.context",
+            InstanceRef,
+            SessionContext,
+            "How many tokens of context the instance's session holds, and its model's window.",
         ),
         Method(
             "workbench.duplicate",
@@ -2689,21 +3129,6 @@ METHODS: Mapping[str, Method] = {
             "it was; never while it works.",
         ),
         Method(
-            "workbench.route",
-            InstanceRef,
-            SessionRouteRow,
-            "The instance's session's route: the destinations it goes on to at a plan's limit, "
-            "accounts of its executor and of others, in order.",
-        ),
-        Method(
-            "workbench.set_route",
-            WorkbenchRouteParams,
-            SessionRouteRow,
-            "Set the instance's session's route, kept for its card. On an account of the same "
-            "executor it goes on in a copy; on another executor in a new session, whose first "
-            "prompt is a handoff packet Atlas puts together with no model call.",
-        ),
-        Method(
             "workbench.account_switch",
             WorkbenchUseAccountParams,
             AccountSwitchRow,
@@ -2722,6 +3147,14 @@ METHODS: Mapping[str, Method] = {
             ExecutorList,
             "Look for the harnesses again, as at a start (installed, which version, which "
             'account): the executors tab asks when it shows, and on its "Look again".',
+        ),
+        Method(
+            "executor.update",
+            ExecutorRef,
+            ExecutorUpdated,
+            "Update an executor's harness to its newest version with the command its row shows, "
+            "then look for it again: only the owner's click in the app, never the agent. Refused "
+            "while one of its sessions runs, since a harness in use cannot be replaced.",
         ),
         Method(
             "executor.folders",
@@ -2776,39 +3209,11 @@ METHODS: Mapping[str, Method] = {
             "who it is logged in as (step 16h).",
         ),
         Method(
-            "executor.add_account",
-            ExecutorAddAccountParams,
-            AccountRow,
-            "Keep another account under a nickname, in the harness's folder for it, not logged "
-            "in yet: `executor.account` on its row logs it in on the user's browser.",
-        ),
-        Method(
-            "executor.remove_account",
-            ExecutorAccountRef,
-            Empty,
-            "Forget another account; its folder stays, with its login and sessions, and its "
-            "folders start on the main account again. Refused while an instance runs on it.",
-        ),
-        Method(
             "executor.delete_session",
             SessionDeleteParams,
             Empty,
             "Delete one session, in its account's folder only, after the user said yes; an idle "
             "instance on it closes first. Refused while it works.",
-        ),
-        Method(
-            "executor.failover",
-            ExecutorFailoverParams,
-            ExecutorAccounts,
-            "The order an executor's accounts take over in when one reaches its plan's limit, "
-            "whether they do, and whether a session compacts before it goes on; told to every "
-            "screen as `executor.accounts`.",
-        ),
-        Method(
-            "executor.folder_account",
-            ExecutorFolderAccountParams,
-            Empty,
-            "The account a folder's new sessions start on; empty, the main account.",
         ),
         Method(
             "executor.account",
@@ -3095,6 +3500,25 @@ EVENTS: Mapping[str, Event] = {
             PluginsChanged,
             "A plugin was turned on, off or failed, or someone asked to pair; read plugin.list "
             "and pairing.list.",
+            conversation=False,
+        ),
+        Event(
+            "speech.changed",
+            SpeechState,
+            "The speech model's download moved, ended or failed, or a recording waited for it.",
+            conversation=False,
+        ),
+        Event(
+            "dictations.changed",
+            Empty,
+            "A dictation was kept, written down or deleted, from any client; read dictation.list.",
+            conversation=False,
+        ),
+        Event(
+            "workspaces.changed",
+            Empty,
+            "A workspace was made, prepared, archived, brought back or deleted; read "
+            "workspace.list.",
             conversation=False,
         ),
         Event(

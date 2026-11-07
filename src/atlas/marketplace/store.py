@@ -37,15 +37,18 @@ from atlas.marketplace.errors import MarketplaceError
 from atlas.marketplace.model import (
     ITEMS_FOLDER,
     META_FILE,
+    OUTSIDE_FILE,
     REMOVED_FILE,
     Index,
     Item,
     Kind,
     Retired,
     Secret,
+    Source,
     Tier,
     parse_item,
     parse_meta,
+    parse_outside,
     parse_removed,
 )
 
@@ -111,6 +114,13 @@ class Record:
     needed_by: tuple[str, ...] = ()
     #: Why it was retired, once it was.
     retired: str = ""
+    #: Where it came from (step 24), and the name it took in the home when not its own.
+    source: Source = Source.ATLAS
+    target: str = ""
+
+    @property
+    def home_name(self) -> str:
+        return self.target or self.name
 
 
 class MarketplaceStore:
@@ -184,7 +194,8 @@ class MarketplaceStore:
                 name: Retired(**entry)
                 for name, entry in cast("dict[str, Any]", fields["retired"]).items()
             }
-            index = Index(fields["name"], fields["description"], items, retired)
+            incompatible = {str(k): str(v) for k, v in fields.get("incompatible", {}).items()}
+            index = Index(fields["name"], fields["description"], items, retired, (), incompatible)
             return index, parse_utc(fields["read_at"])
         except (KeyError, TypeError, ValueError) as error:
             _logger.warning("The marketplace's last read is damaged: %s", error)
@@ -198,6 +209,7 @@ class MarketplaceStore:
             "description": index.description,
             "items": {name: dataclasses.asdict(item) for name, item in index.items.items()},
             "retired": {name: dataclasses.asdict(r) for name, r in index.retired.items()},
+            "incompatible": dict(index.incompatible),
         }
         self.folder.mkdir(parents=True, exist_ok=True)
         replace_file(self.folder / INDEX_FILE, (json.dumps(data, indent=2) + "\n").encode())
@@ -221,6 +233,7 @@ class MarketplaceStore:
                     fields["kind"] = Kind(fields["kind"])
                     fields["tier"] = Tier(fields.get("tier", Tier.COMMUNITY))
                     fields["needed_by"] = tuple(fields.get("needed_by", ()))
+                    fields["source"] = Source(fields.get("source", Source.ATLAS))
                     records[name] = Record(**fields)
                 except (KeyError, TypeError, ValueError):
                     _logger.warning("An entry of %s is damaged: %s", INSTALLED_FILE, name)
@@ -307,6 +320,14 @@ def read_index(root: Path) -> Index:
     name, description = parse_meta(meta.read_text(encoding="utf-8"))
     removed = root / REMOVED_FILE
     retired = parse_removed(removed.read_text(encoding="utf-8")) if removed.is_file() else {}
+    outside = root / OUTSIDE_FILE
+    try:
+        incompatible = parse_outside(outside.read_text("utf-8")) if outside.is_file() else {}
+    except MarketplaceError as error:
+        # Only a mark on cards: a broken file never refuses the marketplace, as `removed.yaml`'s
+        # would.
+        _logger.warning("The marketplace's %s was left out: %s", OUTSIDE_FILE, error)
+        incompatible = {}
     items: dict[str, Item] = {}
     problems: list[str] = []
     folder = root / ITEMS_FOLDER
@@ -319,7 +340,7 @@ def read_index(root: Path) -> Index:
         items[item.name] = item
     for problem in problems:
         _logger.warning("An item of the marketplace was left out: %s", problem)
-    return Index(name, description, items, retired, tuple(problems))
+    return Index(name, description, items, retired, tuple(problems), incompatible)
 
 
 def subfolder(root: Path, path: str) -> Path:
@@ -356,4 +377,5 @@ def _item(entry: Mapping[str, Any]) -> Item:
     fields["tier"] = Tier(fields["tier"])
     fields["screenshots"] = tuple(fields.get("screenshots", ()))
     fields["secrets"] = tuple(Secret(**secret) for secret in fields.get("secrets", ()))
+    fields["source"] = Source(fields.get("source", Source.ATLAS))
     return Item(**fields)

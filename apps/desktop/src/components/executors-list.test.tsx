@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { contribute } from '@/plugins/registry'
 import type { AtlasClient } from '@/protocol/client'
 import type { ExecutorRow, InstanceRow, SessionFolderRow, SessionRow } from '@/protocol/protocol.generated'
 import { current, openHome, showExecutor, startApp } from '@/store/app'
@@ -11,14 +12,17 @@ import { ExecutorsList } from './executors-list'
 const EXECUTOR: ExecutorRow = {
   account: 'someone@example.com',
   account_folders: false,
+  modes: [],
   files: false,
   account_id: '',
   accounts: true,
   base: '',
   consent: '',
+  consent_again: false,
   declaration: [],
   enabled: true,
   installed: true,
+  latest: '',
   logged_in: true,
   minimum: '',
   name: 'claude-code',
@@ -28,6 +32,8 @@ const EXECUTOR: ExecutorRow = {
   problem: '',
   supported: true,
   title: 'Claude Code',
+  update: '',
+  updating: false,
   version: '2.1.140'
 }
 
@@ -425,17 +431,9 @@ describe("an executor's other accounts (step 16h, redone on 19/10/2026)", () => 
                 instances: [],
                 requests: []
               })
-            : method === 'executor.failover'
-              ? Promise.resolve({
-                  ...ACCOUNTS,
-                  accounts: [ACCOUNTS.accounts[1], ACCOUNTS.accounts[0]],
-                  compact: true
-                })
-              : method === 'executor.add_account'
-                ? Promise.resolve({ ...ACCOUNTS.accounts[1], account_id: 'ef56ab78', nickname: 'side' })
-                : ['executor.folder_account', 'executor.remove_account', 'executor.delete_session'].includes(method)
-                  ? Promise.resolve({})
-                  : new Promise(() => undefined)
+            : method === 'executor.delete_session'
+              ? Promise.resolve({})
+              : new Promise(() => undefined)
 
   async function showAccounts(name = 'claude-code'): Promise<[string, unknown][]> {
     const calls: [string, unknown][] = []
@@ -454,8 +452,19 @@ describe("an executor's other accounts (step 16h, redone on 19/10/2026)", () => 
     return calls
   }
 
-  it('shows each account as an executor of its own, and a folder starts on the one it names', async () => {
-    const calls = await showAccounts()
+  it("shows each account as an executor of its own, the accounts plugin's part under each one opened", async () => {
+    const places: unknown[] = []
+    const undo = contribute('accounts', {
+      area: 'executor',
+      id: 'accounts',
+      render: place => {
+        places.push(place)
+
+        return <p data-testid="plugin-part">part</p>
+      },
+      title: 'Accounts'
+    })
+    await showAccounts()
 
     // The harness and its version head its accounts once; each row says only its account.
     expect(screen.getByTestId('harness-heading').textContent).toBe('Claude Code2.1.140')
@@ -466,15 +475,10 @@ describe("an executor's other accounts (step 16h, redone on 19/10/2026)", () => 
       'claude-code',
       'claude-code'
     ])
-    const chosen = await screen.findByTestId<HTMLSelectElement>('folder-account')
-    expect(chosen.value).toBe('ab12cd34')
-    fireEvent.change(chosen, { target: { value: '' } })
-
-    await vi.waitFor(() => {
-      expect(listed(calls, 'executor.folder_account')).toEqual([
-        ['executor.folder_account', { account_id: '', executor: 'claude-code', folder: 'C:\\work\\api' }]
-      ])
-    })
+    // Opened, its tree shows the plugin's part, given the place: the harness's own login.
+    expect(screen.getAllByTestId('plugin-part')).toHaveLength(1)
+    expect(places.at(-1)).toEqual({ account: '', base: 'claude-code', executor: 'claude-code', title: 'Claude Code' })
+    undo()
   })
 
   it('opens another account without closing the first (asked for by the user on 20/10/2026)', async () => {
@@ -495,59 +499,13 @@ describe("an executor's other accounts (step 16h, redone on 19/10/2026)", () => 
     const started = vi.spyOn(current(), 'newSession').mockImplementation(() => undefined)
 
     // The tab's first button, as a new conversation is in its own (the UI review, 26/10/2026).
-    const top = screen.getByTestId('new-session-top')
-    expect(top.compareDocumentPosition(screen.getByTestId('add-account'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    fireEvent.click(top)
+    fireEvent.click(screen.getByTestId('new-session-top'))
     fireEvent.change(screen.getByTestId('new-session-executor'), { target: { value: 'claude-code@ab12cd34' } })
     const form = screen.getByTestId('new-session-form')
     fireEvent.change(within(form).getByRole('textbox'), { target: { value: '/work/shop' } })
     fireEvent.submit(form)
 
     expect(started).toHaveBeenCalledWith('claude-code@ab12cd34', '/work/shop')
-  })
-
-  it('adds one by its nickname alone, and reads the executors again for its row', async () => {
-    const calls = await showAccounts()
-
-    // Above the executors' list, not inside the first one's tree (asked for by the user on 19/10/2026).
-    const add = screen.getByTestId('add-account')
-    expect(add.closest('[data-testid="executor-node"]')).toBeNull()
-    expect(add.compareDocumentPosition(screen.getAllByTestId('executor-node')[0] as HTMLElement)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    )
-    fireEvent.click(add)
-    const form = screen.getByTestId('add-account-form')
-    expect(form.textContent).toContain('a folder of its own beside yours')
-    fireEvent.change(within(form).getByTestId('account-nickname'), { target: { value: ' side ' } })
-    fireEvent.submit(form)
-
-    await vi.waitFor(() => {
-      expect(screen.queryByTestId('add-account-form')).toBeNull()
-    })
-    expect(listed(calls, 'executor.add_account')).toEqual([
-      ['executor.add_account', { executor: 'claude-code', nickname: 'side' }]
-    ])
-    expect(listed(calls, 'workbench.list').length).toBeGreaterThan(0)
-  })
-
-  it("removes one from its row's menu only once the user confirms, saying its folder stays", async () => {
-    const calls = await showAccounts('claude-code@ab12cd34')
-    const [main, work] = screen.getAllByTestId('executor-node') as [HTMLElement, HTMLElement]
-
-    // The main account has none to remove.
-    expect(within(openMenu(main)).queryByTestId('remove-account')).toBeNull()
-    fireEvent.keyDown(screen.getByTestId('executor-menu-content'), { key: 'Escape' })
-    fireEvent.click(within(openMenu(work)).getByTestId('remove-account'))
-    expect(listed(calls, 'executor.remove_account')).toEqual([])
-    const asked = screen.getByTestId('remove-account-confirm')
-    expect(asked.textContent).toContain('.claude-work) stays as it is')
-    fireEvent.click(within(asked).getByRole('button', { name: 'Remove work' }))
-
-    await vi.waitFor(() => {
-      expect(listed(calls, 'executor.remove_account')).toEqual([
-        ['executor.remove_account', { account_id: 'ab12cd34', executor: 'claude-code' }]
-      ])
-    })
   })
 
   it('archives a session out of its folder and back, and deletes one only after a yes', async () => {
@@ -690,5 +648,24 @@ describe('the executors and their accounts, in the order the user drags them int
     drag(screen.getByTestId('harness-heading'), screen.getAllByTestId('harness')[0] as HTMLElement, false)
     expect(names()).toEqual(['claude-code@ab12cd34', 'claude-code', 'codex'])
     expect($executorOrder.get()).toEqual({ work: ['claude-code@ab12cd34', 'claude-code', 'codex'] })
+  })
+})
+
+describe('an executor not logged in (asked for by the user on 01/11/2026)', () => {
+  it('offers its login on its row, not only in its menu, and hides it while the login is open', async () => {
+    await showClaudeCode(() => new Promise(() => undefined))
+    act(() => {
+      current().$workbench.set({ executors: [{ ...EXECUTOR, logged_in: false }], instances: [] })
+    })
+
+    fireEvent.click(screen.getByTestId('executor-log-in'))
+    expect(screen.getByTestId('executor-account')).toBeTruthy()
+    expect(screen.queryByTestId('executor-log-in')).toBeNull()
+  })
+
+  it('says nothing of it once logged in', async () => {
+    await showClaudeCode(() => new Promise(() => undefined))
+
+    expect(screen.queryByTestId('executor-log-in')).toBeNull()
   })
 })

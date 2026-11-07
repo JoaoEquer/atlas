@@ -39,7 +39,7 @@ from typing import Any
 
 from atlas.home import Redactor, load_settings, open_home
 from atlas.plugins import (
-    BUNDLED_FOLDER,
+    OFFICIAL_FOLDER,
     Answers,
     Called,
     Executor,
@@ -137,7 +137,7 @@ def held(folder: Path) -> list[str]:
 
 def executor(program: str, api_key: str | None = None) -> Executor:
     """The plugin's executor, as Atlas makes it."""
-    package = import_plugin(BUNDLED_FOLDER / "gemini-cli", "gemini-cli")
+    package = import_plugin(OFFICIAL_FOLDER / "gemini-cli", "gemini-cli")
     made: Executor = package.GeminiCli(
         package.program(program), logger=logging.getLogger("prove_gemini"), api_key=api_key
     )

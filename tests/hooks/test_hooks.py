@@ -456,7 +456,7 @@ def test_a_stop_hook_makes_a_turn_go_on_three_times_at_most(
 def plugins(home: Home, vault: Vault, tmp_path: Path) -> Plugins:
     database = Database(home.database_file)
     migrate(database, SCHEMAS)
-    return Plugins(home, database, vault, bundled_folder=tmp_path / "bundled")
+    return Plugins(home, database, vault, official_folder=tmp_path / "bundled")
 
 
 def _plugin(home: Home, manifest: dict[str, Any], code: str | None = None) -> Path:

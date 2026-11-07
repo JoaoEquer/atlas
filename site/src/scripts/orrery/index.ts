@@ -10,6 +10,7 @@ import {
   FRAME_RADII,
   moonPosition,
   moons,
+  PORTUGUESE_LABELS,
   routeMoment,
   type RouteMoment,
   strandOfRank,
@@ -126,12 +127,15 @@ async function begin(root: HTMLElement): Promise<void> {
     return
   }
 
+  // The page's language names the labels: the Portuguese home draws them in Portuguese.
+  const portuguese = document.documentElement.lang.toLowerCase().startsWith('pt')
+  const said = (key: string, text: string) => (portuguese ? (PORTUGUESE_LABELS[key] ?? text) : text)
   const labels = createLabels(layer, [
     { key: 'atlas', text: 'Atlas', kind: 'core' },
-    { key: 'laptop', text: 'This laptop', kind: 'system' },
+    { key: 'laptop', text: said('laptop', 'This laptop'), kind: 'system' },
     ...executors.map(e => ({ key: e.key, text: e.label, kind: 'planet', status: e.key === 'codex' })),
-    ...moons.map(m => ({ key: m.key, text: m.label, kind: 'moon', status: true })),
-    ...systems.map(s => ({ key: s.key, text: s.label, kind: 'system' }))
+    ...moons.map(m => ({ key: m.key, text: said(m.key, m.label), kind: 'moon', status: true })),
+    ...systems.map(s => ({ key: s.key, text: said(s.key, s.label), kind: 'system' }))
   ])
   const particles = makeParticles(220)
   const batch = new Batch()

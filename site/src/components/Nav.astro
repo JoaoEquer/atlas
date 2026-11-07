@@ -2,31 +2,37 @@
 import { REPOSITORY } from '../../site.config.mjs'
 import Mark from '../assets/atlas-mark.svg'
 
+import { type Lang, localized, WORDS } from '../lib/i18n'
+
 interface Props {
   current?: 'home' | 'news' | 'changelog' | undefined
+  lang?: Lang
+  /** This page in the other language, when it has one. */
+  switchTo?: string | undefined
 }
 
-const { current } = Astro.props
+const { current, lang = 'en', switchTo } = Astro.props
+const words = WORDS[lang]
 const links = [
-  { href: '/docs/', label: 'Docs' },
-  { href: '/news/', label: 'News', key: 'news' },
-  { href: '/changelog/', label: 'Changelog', key: 'changelog' },
+  { href: localized('/docs/', lang), label: words.nav.docs },
+  { href: '/news/', label: words.nav.news, key: 'news' },
+  { href: '/changelog/', label: words.nav.changelog, key: 'changelog' },
   { href: REPOSITORY, label: 'GitHub' }
 ]
 ---
 
 <header class="nav" data-nav>
-  <a class="brand" href="/" aria-label="Atlas, home">
+  <a class="brand" href={localized('/', lang)} aria-label={words.home}>
     <Mark class="brand-mark" aria-hidden="true" />
     <span class="brand-name">Atlas</span>
   </a>
   <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-menu" data-menu-toggle>
-    <span class="visually-hidden">Menu</span>
+    <span class="visually-hidden">{words.menu}</span>
     <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
       <path d="M3 7h14M3 13h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
     </svg>
   </button>
-  <nav class="menu" id="site-menu" aria-label="Main" data-menu>
+  <nav class="menu" id="site-menu" aria-label={words.mainNav} data-menu>
     <ul>
       {links.map(link => (
         <li>
@@ -35,13 +41,15 @@ const links = [
           </a>
         </li>
       ))}
+      {switchTo && (
+        <li>
+          <a class="language" href={switchTo} hreflang={lang === 'en' ? 'pt-BR' : 'en'} title={words.switchTitle}>
+            {words.switchLabel}
+          </a>
+        </li>
+      )}
     </ul>
-    <button
-      class="theme-toggle"
-      type="button"
-      data-theme-toggle
-      aria-label="Switch between the light and the dark page"
-    >
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label={words.theme}>
       <svg
         width="18"
         height="18"
@@ -58,8 +66,8 @@ const links = [
         ></path>
       </svg>
     </button>
-    <a class="button button--solid install" href="/#install">
-      Install
+    <a class="button button--solid install" href={`${localized('/', lang)}#install`}>
+      {words.footer.install}
     </a>
   </nav>
 </header>

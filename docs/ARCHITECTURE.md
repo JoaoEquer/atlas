@@ -38,6 +38,7 @@ src/atlas/
   browser/     the browser: Atlas's own Chrome, the code that drives it, the user taking over
   server/      HTTP + WebSocket, and the client protocol (single source)
   instances/   talking to more than one machine
+  logins/      the logins of gh and gws, the programs Atlas reaches GitHub and Google through
   secrets/     encrypted vault (age); OS keystores as adapters
   home/        ATLAS_HOME and its boundary, settings, database and migrations, logs, UTC time
   hooks/       plugins' hooks at the loop's events, in Claude Code's events and JSON
@@ -349,7 +350,11 @@ Decided 2026-10-09, in step 5 (`atlas.tools`):
 - **A remote MCP server signs in with OAuth 2.1** (`atlas.mcp.oauth`), decided 2026-10-28, as
   the MCP authorization spec asks: the server's resource metadata (RFC 9728, from its 401's
   `WWW-Authenticate` or the well-known address), its authorization server's (RFC 8414), Atlas
-  registered as a public client for each sign-in (RFC 7591), the code grant with PKCE S256, a
+  named by its client metadata document where the authorization server takes one
+  (`client_id_metadata_document_supported`, step 24: `https://atlasv4.com/oauth/client.json`,
+  `site/public/oauth/client.json`, a public client coming back to a loopback address on any port,
+  the form the 2026 spec prefers) and elsewhere registered as a public client for each sign-in
+  (RFC 7591), the code grant with PKCE S256, a
   `state`, the `iss` when sent (RFC 9207) and `resource` (RFC 8707). The SDK has a client of its
   own, but it signs in from inside a request, where a connection has 30 seconds; the sign-in
   is the user's, at a page only a person may approve, so it is a command, `atlas mcp login
@@ -390,6 +395,13 @@ call.
   and names the closest ones; what a replace or remove overwrote is said back. A file that exists
   but cannot be read is never written over, and one holding an entry longer than the whole limit
   (text appended outside the tool) is copied aside and left alone.
+- **The limits are the user's** (decided 2026-10-29): `[memory] user_limit` and `memory_limit`,
+  from 500 to 20,000, on the settings screen. The home's stores, the bots' included, share one
+  `limits` dict that the screen changes in place, so the next write meets the new limit and the
+  snapshot shows it from the next conversation. Lowered under what a file holds, nothing is cut:
+  the next add is refused until the agent makes room. A plugin reads them (`ctx.memory_limits()`,
+  SDK 26) and never sets them: every model call pays for them, and two plugins could pull them
+  apart unseen. A plugin that needs more room keeps a memory of its own.
 - **The instructions** carry the memory snapshot: read when a conversation starts and again after
   a compaction, so a write mid-conversation
   does not break the provider's cache. Their guidance is short, and does not
@@ -534,9 +546,11 @@ Skills are folders in Claude Code's format (Tools, above) that learn from use.
   or the review changed is theirs and left alone, one the user deleted is not copied again, and a
   library skill of the same name is kept. Every write goes through the library, so an update or
   `atlas skills reset` (back to what Atlas ships) keeps the previous files as a version. The first
-  ones are the programs' skills of step 14b: `github` on `gh`, and the `gws` project's own
-  Gmail and Calendar skills (Apache-2.0). `write-plugin` (step 16t) writes a plugin with the
-  user, reading the plugin guide copied into its `references/`.
+  ones were the programs' skills of step 14b, `github` on `gh` and the `gws` project's own Gmail
+  and Calendar skills (Apache-2.0); since step 26 they are the GitHub and Google Workspace
+  plugins' (Atlas's own plugins out of the core, below), and Atlas ships `atlas` and
+  `write-plugin` (step 16t, which writes a plugin with the user, reading the plugin guide copied
+  into its `references/`).
 - **The curator** makes no model call: at most every 7 days, after 2 idle hours, the first pass deferred one interval, it
   archives a `review` skill nobody loaded or changed for 30 days, counted from its creation when
   it never was (a load by the review counts). A skill a routine names will count
@@ -770,13 +784,15 @@ V3 had 156 environment reads scattered over 51 files.
   packages to the core for a handful of fields.
 - **The editable settings change while the server runs** (step 15b: a screen that saves itself and
   applies without a restart): `settings.read` and `settings.write` cover the
-  default model, the trust rules, the approval timeout, the workspace folder and the time zone. A
+  default model, the trust rules, the approval timeout, the memory's limits, the workspace folder
+  and the time zone. A
   write edits only the setting's own lines (`edit_settings`), so the user's comments and order
   stay; the new text is read again, through the same rules as a start, and must give the same
   settings with only that change, or nothing is written. The server then hands the new values to
   whoever holds them (`Assistant.use_settings`): the default model from the next turn of any
   conversation that picked none, the trust rules from the next request of every open conversation,
-  the folder in new conversations, the zone the next time a routine is scheduled. A setting an
+  the folder in new conversations, the zone the next time a routine is scheduled, the memory's
+  limits from the next write. A setting an
   `ATLAS_*` variable sets is refused there and shown locked, naming the variable: writing the file
   would change nothing. The log, the server's address, the vault and the browser's program stay in
   the file.
@@ -1017,6 +1033,12 @@ has.
   `tests/conftest.py` also points the process's `ATLAS_HOME` at one for every test, as a guard.
 - `tests/docker/` runs only against a built image named in `ATLAS_TEST_IMAGE` (CI's docker job, or
   by hand); without it the tests are skipped.
+- The tests run side by side: pytest on every core (`pytest-xdist`; `-n0` runs them in one process,
+  for a debugger) and the end-to-end files on several workers. So each test owns its home, its
+  folders and its ports, and what holds a key of the whole system runs alone. A test waits for
+  the thing it needs, never for a guess at how long it takes: the machine is shared with the
+  other tests. A test that times the code runs it in a fresh interpreter
+  (`tests/process_support.py`), away from coverage, with a limit far above the time it takes.
 
 ## Container — decided 2026-10-11
 
@@ -1199,8 +1221,8 @@ Cut to what a first screen needs: about 6 runtime packages.
 - **Packages are pinned exactly**: React, Vite, TypeScript,
   Tailwind, `nanostores` for state and `streamdown` for Markdown that arrives in pieces. The
   `.npmrc` asks for exact versions, and no package younger than 14 days. Electron is
-  43.7.5, since 40 is out of support (Electron keeps the last three) and carries a high
-  advisory (GHSA-9f4c-93c8-jc8g); and ESLint is 10.11.0, 10.12.0 being younger than the 14
+  43.8.1, since 40 is out of support (Electron keeps the last three) and carries a high
+  advisory (GHSA-9f4c-93c8-jc8g), and 43.8.1 fixes the high and the medium ones of 43.7.5; and ESLint is 10.11.0, 10.12.0 being younger than the 14
   days. A library that owns the thread's state is left out: here that state is the
   server's event stream. Since 18/10/2026 two more: `@tabler/icons-react`
   for the icons, outlined and minimal (asked for by the user), named by their use in one file
@@ -1610,7 +1632,7 @@ Step 11, the first switch: the user moves to Atlas for every day.
   terminal. Each run writes the shortcut: a Start Menu link on Windows,
   a `.desktop` entry on Linux, opening the built app directly. Both show the app's icon, which the
   window, the taskbar and the Dock show too: `apps/desktop/resources/`, drawn from `icon.svg` by
-  `npm run icons`, with bolder lines at the small sizes. The packaged app is step 18b.
+  `npm run icons`, with bolder lines at the small sizes. The Setup that installs it is step 18b.
 - **`atlas update`**: `git pull --ff-only` of `main`, `uv sync` of the
   dependencies only (reinstalling Atlas would replace the `atlas.exe` the update runs from, which
   Windows refuses; Atlas is installed editable, and the app's next server reinstalls it), never
@@ -1673,11 +1695,15 @@ Step 11, the first switch: the user moves to Atlas for every day.
     lets users make namespaces, the result says the two commands and the app waits for the user.
   - **Left out**: a progress window during the update (a page in the system's
     browser, its own "decoration"), update channels (`stable`, `canary`), the update of a packaged
-    or store app (step 18b), and a bridge of markers between several desktops.
+    or store app (the Setup of step 18b installs the same checkout), and a bridge of markers between several desktops.
   - **A server's update**, a Compose host's, goes through the same button and the same `atlas
     update`: The update of a Compose host (Container, above).
-- **A conversation's model** is chosen in the app, in the model and effort pills of the
-  composer, and kept with the conversation, so it survives a restart:
+- **A conversation's model** is chosen in the app, in the composer's model pill, which says the
+  model and the effort it runs on, and kept with the conversation, so it survives a restart. Its
+  menu (step 18f, drawn with the user on 01/11/2026) lists the conversation's provider first,
+  numbered for the keys 1 to 9, the default marked and the current one checked; then the effort
+  and each other provider with a key, each in a menu of its own; and a search across all of them
+  on top once there are nine models or more:
   - the picker lists the providers with a key in the vault, each with its
     short list of models in `providers.toml` (`models`) plus those the user's `models.toml`
     declares; crossing OpenAI's list with what the key may reach, a network call per opening, is
@@ -1721,7 +1747,8 @@ editable settings, in Settings above), and what the environment set shown locked
 order:
 
 1. **General:** the language (Portuguese, English or the system's) and the look (light, dark or the
-   system's), both kept by the app on this computer; and "About": Atlas's version,
+   system's), both kept by the app on this computer; the first run opened again (step
+   18d); and "About": Atlas's version,
    looking for an update and updating, through the update button the app already has. The look left
    the home menu. A new language reloads the window, whose texts are read once; the server is not
    touched.
@@ -1729,23 +1756,21 @@ order:
    key", and the providers' keys, the key screen's list.
 3. **Personalization:** the soul, "About you" (`USER.md`) and the memory (`MEMORY.md`), each entry
    read, edited, removed or added (`memory.entries`, `memory.edit`), with the limit in characters
-   in view. An edit goes through the memory tool's own
-   door (`MemoryFiles.change`: its lock, its limit, its threat scan and its refusal of a file
+   in view and, under each, the field that changes it (`[memory]`). An edit goes through the
+   memory tool's own door (`MemoryFiles.change`: its lock, its limit, its threat scan and its refusal of a file
    changed outside it), names the exact entry it changes, and applies from the next conversation,
    the snapshot frozen as one starts. The memory proposals stay where they are, with a shortcut.
 4. **Safety:** `[trust] deny`, `ask` and `ask_skip`, one per line, and `approval_timeout`.
 5. **Workspace:** `[workspace] folder` and `[time] zone`.
-6. **Extensions** (since 28/10/2026, in the place of Plugins and Executors; below): the plugins,
-   the skills, the MCP servers and the executors, a tab each. Someone waiting with a code still
-   shows in the sidebar, as the proposals do, and opens its Plugins tab. The executors are out of
-   the sidebar since 22/10/2026: the sidebar shows only the executors turned on, and with none on,
-   a link to the Executors tab.
-7. **Machines** (Several machines, below).
+6. **Machines** (Several machines, below).
 
-The sidebar keeps Conversations, Bots, Executors and Routines, and the proposals when there are
-some. A search over the settings waits for use to ask for it: there are some fifteen settings.
+Extensions was a section here from 28/10/2026 to 01/11/2026; it is a screen of its own now
+(below). The sidebar keeps Conversations, Bots and Executors, then Routines, Marketplace and
+Extensions, and the proposals when there are some. The executors are out of the settings and
+in the sidebar only turned on, since 22/10/2026; with none on, the sidebar links to Extensions'
+Executors tab. A search over the settings waits for use to ask for it: there are some fifteen settings.
 
-### Extensions on the settings screen — decided 2026-10-28
+### Extensions — decided 2026-10-28, a screen of its own since 2026-11-01
 
 Asked for by the user on 28/10/2026: the Plugins section stacked its plugins one under the other,
 each with its whole description, its state, its button and its settings, and read as a muddle.
@@ -1773,11 +1798,19 @@ name, its mark, a summary cut to two lines and its action.
   authorization server), the server's methods and event over its WebSocket, the screen's tests,
   and end to end in the real app after the marketplace installed a skill, a server and a plugin.
 
+Out of the settings since 01/11/2026, asked for by the user: Extensions is a catalog managed
+often, not a setting, and the marketplace, where more is found, was already a screen of its own.
+It is a page of the main area, as the routines and the marketplace are (`PageHeader`, its search
+and "Read again" on the right), with its entry in the sidebar below the marketplace's. Someone
+waiting with a code shows on that entry, which then opens the Plugins tab; the marketplace's
+"Turn on" and the executors' link open it on their tab. Merging it with the marketplace, a screen
+with Installed and Marketplace tabs, waits for the sidebar to need the room.
+
 ## The installer — decided 2026-10-13
 
 Step 18: one line in a terminal gives a machine with nothing on it the installation of Daily use,
 the app built and opened, with the defects such installers are known to meet as our tests. The
-packaged, signed app is step 18b.
+Setup, a file that runs it, is step 18b (The Setup, below); signing is 18c.
 
 - **Two scripts, `scripts/install.ps1` and `scripts/install.sh`**, run as `irm <url> | iex` and
   `curl -fsSL <url> | bash`. The site serves them, `atlasv4.com/install.ps1` and
@@ -1787,7 +1820,7 @@ packaged, signed app is step 18b.
   `main` serves `main`'s, and its Worker answers them as UTF-8 text, never cached. A file handed
   over instead would
   need `-ExecutionPolicy Bypass` (Windows refuses an unsigned script downloaded from the internet),
-  and an `.exe` or `.cmd` the SmartScreen warning, which only signing (18b) removes.
+  and an `.exe` or `.cmd` the SmartScreen warning, which only signing (18c) removes.
 - **Each download is counted** (asked for by the user on 28/10/2026: how many installs began). The
   Worker writes one data point to Cloudflare's Analytics Engine (`atlas_installs`,
   `site/worker/installs.ts`): the system (`windows` for the `.ps1`, `unix` for the `.sh`), the
@@ -1796,6 +1829,15 @@ packaged, signed app is step 18b.
   installs begun, not finished ones, and a run again to repair counts again; the app's own update
   fetches from GitHub and is not counted. The Privacy page says so. Left out: a call from the
   installer when it finishes, and anything from the app itself.
+- **Each visit to the home is counted too** (asked for by the user on 29/10/2026, to compare copies
+  of the home's opening words: a week of the home alone first, then the copies two at a time). The
+  Worker writes to `atlas_home` (`site/worker/home.ts`) a browser's navigation to `/`, not a
+  prefetch, a crawler or a script, and the page's beacon (`/hit`, same origin only) when the visit
+  copies the install line or opens GitHub; each with the copy seen and the country, a visit also
+  with whether it came before. The cookie `atlas_v` keeps only the copy's letter, 30 days, so a
+  second visit sees the same copy and is told from a first; no id, no address. `npm run home` gives
+  each copy its rates per visitor with a 95% interval. Only the home is counted; the Privacy page
+  says so.
 - **Where it installs**: `%LOCALAPPDATA%\atlas\` on Windows (where the installation already lives),
   `~/.local/share/atlas/` elsewhere, holding `atlas/` (the checkout), `tools/` (the pinned tools)
   and `bin/` (the `atlas` command); `~/.local/bin/atlas` on Linux and macOS. `ATLAS_HOME` is not
@@ -1829,8 +1871,8 @@ packaged, signed app is step 18b.
   user's private repositories. With no login saved, Git Credential Manager still opens its own
   sign-in window.
 - **No GitHub sign-in**: the repository is public, so the clone and every later `atlas update`
-  fetch with no login. The pinned `gh` is still installed, for the agent's `github` skill.
-  An installation made while the repository was private keeps `gh` as its checkout's credential
+  fetch with no login. The installer no longer brings `gh` (05/11/2026): the GitHub plugin
+  fetches it at Connect (SDK 31). An installation made while the repository was private keeps `gh` as its checkout's credential
   helper; for a public repository it answers nothing and changes nothing.
 - **The order**: refuse an occupied folder that is not a checkout, a file or a
   link, **before** anything is downloaded; the tools; the clone into a sibling staging
@@ -1880,15 +1922,90 @@ packaged, signed app is step 18b.
   blocks and flaky providers), and a model call costs money. The model is
   then the first provider with a key, as it already is. OpenRouter's OAuth login is left out
   (decided with the user).
+- **The first run** (step 18d, asked for by the user on 01/11/2026, so a first sight says what Atlas
+  is): the key screen became its first step, in five steps numbered on the left, one shown at
+  a time, each done or skipped (`store/setup.ts`, kept per home in the window's storage, so a window
+  closed halfway reopens on its step). **Model**, the key screen above; **Executors**, the harnesses
+  found here turned on with their consent (`ExecutorOffers`) and, once one takes accounts, the
+  other accounts added, since their taking over at a plan's limit is Atlas's own; **Telegram**,
+  the bot's token pasted, the plugin turned on with the consent the step shows, and the person who
+  writes to the bot let in from the step; **Connections**, GitHub and Google Workspace through
+  their own programs' logins on the server's machine (`atlas.logins`): `gh auth status` and
+  `gws auth status` read by `login.list`, GitHub's **Connect** starting `gh auth login --web`,
+  whose one-time code the step shows while its page opens in the browser and whose end
+  `logins.changed` tells, and Google's **Set up with Atlas** opening a conversation where the
+  agent leads `gws auth setup` (step 14b's way, which needs a terminal or a Cloud project
+  only the user can make), the first run waiting a band away from its step until the user comes
+  back to it; only the owner's app may read or start a login; **Bring your
+  work**, the executors chosen and a window (7, 30 or 90 days, or any time): of their folders, the
+  ones that changed within it have their sessions read and counted, and what changed before it is
+  archived (`store/work.ts`), never copied or touched. It opens by itself while no provider has a
+  key, stays open once the key is stored so the steps after it follow, and opens again from the
+  settings' General; "Go to Atlas" leaves at any point, and leaving with no key leaves the band.
+  A home that had its key before the first run existed is offered **Bring your work** once, alone,
+  when its executors have folders untouched for a month, the long lists it is for; one with none is
+  only marked, and never asked (decided with the user on 01/11/2026).
+  It fills the window, without the sidebar. The title's last word stands out in the theme's own
+  foreground against softer words, with no color of its own: the theme has none to spare.
+- **The first steps** (step 18e, asked for by the user on 01/11/2026): after the first run, a card
+  at the sidebar's foot with five tasks that teach Atlas by doing them: hand a task to an
+  executor, add a second account, talk to Atlas on Telegram, schedule a routine, create a bot.
+  Each is seen done in what the home already has (an executor session, an account on another's
+  base, someone let in on Telegram, a routine, a bot), and stays done once seen
+  (`store/first-steps.ts`, per home in the window's storage). The first not done is offered with
+  its **Start**: the executors tab, the first run's own step opened alone (it closes once done
+  instead of going on), a new conversation with a routine's words in its box, or the new bot's
+  dialog. The card waits for the home's lists, so nothing looks undone before they are read, and
+  goes once all five are done or it is hidden. A home from before it shows it too, with what it
+  already did counted.
+- **Archived means still since it was archived** (decided with the user on 01/11/2026): an executor's
+  folder or session keeps when it was archived, and one that changed after that is listed again by
+  itself, so a session resumed in a terminal is never left hidden. The lists of ids kept before
+  count as archived the first time the window reads them.
 - **Proved** by the scripts' tests under Windows PowerShell 5.1, PowerShell 7 and bash
   (`tests/installation/test_install_ps1.py`, `test_install_sh.py`, `test_install_pins.py`); by
   the real install in CI (`.github/workflows/install.yml`) on Windows and Ubuntu, and macOS when
   asked, from the commit under test, run twice
   (`irm | iex` under 5.1 then a file under 7; `curl | bash` under the system's bash), checking the
   command, the PATH a new shell reads, the built app and a server that answers, only when the
-  installer or what it installs changes, or when asked; by the app's e2e of the key
-  screen against the fake model; and by an install in Windows Sandbox (a clean machine under the
+  installer or what it installs changes, or when asked; by the app's e2e of the first
+  run against the fake model; and by an install in Windows Sandbox (a clean machine under the
   Restricted policy) and one by a tester.
+
+### The Setup — decided 2026-11-01
+
+Step 18b, redone with the user on 01/11/2026: a file to download and open, for whoever does not
+open a terminal, that does what the line does. It is not the app packaged. Since 18/10 the app
+updates by its own button (`git` and `uv sync`, several times a day); a packaged app would bring a
+second updater, a version for each push, and a window on another protocol than its server.
+
+- **`apps/setup/`, a small Electron app of its own**, with its own `package.json` and lock: the
+  users' install runs `npm ci` in `apps/desktop`, and electron-builder and its tree never reach
+  it. One window: what it will do and where, a button, then the step running, the installer's
+  lines below it, and an error with what to do. In English, or Portuguese when the system is.
+- **It carries the installer and runs it**, the `install.ps1` or `install.sh` of the commit it was
+  built from (`extraResources`): the same file, the same rules, nothing in between. On Windows
+  through `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command`, which sets
+  the console's output to UTF-8 first (a user folder with an accent comes through) and runs the
+  file with `&`, so the script owns its exit code; elsewhere through `/bin/bash`. It reads the
+  installer's own marks (`->` a step, `[OK]`, `[!]`, `[X]`), and keeps every `[!]` for the end: on
+  Linux, the two `sudo` commands of Electron's sandbox, since there is no terminal to ask in. The
+  installer opens Atlas itself when it ends, detached, and the Setup says so and may be closed.
+- **An Atlas already installed** (its checkout in the installer's folder, `ATLAS_INSTALL_DIR`
+  heeded) is opened, or repaired and updated by running the installer again.
+- **`--auto`** installs with no click and exits with the installer's code: CI proves the packaged
+  Setup with it.
+- **Three files, unsigned**: `Atlas-Setup.exe` (electron-builder's portable target: it unpacks and
+  runs, and installs nothing of its own, so there is nothing of it to uninstall), the DMG for each
+  Mac (`arm64`, `x64`) signed ad-hoc, which Apple Silicon needs to run at all, and the `x86_64`
+  AppImage, which runs Chromium without its sandbox (AppImage cannot carry a setuid helper, and
+  Ubuntu 24.04 refuses the unprivileged one); its window loads only its own page. Windows'
+  SmartScreen and the Mac's "Open anyway" are met once, by the Setup: the app is built on the
+  machine and carries no quarantine mark.
+- **CI builds them** (`.github/workflows/setup.yml`) when the Setup or the installer changes, or
+  when asked: each on its own system, then `--auto` into a temporary folder from the commit under
+  test, then, on `main`, puts the files in the release `setup`, whose download addresses never
+  change, and the site links them.
 
 ## Routines and loop guards — decided 2026-10-11
 
@@ -1943,8 +2060,86 @@ Step 12. Atlas V3's M-106 had reached the catch-up rule below.
   deleted the folder another way. Kept as it is, decided with the user.
 - **Proved** by `tests/jobs`, `tests/assistant/test_routines.py`, the server's and the CLI's tests, an
   e2e scenario, and `scripts/prove_routines.py` against real models (OpenAI and Gemini, 12/10/2026).
-- **Left out** until use asks: URL monitors, wake scripts, the per-routine notepad, retrying an
-  unreachable model, and durable tasks (a kanban, goals, V3's task registry).
+- **Left out** until use asks: URL monitors, the per-routine notepad, retrying an unreachable
+  model, and durable tasks (a kanban, goals, V3's task registry). Wake scripts came as probes, in
+  step 23 (below).
+- **A probe** (step 23, 04/11/2026): a prompt routine on a schedule that repeats may have a command
+  (`probe`) that runs first, with no model, when the routine comes due; the prompt runs only when
+  the probe printed something new. *New* is a digest of its output against the one that last woke
+  the routine (`jobs_probes`), so the same output twice wakes once, and an empty output wakes
+  nothing; a probe that wants a cursor of its own keeps it in `ATLAS_PROBE_STATE`, a private folder
+  per routine in the home's `probes/` (USER: lost, a probe hears everything again). Nothing new,
+  and no run is written: the routine just looks again at its next time. The output reaches the
+  run as its `event` (its last 20,000 characters), and the prompt receives it wrapped as text from
+  outside (`untrusted`), never as the user's words. While a run goes on its probe does not run, so
+  what arrives meanwhile is heard by the next look, all at once, never lost and never a run per
+  event; a machine that slept looks once on waking. A probe may run two minutes; one that fails
+  wakes nothing, and at its third failure in a row the user is told once, as a failed run, then
+  again only after it worked and failed anew. Run now with nothing new is a silent run that says
+  so. The probe is a command, so the approval gate judges it as it judges a routine's command; a
+  bot gives none, since a command runs as nobody. `atlas routines create --probe`, the tool's
+  `probe`, and the Routines screen shows it and which runs it woke.
+- **An executor's routine** (step 25, decided by the user on 03/11/2026): a prompt routine may
+  name an outside executor and a folder (`RoutineExecutor`), and each run is then a new session of
+  that executor there, on Atlas's workbench as an instance of Atlas's, in the mode chosen when it
+  was made (`auto`, the executor's automatic mode; otherwise its own). Nobody answers what it asks:
+  the first question or permission stops the run (`ExecutorRun.on_nobody`), which ends as
+  `needed` (`RunStatus.NEEDED`), its session kept for the user to open in Executors and go on; it
+  never approves anything past its mode. A routine that changes code works in a new workspace of
+  the folder each run (`workspace`, step 21), archived when the run changed nothing and kept
+  otherwise; with `draft`, off unless the user turns it on, a run that changed something has its
+  workspace committed, sent and opened as a draft pull request by the GitHub plugin (its
+  `open_pull_request` call), and a run without the plugin on says so. One that only reads works in
+  the folder. The agent's `cronjob_manage` gives `executor`, `folder`, `auto`, `workspace` and
+  `draft`, and the approval gate asks the user once, showing where, which and how
+  (`ask_first`), since it will run unwatched with the harness's permissions; the user's own,
+  from the terminal (`--executor`) or the app, is theirs already. A bot's routine stays a prompt on
+  Atlas's model, never an executor's. A prompt routine whose run met a refusal for want of someone
+  to approve (`NOBODY_TO_APPROVE`) ends `needed` too, so the scoreboard counts both.
+- **The form** (step 25, asked for by the user in the sequence's review on 03/11/2026, in place
+  of "making one stays with the conversation and the terminal" of 11/10/2026): the Routines
+  screen makes and changes a prompt routine (`routine.save`, the user's own, so no gate): its
+  prompt, its schedule and probe, who runs it (Atlas, a bot, or an executor in a folder with its
+  mode, workspace and draft), its model and effort, and Save and run now. A command routine stays
+  the terminal's.
+- **The templates** (step 25, asked for by the user on 03/11/2026, a tab of the Routines screen and
+  not a kind of the marketplace): no public catalog has routine templates, so the first are
+  Atlas's own, in the app (`routine-templates.ts`, their words in each language file), a dozen as
+  the sequence chose: a project's six (a security sweep, checks that failed, pull requests waiting
+  for 3 days, dependency updates and missing tests in a new workspace, release notes), run by the
+  first coding agent installed, and six personal ones run by Atlas (the morning email, tomorrow's
+  agenda, the weekly review, a daily backup, the week's bills, the morning news). Each says its tier (essential, recommended, useful), how often it runs
+  and its effort; Add opens it in the form, and one whose plugin is not on (gh's `github`, gws's
+  `google`) says so and opens that plugin's page in the marketplace instead.
+- **The scoreboard** (step 25): the top of the Routines screen counts this week's runs of every
+  routine, since Monday at midnight in the user's time (`Routines.scoreboard`, in `routine.list`):
+  the ones that ran alone (answered or silent), the ones that needed the user (`needed`), the ones
+  that failed (`error`; one whose end Atlas never saw is in none). Counted from the runs Atlas keeps
+  already; it is not the diary of base B, which is a plugin's.
+- **A connection offered in the conversation** (`offer_connection`, asked by the user on
+  05/11/2026, after an assistant that offers what it can reach): GitHub, and Gmail with Calendar,
+  are offered by the main agent in the user's own conversations while one is not ready (its plugin
+  off, not consented to, or not logged in, read from the plugin's `status` call at load and every
+  few housekeeping rounds). The model offers when what the user asks needs it, and once early on
+  in their first few conversations; the tool's answer tells it to wait for the user. The app draws
+  the call as a card: the plugin's declaration and Turn on (the consent), then the plugin's own
+  connection part (GitHub's Connect, Google's set-up). Bots, subagents and routines are not given
+  it, and nothing is turned on but by the user's click.
+- **A program a plugin fetches** (SDK version 31, `PluginContext.add_programs`, 05/11/2026): a
+  folder of the plugin's own data put first on the `PATH` of the model's commands while the plugin
+  is on, any other folder refused; no new declaration, since a plugin with Python already runs
+  with the user's permissions. The GitHub plugin fetches `gh` there at Connect when the computer
+  has none (`plugins/github/fetch.py`: the version and each build's SHA-256 pinned, as the
+  installer pinned them, only the program taken out of the archive), so the installer need not
+  bring it.
+- **A plugin's probe** (SDK version 30, `PluginContext.register_probe`, `atlas.probes` in the
+  manifest, shown at consent and counted in its fingerprint): the source of events of a service
+  the plugin speaks to (GitHub, a calendar), in its Python. A routine names it as its probe,
+  `plugin:<plugin>:<name>`, a prefix no command starts with; the runner calls it with the same
+  folder and the same two minutes a probe command gets, and what it returns is what it heard, so
+  what *new* means, the failures and the run are the same for both. A raise is a failure; a plugin
+  that is off makes each look fail, saying which probe is missing. The webhook, an event pushed
+  rather than looked for, comes with the relay (step 20).
 
 ## Subagents — decided 2026-10-11
 
@@ -2005,7 +2200,7 @@ Step 13. The user's goal, in their words: nothing they would answer Claude Code 
 lost; it reaches them through Atlas. Researched on 12/10/2026. Domain agents moved to step 13b.
 
 - **Claude Code first**, the one the user runs (since step 16c the plugin Atlas ships,
-  `atlas/plugins/bundled/claude-code`: Plugins, below); Codex second, since step 16o (Codex,
+  `plugins/claude-code`: Plugins, below); Codex second, since step 16o (Codex,
   below); the Gemini CLI third, since step 16p, over ACP (Gemini CLI, below); DeepSeek's
   harness fourth, since step 16q, over the same client (DeepSeek, below); and the rest come when
   use asks.
@@ -2070,7 +2265,7 @@ lost; it reaches them through Atlas. Researched on 12/10/2026. Domain agents mov
 Step 16o, asked for by the user on 20/10/2026 with the Gemini CLI and DeepSeek after it (ROADMAP,
 Codex, Gemini CLI e DeepSeek). Studied on Codex 0.163.0, in the schema its own `codex app-server
 generate-json-schema` writes. The plugin is
-`atlas/plugins/bundled/codex`, the SDK's executor as Claude Code's is.
+`plugins/codex`, the SDK's executor as Claude Code's is.
 
 - **Over `codex app-server`**, the JSON-RPC 2.0 on stdio that Codex's own app and its VS Code
   extension speak: one process per instance, holding one thread; a prompt is a
@@ -2115,7 +2310,7 @@ generate-json-schema` writes. The plugin is
 Step 16p, after Codex (ROADMAP, Codex, Gemini CLI e DeepSeek). Studied on the Gemini CLI 0.65.0,
 in its source (`packages/cli/src/acp/`, its session files and its Code Assist client; Apache-2.0)
 and in ACP's schema (`agent-client-protocol` 0.9.0, schema 0.11.2). The plugin is
-`atlas/plugins/bundled/gemini-cli`.
+`plugins/gemini-cli`.
 
 - **Over ACP**, through the SDK's client (`atlas.plugins.acp`, version 18): `gemini --acp`, one
   process per instance holding one session; a prompt is a `session/prompt`, which answers when the
@@ -2173,7 +2368,7 @@ and in ACP's schema (`agent-client-protocol` 0.9.0, schema 0.11.2). The plugin i
 Step 16q, after the Gemini CLI (ROADMAP, Codex, Gemini CLI e DeepSeek). Studied in DeepSeek's
 harness (`dsh`, `@deepseek-ai/dsh` 0.2.1-rc.2, MIT): its ACP package (`packages/acp/acp`), its
 session format and its configuration, and in the `dsh` installed here, with no prompt. The plugin
-is `atlas/plugins/bundled/deepseek`, over the SDK's ACP client.
+is `plugins/deepseek`, over the SDK's ACP client.
 
 - **Over `dsh --profile acp`**, its automation-only ACP: no login over the channel, `session/new`,
   `session/resume`, `session/list` and `session/close`, the model and the effort as configuration
@@ -2396,14 +2591,14 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
   `secrets` (names in the vault, with where to get them), `settings` (Claude Code's `userConfig`,
   with defaults) and `network` (shown, not enforced). Version 1 loads Python channels; a plugin
   with skills, commands, agents, hooks or MCP servers is listed and refused until Atlas loads them.
-- **Where plugins come from:** the ones Atlas ships, in `atlas/plugins/bundled/` (inside the
-  package, so the image and the wheel carry them), then the home's `plugins/`, one folder each. A
-  user's plugin named as a shipped one is refused (an impostor). Each plugin has a data
+- **Where plugins come from:** the home's `plugins/`, one folder each. Since step 26 the ones
+  Atlas makes live in the repository's `plugins/`, beside the package, and are installed into the
+  home like any other (Atlas's own plugins, below); an address cannot replace one installed. Each plugin has a data
   folder in the home's `plugin-data/` (Claude Code's `${CLAUDE_PLUGIN_DATA}`); both travel in a
   backup.
 - **Python only through `register(ctx)`** (`atlas.plugins.sdk`, the one module of Atlas a plugin
-  imports with `atlas.plugins.acp`, the SDK's ACP client since version 18; import-linter and a
-  test hold the shipped ones to them). The context grants only what the manifest
+  imports with `atlas.plugins.acp`, the SDK's ACP client since version 18; a test holds Atlas's
+  own to them). The context grants only what the manifest
   declares: an undeclared secret, setting or channel raises. **The contract only grows**: nothing
   removed or renamed, new parameters optional and keyword-only, a breaking change
   kept working with a warning for two versions; a plugin written for a newer SDK is refused.
@@ -2411,6 +2606,15 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
   (its Python, with no sandbox; its channels; the secrets it reads; the hosts it reaches), and the
   consent is kept as the declaration's fingerprint. An update that declares anything else, not
   only a new capability, turns it off until the user consents again.
+- **Waiting for the consent again is said, never silent** (found on 01/11/2026, when an update
+  moved Claude Code's `atlas.api` from 2 to 25 and every one of its executors left the sidebar,
+  a tab of one of its sessions read forever): an executor whose plugin is on but no longer
+  consented to comes as `ExecutorRow.consent_again`, and the app keeps it in the sidebar saying
+  so, with the way to the plugin's consent in Extensions (`showPluginConsent`); a session's tab
+  whose executor is not running says why in the conversation's place, and reads the session once
+  it runs. Each shipped plugin's fingerprint is pinned by a test (`BUNDLED_CONSENTS`), so a
+  change to one is a decision: its commit updates the value and says that users will be asked to
+  consent again.
 - **The agent cannot consent for the user** (found on 14/10/2026, before the step closed): the
   gate treats `atlas plugins enable|disable|secret|set|new`, `atlas plugins
   install|update|remove` (step 16n), `atlas pairing approve|forget`,
@@ -2453,7 +2657,7 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
   alphabet without look-alikes and their message is dropped; the user approves it on the Plugins
   screen or with `atlas pairing approve`, and they send again. Codes last an hour, at most 3 wait
   per channel.
-- **Telegram** (`atlas/plugins/bundled/telegram`): long polling, the
+- **Telegram** (`plugins/telegram`): long polling, the
   backlog dropped at start, private chats and text only, each interim text as it comes and the
   reply at the end, with the typing notice meanwhile (The turn on screen). Two choices of Atlas's own: the Bot API over `httpx2` instead of
   python-telegram-bot, since that library's retries have to be fought (the 409 loop,
@@ -2474,13 +2678,13 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
   Atlas (decided with the user). The server finds the executors of the plugins that are on at
   every start (waiting 5 seconds, so the first conversation sees them) and whenever one is turned
   on or off, and offers only those installed in a version their plugin drives. Claude Code is the
-  first (`atlas/plugins/bundled/claude-code`), moved out of the core with its behavior of step 13
+  first (`plugins/claude-code`), moved out of the core with its behavior of step 13
   kept: its `program` setting replaced `[executors] claude_code`, which `config.toml` now refuses
-  with the way there. Codex is the second (`atlas/plugins/bundled/codex`, step 16o: Codex,
-  above), the Gemini CLI the third (`atlas/plugins/bundled/gemini-cli`, step 16p: Gemini CLI,
+  with the way there. Codex is the second (`plugins/codex`, step 16o: Codex,
+  above), the Gemini CLI the third (`plugins/gemini-cli`, step 16p: Gemini CLI,
   above), over the SDK's ACP client (`atlas.plugins.acp`, version 18), which came with it (decided
   with the user on 20/10/2026, when Hermes, its first user until then, moved after Codex, the
-  Gemini CLI and DeepSeek); DeepSeek's harness the fourth (`atlas/plugins/bundled/deepseek`,
+  Gemini CLI and DeepSeek); DeepSeek's harness the fourth (`plugins/deepseek`,
   step 16q: DeepSeek, above), over the same client.
 - **The workbench** (step 16c; `atlas.assistant.workbench`, the app's `workbench.tsx`): one panel on
   the right, the same in every conversation, collapsed while no instance works or waits. One card
@@ -2551,6 +2755,35 @@ Step 16, in `atlas.plugins`; the first plugin is Telegram, the proof the user ch
     SDK passes it on. It was left out with the credentials, while the executors tab read the
     sessions from it, so a user who keeps Claude Code there had their runs in one folder, logged
     in elsewhere, and their sessions listed from the other.
+- **Updates of the harnesses** (asked for by the user on 01/11/2026; SDK version 27): an
+  executor's row says when a newer version than the installed one is out, and updates it from
+  inside Atlas.
+  - **The plugin says where, Atlas reads**: `Executor.update_source` (behind
+    `Capabilities.updates`) names where the install it found updates from (an npm package and its
+    dist-tag, a WinGet package, or an https address that answers the version as text) and the
+    command that updates it. Atlas reads the version itself (`atlas.server.updates`), so no
+    plugin reaches a new host: a host added to a manifest's `network` would change its consent's
+    fingerprint and ask every user to consent again. Each source is read at most once every 20
+    hours (Codex's own check waits as long), in the background, after a look and at the
+    housekeeping, never on the way to a start; a read that fails waits as long.
+  - **Each install as its makers update it**: Claude Code native or npm's, `claude update` and
+    its own releases (`downloads.claude.ai`, the channel the user chose, `latest` unless
+    `stable`); WinGet's, `winget upgrade` and WinGet's catalog, which lags behind the makers', so
+    the version offered is one WinGet installs; Homebrew's cask, `brew upgrade --cask` and the
+    stable channel. Codex, the Gemini CLI and DeepSeek's `dsh` in npm's package, in a folder the
+    user may write to, update with the user's npm (`cmd /c npm` on Windows, whose npm is a
+    `.cmd`). Anything else (the Microsoft Store, a system package that needs an administrator, a
+    program the `program` setting names by hand) is left to its own updater: no button.
+  - **Too old blocks, newer only suggests**: below the plugin's minimum the executor does not run,
+    and the sidebar says so in its place (`TooOld`), with its update when there is one; above it,
+    "Update available X → Y" sits under its row (`ExecutorRow.latest`, `update`). A version is
+    compared whole, a prerelease before its release (`0.2.1-rc.4` < `0.2.1-rc.5` < `0.2.1`).
+  - **Only the user's click updates** (`executor.update`, owner only): it runs a program on the
+    user's computer, as consenting to a plugin does, so neither the agent nor a bot can. It is
+    refused while one of the harness's sessions runs (Windows locks a program in use), shows
+    "Updating…" meanwhile (`ExecutorRow.updating`), and looks for the harnesses again after: the
+    version found then is the one shown, whatever the command said. A failure shows the end of
+    its output.
 - **Left out of version 1:** groups, photos, voice and files, the reply streaming as it is written,
   the questions an outside executor asks (they stay with the app), a plugin's skills, MCP servers
   and hooks, a plugin's own screen, and installing a plugin from a URL.
@@ -2867,6 +3100,10 @@ people made for Atlas, a tab per kind, the Atlas team's items marked, a page per
 - **The marketplace's own CI** runs `atlas marketplace check --load` on each pull request: every
   item read by these rules, its code fetched at its commit and checked for its kind, and a plugin's
   Python loaded in a home thrown away after (only there: `check` without `--load` runs nothing).
+  For a pull request of someone other than the owner, `--base` (the marketplace as on its branch)
+  also refuses what only the owner changes (step 24): an item marked official, `removed.yaml` and
+  `outside.yaml`. The workflows that use it, a check with no secret and a merge that runs none of
+  the pull request's code, live in the marketplace's repository.
 - **The screen:** a Marketplace entry in the sidebar opens it in the main area: a search, a tab per
   kind with its count, the Atlas team's items before the community's, a card each, and a page with
   the README at the commit (a skill's own `SKILL.md`, which is what the model reads; an MCP server's
@@ -2884,6 +3121,58 @@ people made for Atlas, a tab per kind, the Atlas team's items marked, a page per
   file against real servers, the server's methods with two clients, the app's screens, and end to
   end in the real app, as far as the model receiving the marketplace's skill and a plugin's. The
   end-to-end MCP item asks for two secrets and gets one, so `npx` never fetches a package there.
+- **The outside sources** (step 24, decided by the user on 03/11/2026, `atlas.marketplace.sources`):
+  one public catalog per kind, read directly by Atlas, with no review and no copy, listed after
+  the marketplace's own, each on a shelf of its own. An outside item is named
+  `<source>:<its id>`, which no item of the repository can be (its names have no colon), and takes a
+  short name in the home; what was installed records its source and that name. Atlas's own
+  repository keeps what is Atlas's (the executors, the voice, Telegram, gh and gws), and its
+  `removed.yaml` retires an outside item by that name, so the retired list holds for them too.
+  - **The MCP Registry** (`registry.modelcontextprotocol.io`, `[marketplace] registry_url`), made
+    to be read by other catalogs: with no search, the servers updated in the last 30 days; with
+    one, what the registry finds for it (`search`), 100 at most. A server becomes the `mcp.json`
+    entry an item would be and passes the same rules (`server_problems`): a remote `https` address,
+    preferred since nothing runs on the computer, or an npm or PyPI package at its exact version.
+    One that fails them, a Docker image by a tag say, is listed with why and does not install. What
+    it asks for (an environment variable, a header, a part of its address) becomes a `${NAME}` the
+    vault fills, so its page asks for it; a remote one that signs in with OAuth gets Sign in. The
+    registry counts no installs: the vendor's own (a name verified by a domain, `com.stripe/mcp`)
+    come first, then the newest. The short name is the server's own (`notes-mcp`), or its
+    namespace's when that says nothing (`com.stripe/mcp`: `stripe`); one the home's `mcp.json`
+    has already refuses it, as for the marketplace's own. Installing reads its entry again from
+    the registry, so what installs is its latest version, and works while Atlas's own repository
+    cannot be read.
+  - **Claude Code's plugin directory** (`anthropics/claude-plugins-official`,
+    `[marketplace] claude_plugins`), in the format Atlas's plugins already have: its catalog
+    (`.claude-plugin/marketplace.json`) read at its branch at most once an hour, the last read well
+    kept (`marketplace/claude-plugins.json`) and standing in, and searched here by its words. A
+    plugin installs from its GitHub repository (a folder of the directory's own, a repository, or a
+    folder of one) at the commit the catalog pins, or the one its branch is on then, through the
+    marketplace's own plugin install (the folder named, nothing compiled, `read_plugin`), its
+    manifest optional as Claude Code allows, and arrives off: turning it on is the consent. One
+    outside GitHub is listed with why.
+  - **What does not work in Atlas** (the twelve with a language server, say): `atlas marketplace
+    outside` fetches every plugin of the directory at the commit it would install from and reads
+    it as Atlas reads a plugin, running none of it, and writes what fails, with why, as
+    `outside.yaml`; the marketplace's repository runs it each night and keeps only that file (no
+    code of anyone's is copied). Atlas reads it with the marketplace, and such a card says "It does
+    not work in Atlas" and does not install. A broken `outside.yaml` is left out, logged: it only
+    marks cards, where a broken `removed.yaml` refuses the whole.
+  - **skills.sh** (`[marketplace] skills_url`), whose search says each skill's installs: opening
+    the tab searches for "skill" (its search needs two characters), the most installed first, and
+    each search is another. Its API is not documented, so the last opening list read is kept
+    (`marketplace/skills-sh.json`) and stands in, said, when the search breaks. A skill installs
+    from its GitHub repository at the commit its default branch is on then, which GitHub's API says
+    (`[marketplace] github_api_url`), with the skill's folder (the one named after it holding a
+    `SKILL.md`, the shortest path first; the root when the repository is the skill); Update shows
+    once the branch moved, GitHub asked at most once an hour per repository, the 60 questions an
+    hour it answers a computer that does not sign in. Its text files pass the scan the memory
+    passes (step 7) before anything lands, since the model reads them and nobody reviewed them for
+    Atlas; the rest is the marketplace's own skill install (`read_skill`, the limits, the versions
+    kept). It takes the skill's own name in the library.
+  - **The search** goes to the server once the typing stops (`marketplace.list`'s `query`); a
+    source that cannot be read is said beside the list (`source_problems`), and the marketplace's
+    own items are still listed. `[marketplace] outside = false` turns the outside sources off.
 
 ### Voice — decided 2026-10-24
 
@@ -2905,7 +3194,7 @@ the user: the voice conversation is to be the best there is, paid).
   runs out leaves the note, logged. **Atlas's own, marked:** an image is described only as a
   turn starts, but a voice note sent while a turn runs is common on a phone, so a steer with a file
   to read is read first and delivered then, steering the turn or starting the next one.
-- **The voice plugin's reader** (`atlas/plugins/bundled/voice`): OpenAI's
+- **The voice plugin's reader** (`plugins/voice`): OpenAI's
   `audio/transcriptions` with `gpt-transcribe` (released 05/08/2026, US$ 0.0045 a minute), the
   file sent as it is (Telegram's OGG voice notes, MP3, M4A, WAV and WebM up to 25 MB, past
   Atlas's 20 MB for audio). The model and the address are settings.
@@ -3426,6 +3715,10 @@ another conversation shows none of its tabs; a mermaid block opens as its drawin
 
 ## Several accounts at once — decided 2026-10-18, redone 2026-10-19
 
+Since step 22 (03/11/2026) the accounts, their order and the routes below are the accounts
+plugin's, and Atlas deletes no session (The other accounts in a plugin, below); what carries a
+session from one account to another is as this section says.
+
 Step 16h, asked for by the user in three parts on 18/10: the same executor running on two accounts
 at once, each project on its account, and a session that switches accounts and goes on in its
 project. On 19/10 the user added a fourth, which changed the design: **each account keeps its own
@@ -3535,7 +3828,242 @@ other (that `--fork-session` writes the copy in the other account's folder is wh
 assumes, and the real one must show); the way back; the missing tool's warning; the leaks above;
 archive and delete on the other account, the first untouched.
 
+### Atlas's own plugins out of the core — decided 2026-11-03
+
+Step 26, the core's pruning: the core is the agent's own capabilities, and a link to a service, an
+account or a given program is a plugin. Atlas's own plugins (the four executors, the voice,
+Telegram and the accounts) leave the package for the repository's `plugins/` folder, kept beside
+it and tested in the same CI (pyright strict, the coverage floor and a test of their imports
+included). Decided with the user; how, our choice, marked:
+
+- **Installed by the home, run from the installation.** The installation is a checkout and the
+  image copies the folder: installing one (turning it on does it) records it in the home's
+  `plugins/` as `official:<name>` (`atlas.plugins.official`), and Atlas runs it from the
+  installation's folder. Our choice, marked: a copy in the home would be a second version to keep
+  in step and give nothing the record does not. Until then it is listed from the installation's
+  folder, off and not installed, as the shipped plugins were; the executors tab and the first run
+  look at its harness with its own code, which is Atlas's at the version that runs (the store's
+  `bins`, from the sequence's review, stay for others' items).
+- **It updates with Atlas** (the sequence's review, item 5), with nothing to copy: its files are
+  the installation's. One whose declaration changed waits for consent, as any plugin. A home that
+  used one when Atlas shipped it inside itself gets it installed by the first start, as it was
+  left; a plugin of the user's of the same name keeps the name.
+- **GitHub and Google Workspace become plugins too**, `github` and `google`: the skills of step
+  14b (`github:github`, `google:gws-*`), and the first run's Connections, which their screens draw
+  (screen version 5, `connection`) over their calls (`status`, and `gh`'s login in the browser);
+  `atlas.logins` and its methods leave the core. The defenses stay in it, whatever brought the
+  program (the sequence's review): the outward actions the gate asks about
+  (`atlas.trust.outward`), their output marked as outside text, and their logins out of the
+  backup. A home that had the skills gets both plugins installed and on by its first start, its
+  untouched copies archived and a changed one left as the user's. Since 05/11/2026 the
+  installer brings no `gh` (asked by the user: a program installed out of sight helps nobody who
+  never opened a terminal); the GitHub plugin fetches it at Connect. Its published copy changes when
+  the installer is republished (the user's).
+- **The marketplace lists them as official**, available until installed; installing one installs
+  it off. Removing one takes its record away and leaves its data; the installation keeps its
+  files.
+
+### The other accounts in a plugin — decided 2026-11-03
+
+Step 22. On 03/11/2026 the user doubted the several accounts of step 16h: on their machine the
+switch at a plan's limit had copied sessions to other accounts' folders and deleted 42 originals,
+a project's automatic memory was spread over five accounts' folders, and the other folders lacked
+the main one's hooks, permissions and instructions. No large product puts several subscription
+accounts, switched at a limit, in its core. Decided with the user: **the core runs each harness on
+the user's own login, one account; several accounts, and a session moving between them, are a
+plugin's**, the `accounts plugin` Atlas ships, for whoever wants them.
+
+- **Mechanism in the core, policy in the plugin.** The core keeps what carries a session: an
+  account's executor named `<executor>@<id>` and made by the harness's plugin on that folder
+  (`for_account`), the copy on another account (`ExecutorSpec.resume_from`), the `handoff packet`
+  to another harness, the model and effort carried, the login of an executor, and the preview of
+  a switch. The plugin keeps what the user chooses: the accounts (a nickname, a folder), the order
+  they take over in and whether they do, a folder's account, and each session's route; and it
+  says where a session goes at a limit (`Accounts.next_stop`, a `next stop`). SDK version 29:
+  `Accounts`, `OtherAccount`, `HandOver`, `NextStop`, `PluginContext.register_accounts`, and the
+  `WorkbenchHost` Atlas lends it (`ctx.workbench`: the executors, which may take a session, which
+  are at their limit, which run, and the word that the accounts changed, which every screen
+  hears). One plugin a home brings it.
+- **The plugin keeps one JSON file in its data folder**, read again when another load of it wrote
+  it (its screen's calls and what Atlas asks run in two loads), never written over when it cannot
+  be read. Atlas's tables of step 16h (`jobs_executor_accounts`, `jobs_folder_accounts`,
+  `jobs_account_failover`, `jobs_session_routes`) are read once, when an update finds them filled:
+  their rows go to the plugin's folder (`from-atlas.json`, adopted on its first start and left for
+  the user to look at) and the plugin is turned on, as the update's own doing, since it is what
+  that user used. No account's folder is touched. The tables stay, unread: taking a table back is
+  a riskier migration than leaving one behind.
+- **Atlas deletes no session.** The deletion of the session a copy replaced (22/10/2026) is gone
+  with nothing in its place: the original stays on its account, and deleting a session is the
+  user's, from its row.
+- **At a plan's limit**, a session the plugin hands over goes on as before; one it does not (no
+  plugin, no other account, the hand-over off, or none that can) goes on where it is, once, a
+  minute after the limit resets, with the prompt to continue (`resume at reset`, decided with the
+  user on 03/11/2026). The wall clock is read every 30 s, so a computer that slept past the reset
+  goes on when it wakes; a prompt, a switch or a stop meanwhile cancels it, and a limit that does
+  not say when it resets is told and left to the user.
+- **The screens are the plugin's** (screen version 4): a `session` part by a session's box (the
+  account and route pill, the switch read before it happens, the route as a path) and an
+  `executor` part atop an executor's tree (add an account, a project's account, an account's
+  removal). The app keeps the login form and the switch itself (`host.sessionAccount`), and its
+  first run offers to turn the plugin on. The bundled screens' classes are compiled with the
+  app's own (`@source` in `styles.css`).
+- **Kept in the core, marked as our choice:** the `executor_accounts` tool, which lists the
+  accounts through the plugin (each account's folders left out); `executor.accounts`, read only; a
+  delegation's `route`, refused with its reason when no plugin keeps routes; and a hand-over that
+  finds no stop told as `account`, a route's or not.
+
+**Proved** by the plugin's file's tests (a write one load makes read by the other, a file that
+cannot be read never written over, `from-atlas.json` adopted once), the workbench's and the
+delegation's through the plugin on a temporary folder (every case of step 16h and the routes,
+the original left on its account, a session going on at its reset), the gateway's over the socket
+(the plugin turned on with its consent, an account added, logged in, a folder on it, a switch and
+its removal; a route set and read), the update's (a home with the old tables comes up with the
+plugin on, the accounts in the user's order, a folder and a route kept, the account's folder
+untouched; a home with none gets no plugin), Vitest on its screen as the app loads it, and the
+e2e scenario of step 16h with the plugin turned on in a terminal.
+
+### Speech in the core — decided 2026-11-03
+
+Step 26, the core's rule (the agent's own capabilities are native, a link to a service is a
+plugin): writing down a recording is the agent's, so `atlas.speech` does it, for a file the user
+attaches and for every channel's voice note; the voice plugin keeps speaking and the live
+conversation. Decided with the user; how, our choice, marked:
+
+- **On this computer, by default** (`[voice] transcription = local | openai | gemini | off`, on the
+  settings screen's Voice section, read on each recording). The model, chosen on 03/11/2026
+  against Whisper small on 40 public Brazilian Portuguese recordings (FLEURS pt_br): NVIDIA's
+  Parakeet TDT 0.6B v3 (CC BY 4.0, credited where it is offered) in the int8 ONNX export onnx-asr
+  reads, 5.5% of the words wrong against 6.6%, at 31 times real time against 8. A recording above
+  25 seconds is cut at its silences first, by Silero's VAD (MIT). PyAV, FFmpeg's libraries in its
+  wheel, reads any format (the app's WebM, Telegram's OGG, a phone's M4A) and brings it to 16 kHz
+  mono. They are the `transcribe` extra, imported only once a recording comes.
+- **The model is downloaded once, after asking** (decided with the user): into the root's
+  `speech/` (MACHINE, for every home of the computer, out of the backup), each file pinned to a
+  commit and checked against its hash before it takes its place; its progress is told
+  (`speech.changed`). The first recording that waits for it marks it wanted, and the app asks
+  once above the conversation, with the size; a no is kept at the root, and Settings, Voice
+  offers it still. A recording that comes before it keeps its note.
+- **Or a provider**, on the key Atlas's provider of that name uses: OpenAI's transcription
+  endpoint, or a Gemini interaction (its Files API for a recording too large for the request),
+  ported from the voice plugin.
+- **Atlas's own reader of audio** (`Assistant.use_reader`): the readers of step 17a stay open to
+  plugins, and a plugin's reader of a kind reads before Atlas's. The voice plugin's is gone; a home
+  whose voice plugin was on keeps its provider as `[voice] transcription`, once, at the first
+  start.
+- **Dictation is the app's** (the voice plugin's since step 17b): the box's microphone (Atlas's
+  and a bot's box) and dictation anywhere, with the Dictations page, call `dictation.*`: each
+  recording kept in the home's `dictations/` (USER, a backup carries it) before it is written down,
+  so a failed transcription keeps its speech and why; every client told (`dictations.changed`).
+  The window's desktop powers (step 17b) hold the key, paste and show the bar as they did for the
+  plugin, under a key of the app's own. **Off until the user chooses a key** (decided with the
+  user): the key is the computer's, kept by the app. The voice plugin's dictations move to the
+  home's at the first start.
+- **The voice plugin keeps speaking and the live conversation.** Its declaration only lost things
+  (the reader, the dictation's calls, the desktop powers, two settings), so the consent the user
+  gave it is carried to the new one (`atlas.plugins.official.NARROWED`, each pair pinned): asking
+  again would ask for nothing new.
+- **Left for later:** a mouse button as the key, which Electron's shortcuts do not hear, needs a
+  native listener of its own, optional as the terminal's.
+
+### Workspaces — decided 2026-11-03
+
+Step 21, the base A: a workspace is a task of a project, a worktree Atlas makes in the home's
+`worktrees/` (MACHINE: its work goes back through git, not a backup) on a branch of its own,
+`atlas/<name>`, from the branch the project had checked out; sessions of any harness run in it, as
+in any folder. `atlas.workspaces` (A1), decided with the user; how, our choice, marked:
+
+- **The git is the server's, never the agent's:** making and removing the worktree, the archive's
+  commit, later the checkpoints and the delivery. A harness that guards `.git` is left as it is,
+  and no plugin changes: a workspace's folder is one more folder for `ExecutorSpec.folder`.
+- **The project comes from git** (`git rev-parse --git-common-dir`, kept per folder): every
+  worktree of a repository, Atlas's, a harness's or the user's, groups under it.
+- **A new one is prepared once:** the files the project's `.worktreeinclude` lists copied in (a
+  path that leaves the project skipped), then the project's setup script, set in the app, run in
+  its folder with its block of ports (`ATLAS_WORKSPACE_PORT`, `ATLAS_WORKSPACE_PORTS`); a script
+  that fails marks the workspace and leaves it usable.
+- **Archiving loses nothing:** its changes committed on its branch with a message of Atlas's (the
+  project's hooks left out: our choice, marked), its folder removed, its branch kept; unarchiving
+  makes the folder again and undoes that commit, its changes back as they were. Deleting one that
+  holds work its branch of origin has not asks the user first.
+- **Never touched:** the project's own folder, but to read its `.worktreeinclude` and to make,
+  list and remove worktrees; the branch of origin is never checked out, reset or deleted.
+- **A delegated task gets one only when asked:** `delegate`'s task takes `workspace: "new"`,
+  for an outside executor alone; the server makes it and runs its setup script before the task
+  starts there (`TaskWorkspaces`, which the server gives the assistant), and the result ends with
+  its branch and what it changed (`git diff --shortstat` from where it left its branch of origin,
+  its own commits and its new files). Without it, the task runs in the folder as before, and the
+  spawn's answer warns when another agent works there now, a session of the user's or another
+  delegated task: no lock on a folder (decided with the user on 03/11/2026).
+- **The screen** (step 21, A1): the workspaces atop the executors tab, under their project
+  (`workspace.list`, read again on `workspaces.changed`), each opening a session of the first
+  executor on; a project's menu makes one and sets how a new one is prepared
+  (`workspace.set_project`); deleting asks once, and again when the server refuses for work not
+  delivered (`force`). The settings section that held the starting folder and the time zone is
+  named for them.
+- **Its changes, commented on the line** (A2): `workspace.diff`, the workspace's folder against
+  the merge base with its branch of origin (`git diff`, committed or not, renames found) and its
+  untracked files whole, each line with its number on each side; cut at 3,000 lines a file and 300
+  files, said so. The side panel's Changes tab, for the session on screen in a workspace, shows it;
+  a click on a line takes a `review comment`, kept in the app per workspace until sent, and the
+  comments go to the session as one message of the user's (`sendToSession`): each its file and
+  line, the line quoted, then the comment. Nothing new for a harness: it reads a message.
+- **Delivering** (A4, the core's part; the pull request, its checks and the issue are the GitHub
+  plugin's, by the core rule): by the user's clicks, never the agent's. `workspace.commit` commits
+  every change as the user's own (their git identity, the project's hooks run, unlike the
+  archive's); `workspace.merge` merges the branch into its branch of origin with a merge commit,
+  in the worktree that has it checked out (refused when that one holds changes of its own; a
+  conflict aborts, leaving everything as it was) or, checked out nowhere, without a folder
+  (`git merge-tree --write-tree`, git 2.38, then `commit-tree` and a compare-and-swap
+  `update-ref`); `workspace.push` sends the branch to `origin`, setting its upstream. The app asks
+  before a merge and before a push, the one outward act.
+- **The GitHub plugin's part** (A4, A5; screen version 6 adds the `workspace` and `project`
+  areas): beside a workspace's changes, its branch's pull request and how each check stands (`gh
+  pr view`), or one opened at the user's click (`workspace.push` through `host.request`, then
+  `gh pr create` into the branch of origin); under a project, its open issues (`gh issue list`),
+  each of which `start`s a workspace whose session begins with the issue. The calls are the
+  plugin's own, so its consent covers them: an update that adds one asks again.
+- **Checkpoints** (A3): before each prompt the server sends a session in a workspace
+  (`workbench.prompt`), its folder is kept as a commit on top of its HEAD that no branch holds,
+  under `refs/atlas/checkpoints/<workspace>/<time>` (a ref of Atlas's own, which a push leaves
+  out), made through a throwaway index so the folder, its index and its branch never change; the
+  same tree twice is one checkpoint, and a git that fails costs the prompt nothing. Going back
+  (`workspace.restore`), refused while a session works there, first keeps a checkpoint of now,
+  then puts the files back (`read-tree -u --reset`, `clean` without the ignored files, the branch
+  reset to the commit the checkpoint was made on, its changes unstaged): nothing is lost, and
+  going back can be undone. The app's session then goes on in a copy (`fork`), so what was said
+  after the checkpoint stays in the original. Deleting the workspace drops its refs.
+- **Named `workspace`;** the file tools' folder of before is the `starting folder` (GLOSSARY), its
+  `[workspace] folder` setting kept as it was.
+
+### A session's environment, mode and plan by its box — decided 2026-11-01
+
+Step 18g, from what the user brought on 01/11/2026 (decided with the user: a worktree is the
+executors' alone, never Atlas's own conversation's or a bot's; the cloud waits for Atlas Cloud):
+
+- **Where it works**, a pill by the box: the folder and the branch its git has checked out
+  (`workbench.git`, read with the user's own `git`). In a repository its menu makes a new
+  worktree (`workbench.worktree`, on a new branch `atlas/<name>` from the one checked out), and
+  opens a new session there; since step 21 that worktree is a workspace in the home's
+  `worktrees/` (Workspaces, above), not a folder beside the project. Atlas never checks
+  out, resets or deletes anything in the folder.
+- **The permission mode**, a menu by the box, for a harness that lists its modes (SDK version 28,
+  `Capabilities.modes`, `ExecutorInstance.set_mode`, `workbench.mode`): Claude Code's default,
+  `acceptEdits`, `plan` and `auto`, never `bypassPermissions`. `auto` stays its automatic mode,
+  the one the box's warning is read for; a mode chosen before the session runs is set right after
+  it starts, before its first prompt. A harness with only its automatic mode keeps the switch.
+- **The plan ring**: the fullest of the account's plan limits (`executor.usage`), each on hover.
+- **The side panel's Environment and Context**, with the session's executor open: the machine,
+  the folder and its branch; then the session's tokens of context (`Transcript.context`, SDK
+  version 20) against the window of the model it runs as, Claude Code's `[1m]` for a million or
+  the models' catalog (`workbench.context`), read again as each turn ends.
+- **The title bar's actions**, on its right with a session on screen: its folder in the system's
+  file manager (`shell.openPath`, the same folders as VS Code's: this machine's, given in full),
+  in VS Code, and in a terminal, which then shows or hides the terminals as Ctrl+` does.
+
 ### A session's route across executors — decided 2026-10-21
+
+Since step 22 the route is the accounts plugin's, kept in its data folder, and Atlas asks it for
+the next stop (The other accounts in a plugin, above); the rest holds.
 
 Asked for by the user on 21/10/2026, beside the `account failover` of the same day, which stays
 as it is: a session of its own may go on, at a plan's limit, to destinations the user orders,
@@ -3677,7 +4205,47 @@ never the server itself.
 - **One agent acting on another machine is left out** (the user's decision): crossing a server's
   boundary changes filesystem, credentials, tools and trust.
 - **Transports** (`atlas.instances`): `tailscale` for all three cases, `ssh` for a server, and
-  `relay` later, with Atlas Cloud (step 20) and the Android app.
+  `relay` (step 20), for Atlas Cloud, the phone, and any home reached from anywhere.
+  - **`relay`** (decided by the user on 03/11/2026: on Cloudflare, ciphered end to end from the
+    first version): the home and the app each dial out to a relay (`[relay] url`), so neither
+    opens a port. The home waits at `{relay}/{room}/home` with one connection, the app comes in at
+    `{relay}/{room}/app`, the relay joins them, says `paired` to the home, and carries every frame
+    of one to the other, closing both when one closes; the home then waits again with a new one
+    (`RelayLink`, run by the server's lifespan), so several apps come in at once. The relay sees
+    only sealed bytes (`atlas.instances.tunnel`): the connection code carries a 32-byte key the
+    relay never sees; each connection agrees its own keys from it with HKDF-SHA256, salted with a
+    fresh nonce from each side, one per direction, and seals each frame with AES-256-GCM (the
+    app's window has WebCrypto, which has no ChaCha20)
+    numbered in its direction, so a frame read, changed, dropped, reordered or replayed stops the
+    other end. Each end proves it holds the key with a sealed `ready`, the home in its answer and
+    the app in the frame after, before the server hears anything; then the connection is one more
+    client of the server's protocol (`_RelayPeer`), the key standing for the token. The room and
+    the key are made once and kept in the vault (`ATLAS_RELAY_ROOM`, `ATLAS_RELAY_KEY`), so every
+    code given stays valid; `atlas server code --relay` adds them to the code. A relay that cannot
+    be reached is tried again, up to a minute apart. Proved against a relay of the tests' own over
+    real WebSockets (two apps at once, a wrong key refused, nothing readable carried).
+  - **The app's end** (`src/protocol/relay.ts`): a machine added with the `relay` transport keeps
+    the relay and its room in `machines.json` and the tunnel's key sealed with its token; its
+    endpoint is an `atlas-relay:` address carrying them, which the window's client opens as a
+    `RelaySocket`, a WebSocket to the client, the same tunnel in WebCrypto (HKDF, AES-256-GCM,
+    which is why the tunnel is AES-GCM and not ChaCha20). Nothing is probed before: the tunnel
+    proves the far end is the home. A preview of that machine's local site is not reached through
+    a relay. Fixed vectors printed by the Python tunnel prove both ends seal the same bytes. Atlas
+    Cloud's relay, a Worker, waits for the stop of step 20.
+- **What a cloud computer needs of the home** (step 20, the Atlas part, proved without the cloud):
+  - **its activity** (`server.activity`, and `GET /activity` with the server token as a bearer, for
+    the host that sleeps the home's machine): whether a turn, a review, a routine or an executor
+    works now, the clients connected, since when nothing worked and no client was connected, and
+    when the next routine comes due, so the host wakes it in time;
+  - **a backup on its own** (`[backup] folder`, `every_hours`, `keep`): the housekeeping writes the
+    home's backup there once the newest is that old, checked as `atlas backup` writes one, and
+    keeps the newest few, for a home on a machine that may be lost;
+  - **its credentials out of reach:** a cloud machine's metadata address (by its names and
+    numbers, and the link-local range) is refused to `web_fetch` (by name, number, or a name
+    resolving there, the browser's rule) and is on the command floor, refused even in Auto. The
+    bandwidth limit is the host's.
+  - Left to the stop: Telegram by webhook, which needs the relay's public address, and the
+    executor on Atlas's credit.
   - **`tailscale`**: an open home's server listens on the machine's tailnet address too. The
     address and the machine's MagicDNS name come from
     the `tailscale` command (`tailscale ip`, `tailscale status --json`); WireGuard encrypts, so no
@@ -3821,6 +4389,19 @@ training.
   and the settings page from the settings' dataclasses and the `#:` comment above each field, which
   every setting must have (the generator refuses one without). `tests/docs/test_reference.py`
   fails when a committed page differs from what the code renders.
+- **Portuguese, from 01/11/2026**, starting with the home and the documentation's start (ROADMAP,
+  step 19). The site serves it under `/pt-br/`: the home is one component (`site/src/components/
+  Home.astro`) in each language, its words in `site/src/lib/home.ts` and `home.pt-br.ts`, the
+  second typed as the first, and the frame's in `site/src/lib/i18n.ts`; the documentation is
+  Starlight's `pt-br` locale. A translated page lives in the site, `site/src/translations/pt-br/`,
+  not in the package: `atlas docs` and the agent read English. `sources.json` there holds the
+  SHA-256 of the English page each translation was made from, and `site/tests/translations.test.ts`
+  fails when an English page changes and its translation does not; the rest of `/pt-br/docs/`
+  shows the English page with Starlight's notice. The terms are the glossary's Portuguese column
+  (`casa`, `loja`); a screen of the app is named as the app in Portuguese names it. Each page says
+  its other language with `hreflang` and a link in the menu, and nothing redirects by the
+  browser's language, which search engines read as a moving page. The home's count stays on `/`
+  (The installer), so the Portuguese home does not mix into its copies. `llms.txt` lists English.
 - **What proves it:** every page reads, sits in a group and links only to pages that are there
   (`tests/docs`); the site's build checks every internal link and every `#` section of the built
   pages (`site/scripts/check-dist.mjs`); every command the skill gives runs, and a page reaches the

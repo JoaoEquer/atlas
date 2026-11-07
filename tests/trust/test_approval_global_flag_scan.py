@@ -8,30 +8,11 @@ runs in a fresh interpreter under a time limit: a pattern stuck in C holds the G
 separate process can be stopped. Atlas has no gateway command, so no case is about one.
 """
 
-import os
-import subprocess
-import sys
-from pathlib import Path
-
-import atlas
-
-# The interpreter imports the same Atlas as this test, whether that is the editable install, a
-# worktree or a tree put first on PYTHONPATH.
-_ATLAS_SOURCE = str(Path(atlas.__file__).resolve().parent.parent)
-
-
-def _in_a_fresh_interpreter(code: str) -> None:
-    search = os.pathsep.join(p for p in (_ATLAS_SOURCE, os.environ.get("PYTHONPATH")) if p)
-    subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        timeout=10,
-        env={**os.environ, "PYTHONPATH": search},
-    )
+from process_support import in_a_fresh_interpreter
 
 
 def test_a_long_flag_run_still_reaches_the_rule_after_it() -> None:
-    _in_a_fresh_interpreter("""
+    in_a_fresh_interpreter("""
 from atlas.trust.detection import detect_dangerous_command
 
 flags = "--opt val --flag=x -q - " * 58
@@ -49,7 +30,7 @@ for command, rule in expected.items():
 
 
 def test_a_long_flag_run_that_matches_nothing_ends_quickly() -> None:
-    _in_a_fresh_interpreter("""
+    in_a_fresh_interpreter("""
 from atlas.trust.detection import detect_dangerous_command
 
 tools = ("rclone lsf $HOME/.hermes --recursive --files-only", "hermes", "docker",
@@ -64,7 +45,7 @@ for tool in tools:
 def test_the_space_between_a_flag_and_its_value_decides_as_it_always_did() -> None:
     # Bounding the scan moves no verdict: docker and podman take a value after exactly one
     # whitespace character, so two spaces end the flag run there.
-    _in_a_fresh_interpreter("""
+    in_a_fresh_interpreter("""
 from atlas.trust.detection import detect_dangerous_command
 
 verdicts = {

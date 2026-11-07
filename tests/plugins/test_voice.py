@@ -1,5 +1,5 @@
-"""The voice plugin (step 17a): a plugin's reader (SDK version 21) and the voice plugin Atlas
-ships, which writes down what an audio file says through OpenAI's transcription or Gemini's; the
+"""The voice plugin (step 17a): a plugin's reader (SDK version 21), which Atlas's own reader of
+audio leaves to other plugins since step 26 (tests/speech); the voice plugin Atlas makes, with the
 answer spoken when the user asks, sent as a file (SDK version 22); the dictation; the live
 conversation's server side, its session and the note each spoken turn carries; and the lists its
 settings are picked from (SDK version 25), asked of the provider.
@@ -10,7 +10,6 @@ same server, so what reaches the model is what a provider would get.
 """
 
 import asyncio
-import base64
 import json
 import shutil
 from pathlib import Path
@@ -22,9 +21,8 @@ from atlas.__main__ import SCHEMAS
 from atlas.assistant import Assistant, ConversationEvent, FileSent
 from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
 from atlas.hooks import Hooks
-from atlas.models import TOOL_SEARCH, AttachmentKind, CallLedger, UserMessage
-from atlas.plugins import BUNDLED_FOLDER, ManifestError, Plugins
-from atlas.plugins.bundled.voice.gemini import INLINE_BYTES
+from atlas.models import TOOL_SEARCH, AttachmentKind, CallLedger
+from atlas.plugins import OFFICIAL_FOLDER, ManifestError, Plugins, install_official
 from atlas.plugins.model import parse_manifest
 from atlas.secrets import Vault
 from fake_model import (
@@ -33,7 +31,6 @@ from fake_model import (
     SPOKEN,
     SPOKEN_WAV,
     FakeCall,
-    FakeError,
     FakeModelServer,
     FakeReply,
 )
@@ -51,7 +48,9 @@ ATLAS = "You are Atlas"
 def plugins(home: Home, vault: Vault) -> Plugins:
     database = Database(home.database_file)
     migrate(database, SCHEMAS)
-    return Plugins(home, database, vault, bundled_folder=BUNDLED_FOLDER)
+    made = Plugins(home, database, vault, official_folder=OFFICIAL_FOLDER)
+    install_official(made, "voice")
+    return made
 
 
 def _voice_on(
@@ -198,140 +197,6 @@ def test_one_reader_a_kind_the_first_loaded(plugins: Plugins, home: Home) -> Non
     assert [(reader.plugin, reader.kind) for reader in parts.readers] == [("ears", "audio")]
 
 
-# -- the voice plugin ------------------------------------------------------------------------------
-
-
-def test_an_audio_file_reaches_the_model_written_down_once(
-    plugins: Plugins,
-    home: Home,
-    vault: Vault,
-    fake: FakeModelServer,
-    connect: Connect,
-    tmp_path: Path,
-) -> None:
-    _voice_on(plugins, fake)
-    assistant = _assistant(home, vault, fake, connect, tmp_path)
-    fake.transcribe(SAID)
-    fake.reply(
-        FakeReply(text="I will remind you.", when=ATLAS),
-        FakeReply(text="Thursday, yes.", when=ATLAS),
-    )
-
-    async def scenario() -> str:
-        parts = await plugins.parts()
-        await assistant.set_plugins([], {}, {}, readers=parts.readers)
-        added = assistant.attachments.add("", "voice.ogg", len(VOICE), 0, VOICE)
-        assert added.attachment is not None
-        conversation = assistant.conversation(assistant.conversations.create().id)
-        conversation.send(UserMessage("", (added.attachment,)))
-        await conversation.wait()
-        conversation.send("Which day was it?")
-        await conversation.wait()
-        await assistant.close()
-        await plugins.stop()
-        return conversation.id
-
-    conversation_id = asyncio.run(scenario())
-
-    (heard,) = fake.heard
-    assert heard["model"] == "gpt-transcribe"
-    assert (heard["file_name"], heard["file_type"], heard["file_bytes"]) == (
-        "voice.ogg",
-        "audio/ogg",
-        VOICE,
-    )
-    first, second = fake.bodies(CHAT)
-    assert SAID in _said(first)
-    assert "may have misheard" in _said(first)
-    assert SAID in json.dumps(second["messages"]), "the next call reads it again, unheard"
-    history = assistant.conversations.open(conversation_id).history
-    user = next(message for message in history if isinstance(message, UserMessage))
-    assert user.attachments[0].description == SAID, "kept with the file"
-
-
-@pytest.mark.parametrize(
-    ("key", "answer"),
-    [(None, None), ("fake-key", FakeError(500, "The transcription service is down."))],
-    ids=["no key in the vault", "OpenAI fails"],
-)
-def test_audio_not_written_down_keeps_its_note_and_the_turn_goes_on(
-    plugins: Plugins,
-    home: Home,
-    vault: Vault,
-    fake: FakeModelServer,
-    connect: Connect,
-    tmp_path: Path,
-    key: str | None,
-    answer: FakeError | None,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    _voice_on(plugins, fake, key)
-    assistant = _assistant(home, vault, fake, connect, tmp_path)
-    if key is None:
-        vault.delete("OPENAI_API_KEY")  # the one pointing OpenAI at the fake stored
-    if answer is not None:
-        fake.transcribe(answer)
-    fake.reply(FakeReply(text="I could not hear it.", when=ATLAS))
-
-    async def scenario() -> None:
-        parts = await plugins.parts()
-        await assistant.set_plugins([], {}, {}, readers=parts.readers)
-        added = assistant.attachments.add("", "voice.ogg", len(VOICE), 0, VOICE)
-        assert added.attachment is not None
-        conversation = assistant.conversation(assistant.conversations.create().id)
-        conversation.send(UserMessage("", (added.attachment,)))
-        await conversation.wait()
-        await assistant.close()
-        await plugins.stop()
-
-    asyncio.run(scenario())
-
-    (turn,) = fake.bodies(CHAT)
-    assert "an audio file attachment: 'voice.ogg'" in _said(turn), "the note, as before"
-    expected = "no OPENAI_API_KEY" if key is None else "HTTP 500"
-    assert any(
-        "voice could not read voice.ogg" in record.getMessage() and expected in record.getMessage()
-        for record in caplog.records
-    )
-
-
-def test_audio_sent_while_a_turn_runs_is_written_down_before_it_steers(
-    plugins: Plugins,
-    home: Home,
-    vault: Vault,
-    fake: FakeModelServer,
-    connect: Connect,
-    tmp_path: Path,
-) -> None:
-    _voice_on(plugins, fake)
-    assistant = _assistant(home, vault, fake, connect, tmp_path)
-    fake.transcribe(SAID)
-    fake.reply(
-        FakeReply(text="Working on the first thing.", pause=0.05, when=ATLAS),
-        FakeReply(text="Noted.", when=ATLAS),
-    )
-
-    async def scenario() -> None:
-        parts = await plugins.parts()
-        await assistant.set_plugins([], {}, {}, readers=parts.readers)
-        added = assistant.attachments.add("", "voice.ogg", len(VOICE), 0, VOICE)
-        assert added.attachment is not None
-        conversation = assistant.conversation(assistant.conversations.create().id)
-        conversation.send("Plan my week.")
-        assert conversation.running
-        conversation.send(UserMessage("", (added.attachment,)))
-        await conversation.wait()
-        await assistant.close()
-        await plugins.stop()
-
-    asyncio.run(scenario())
-
-    assert len(fake.heard) == 1
-    bodies = fake.bodies(CHAT)
-    assert SAID not in _said(bodies[0])
-    assert any(SAID in _said(body) for body in bodies[1:]), "it reached the model, written down"
-
-
 # -- the answer spoken when asked ------------------------------------------------------------------
 
 
@@ -399,89 +264,6 @@ def _call(plugins: Plugins, name: str, params: Any) -> Any:
             await plugins.stop()
 
     return asyncio.run(run())
-
-
-def test_the_screen_dictates_through_the_plugin(plugins: Plugins, fake: FakeModelServer) -> None:
-    _voice_on(plugins, fake)
-    fake.transcribe("Buy bread.")
-    recorded = base64.b64encode(b"webm recording").decode()
-    said = _call(plugins, "dictate", {"audio": recorded, "media_type": "audio/webm"})
-    assert said["text"] == "Buy bread."
-    (heard,) = fake.heard
-    assert (heard["file_name"], heard["file_type"]) == ("dictation.webm", "audio/webm")
-    assert heard["file_bytes"] == b"webm recording"
-    with pytest.raises(ValueError, match="not base64"):
-        _call(plugins, "dictate", {"audio": "not base64!"})
-
-
-def test_every_dictation_is_kept_with_its_recording(
-    plugins: Plugins, fake: FakeModelServer
-) -> None:
-    _voice_on(plugins, fake)
-    fake.transcribe("Buy bread.", FakeError(500, "The transcription service is down."))
-    first = _call(
-        plugins,
-        "dictate",
-        {"audio": base64.b64encode(b"first").decode(), "media_type": "audio/webm;codecs=opus"},
-    )
-    with pytest.raises(ValueError, match="service is down"):
-        _call(
-            plugins,
-            "dictate",
-            {
-                "audio": base64.b64encode(b"second").decode(),
-                "media_type": "audio/webm",
-                "where": "anywhere",
-            },
-        )
-    listed = _call(plugins, "dictations", None)["dictations"]
-    # Both made within the same second: their order is not told apart.
-    assert sorted((d["text"], d["where"]) for d in listed) == [
-        ("", "anywhere"),
-        ("Buy bread.", "box"),
-    ]
-    failed = next(d for d in listed if d["where"] == "anywhere")
-    assert "service is down" in failed["error"], "kept with why, its speech not lost"
-    assert first["id"] in {d["id"] for d in listed}
-    audio = _call(plugins, "dictation_audio", {"id": first["id"]})
-    assert base64.b64decode(audio["audio"]) == b"first"
-    assert audio["media_type"] == "audio/webm;codecs=opus"
-    fake.transcribe("Call the bank.")
-    again = _call(plugins, "dictation_again", {"id": failed["id"]})
-    assert again == {"id": failed["id"], "text": "Call the bank."}
-    assert fake.heard[-1]["file_bytes"] == b"second", "its own recording, written down again"
-    rewritten = next(
-        d for d in _call(plugins, "dictations", None)["dictations"] if d["id"] == failed["id"]
-    )
-    assert (rewritten["text"], rewritten["error"]) == ("Call the bank.", "")
-    assert _call(plugins, "dictation_delete", {"id": first["id"]}) is True
-    folder = plugins.data_folder("voice") / "dictations"
-    assert sorted(path.suffix for path in folder.iterdir()) == [".json", ".webm"]
-    for wrong in ("", "../../vault", first["id"]):
-        with pytest.raises(ValueError, match="no such dictation"):
-            _call(plugins, "dictation_audio", {"id": wrong})
-
-
-def test_the_dictation_status_names_the_shortcut(
-    plugins: Plugins, vault: Vault, fake: FakeModelServer
-) -> None:
-    _voice_on(plugins, fake)
-    assert _call(plugins, "dictation_status", None) == {
-        "ready": True,
-        "why": "",
-        "shortcut": "Capslock",
-    }
-    plugins.set_setting("voice", "dictation_shortcut", "F9")
-    vault.delete("OPENAI_API_KEY")
-    status = _call(plugins, "dictation_status", None)
-    assert (status["ready"], status["shortcut"]) == (False, "F9")
-    assert "OPENAI_API_KEY" in status["why"]
-
-
-def test_the_voice_screen_gets_its_desktop_powers(plugins: Plugins, fake: FakeModelServer) -> None:
-    _voice_on(plugins, fake)
-    [screen] = [s for s in plugins.screens() if s.plugin == "voice"]
-    assert screen.desktop == ("shortcut", "paste")
 
 
 def test_the_live_session_is_opened_here_with_the_key_and_the_history(
@@ -620,10 +402,8 @@ def test_the_voice_lists_the_models_the_provider_has_for_each_setting(
     fake.model_ids = [
         "gpt-6-luna",
         "gpt-transcribe",
-        "gpt-4o-mini-transcribe-2025-03-20",
-        "gpt-4o-mini-transcribe",
         "gpt-live-transcribe",
-        "whisper-1",
+        "gpt-4o-mini-tts-2025-03-20",
         "gpt-4o-mini-tts",
         "gpt-live-1",
     ]
@@ -634,14 +414,7 @@ def test_the_voice_lists_the_models_the_provider_has_for_each_setting(
         return [choice["value"] for choice in found["choices"]]
 
     # The provider's own first, as the empty value; a dated snapshot after the name it pins.
-    assert values("transcription_model") == [
-        "",
-        "gpt-4o-mini-transcribe",
-        "gpt-transcribe",
-        "whisper-1",
-        "gpt-4o-mini-transcribe-2025-03-20",
-    ]
-    assert values("speech_model") == ["", "gpt-4o-mini-tts"]
+    assert values("speech_model") == ["", "gpt-4o-mini-tts", "gpt-4o-mini-tts-2025-03-20"]
     assert values("live_model") == ["", "gpt-live-1"]
     assert values("voice") == [""], "OpenAI lists no voices: its voice is typed"
     models = [{"value": "gemini/gemini-3.8-flash", "label": "Google Gemini · Gemini 3.8 Flash"}]
@@ -650,8 +423,12 @@ def test_the_voice_lists_the_models_the_provider_has_for_each_setting(
         "conversation",
         "gemini/gemini-3.8-flash",
     ]
-    found = _call(plugins, "setting_choices", {"setting": "transcription_model"})
-    assert found["choices"][0]["label"] == "OpenAI's choice: gpt-transcribe"
+    found = _call(plugins, "setting_choices", {"setting": "speech_model"})
+    assert found["choices"][0]["label"] == "OpenAI's choice: gpt-4o-mini-tts"
+    assert _call(plugins, "setting_choices", {"setting": "transcription_model"}) == {
+        "choices": [],
+        "why": "",
+    }, "writing down is Atlas's own now"
     assert _call(plugins, "setting_choices", {"setting": "quiet_close_seconds"}) == {
         "choices": [],
         "why": "",
@@ -693,8 +470,7 @@ def test_gemini_lists_what_each_model_does_and_its_voices_by_language(
         params = {"setting": setting, "language": language}
         return [c["value"] for c in _call(plugins, "setting_choices", params)["choices"]]
 
-    # A transcription model first, then the models that talk; nothing that draws or embeds.
-    assert values("transcription_model") == ["", "gemini-3.5-transcribe", "gemini-3.8-flash"]
+    # Only what speaks, or talks live; nothing that writes down, draws or embeds.
     assert values("speech_model") == ["", "gemini-3.8-flash-tts"]
     assert values("live_model") == ["", "gemini-3.8-live"]
     assert values("voice", "pt-BR") == ["", "pt-br-advisor-1", "kore"]
@@ -720,64 +496,11 @@ def test_a_list_kept_short_says_why(plugins: Plugins, fake: FakeModelServer, vau
 # -- the voice through Gemini --------------------------------------------------------------------
 
 
-def test_gemini_writes_down_audio_with_its_transcription_model(
-    plugins: Plugins, fake: FakeModelServer
-) -> None:
-    _voice_on(plugins, fake, provider="gemini")
-    fake.transcribe("Buy bread.", "Call the bank.")
-    recorded = base64.b64encode(b"webm recording").decode()
-    said = _call(plugins, "dictate", {"audio": recorded, "media_type": "audio/webm;codecs=opus"})
-    assert said["text"] == "Buy bread."
-    (body,) = fake.bodies("/v1beta/interactions")
-    assert body == {
-        "model": "gemini-3.5-transcribe",
-        "input": [{"type": "audio", "mime_type": "audio/webm", "data": recorded}],
-    }
-
-    # Another model is asked for the words only, beside the audio.
-    plugins.set_setting("voice", "transcription_model", "gemini-3.8-flash")
-    _call(plugins, "dictate", {"audio": recorded, "media_type": "audio/ogg"})
-    asked = fake.bodies("/v1beta/interactions")[-1]
-    assert asked["model"] == "gemini-3.8-flash"
-    assert asked["input"][0]["type"] == "text"
-    assert "words only" in asked["input"][0]["text"]
-    assert not any(r.headers.get("authorization") for r in fake.requests), "its key, its header"
-
-
-def test_gemini_takes_a_long_recording_through_its_files_api(
-    plugins: Plugins, fake: FakeModelServer
-) -> None:
-    _voice_on(plugins, fake, provider="gemini")
-    fake.transcribe("A long meeting.")
-    long = b"\x01" * (INLINE_BYTES + 1)
-    said = _call(plugins, "dictation_status", None)
-    assert said["ready"] is True
-
-    async def read() -> str:
-        parts = await plugins.parts()
-        [reader] = parts.readers
-        path = plugins.data_folder("voice") / "meeting.ogg"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(long)
-        try:
-            return await reader.run(path, "audio/ogg")
-        finally:
-            await plugins.stop()
-
-    assert asyncio.run(read()) == "A long meeting."
-    [(uri, data)] = fake.uploaded.items()
-    assert data == long
-    (body,) = fake.bodies("/v1beta/interactions")
-    assert body["input"] == [{"type": "audio", "mime_type": "audio/ogg", "uri": uri}]
-
-
 def test_without_the_gemini_key_the_voice_names_it(plugins: Plugins, fake: FakeModelServer) -> None:
     _voice_on(plugins, fake, provider="gemini", key=None)
-    status = _call(plugins, "dictation_status", None)
+    status = _call(plugins, "live_status", None)
     assert status["ready"] is False
     assert "no GEMINI_API_KEY" in status["why"]
-    with pytest.raises(ValueError, match="no GEMINI_API_KEY"):
-        _call(plugins, "dictate", {"audio": base64.b64encode(b"x").decode()})
 
 
 def _spoken_by_gemini(

@@ -19,6 +19,7 @@ from atlas.jobs import (
     JobsError,
     Lateness,
     Routine,
+    RoutineExecutor,
     RoutineNotFoundError,
     Routines,
     RoutineStore,
@@ -282,3 +283,59 @@ def test_a_routine_keeps_its_newest_fifty_runs(routines: Routines, clock: _Clock
     runs = routines.store.runs(made.id, limit=100)
     assert len(runs) == 50
     assert runs[0].number > runs[-1].number
+
+
+# -- a routine an executor runs (step 25) ---------------------------------------------------------
+
+
+def test_an_executor_runs_a_prompt_in_a_whole_folder_and_is_kept(
+    routines: Routines, tmp_path: Path
+) -> None:
+    folder = str(tmp_path / "project")
+    chosen = RoutineExecutor(" claude-code ", folder, auto=True, workspace=True, draft=True)
+    made = routines.create("sweep", "every 1d", prompt="Sweep.", executor=chosen)
+    assert routines.store.get(made.id).executor == RoutineExecutor(
+        "claude-code", folder, auto=True, workspace=True, draft=True
+    )
+    cases = [
+        (dict(command="ls", executor=chosen), "give a prompt"),
+        (dict(prompt="a", bot="finance", executor=chosen), "A bot's routine runs on Atlas's model"),
+        (dict(prompt="a", executor=RoutineExecutor("codex", "project")), "its whole path"),
+        (dict(prompt="a", executor=RoutineExecutor("", folder)), "Name the executor"),
+        (
+            dict(prompt="a", executor=RoutineExecutor("codex", folder, draft=True)),
+            "a new workspace each run",
+        ),
+    ]
+    for index, (fields, why) in enumerate(cases):
+        with pytest.raises(JobsError, match=why):
+            routines.create(f"r{index}", "every 1d", **fields)  # type: ignore[arg-type]
+    back = routines.update(made.id, executor=RoutineExecutor("", ""))
+    assert back.executor is None
+    pinned = routines.update(made.id, model=("openrouter", "gemini", "high"), bot="finance")
+    assert (pinned.model_name, pinned.bot) == ("gemini", "finance")
+    assert routines.update(made.id, model=("", "", None), bot="").model_name is None
+
+
+def test_the_scoreboard_counts_this_weeks_runs_by_how_they_ended(
+    routines: Routines, clock: _Clock
+) -> None:
+    """Step 25: since Monday at midnight, the ones that ran alone, needed the user, or failed."""
+    made = routines.create("sweep", "every 1h", prompt="Sweep.")
+    store = routines.store
+    ended = [
+        (datetime(2026, 10, 11, 23, 0, tzinfo=UTC), RunStatus.ERROR),  # Sunday: last week
+        (datetime(2026, 10, 12, 0, 0, tzinfo=UTC), RunStatus.OK),
+        (datetime(2026, 10, 12, 1, 0, tzinfo=UTC), RunStatus.SILENT),
+        (datetime(2026, 10, 12, 2, 0, tzinfo=UTC), RunStatus.NEEDED),
+        (datetime(2026, 10, 12, 3, 0, tzinfo=UTC), RunStatus.ERROR),
+        (datetime(2026, 10, 12, 4, 0, tzinfo=UTC), RunStatus.UNKNOWN),
+    ]
+    for started, status in ended:
+        run = store.start_run(store.get(made.id), started, Lateness.ON_TIME)
+        store.finish_run(dataclasses.replace(run, status=status, ended_at=started))
+
+    score = routines.scoreboard()
+
+    assert score.since == datetime(2026, 10, 12, 0, 0, tzinfo=UTC)
+    assert (score.alone, score.needed, score.failed) == (2, 1, 1)

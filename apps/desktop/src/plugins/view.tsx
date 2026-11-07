@@ -7,7 +7,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 import { t } from '@/i18n'
 
-import { $contributions, $pluginPage, inArea, type Registered } from './registry'
+import { $contributions, $pluginPage, type Area, inArea, type Place, type Registered } from './registry'
 
 interface BoundaryState {
   error: Error | null
@@ -39,16 +39,39 @@ class Boundary extends Component<{ children: ReactNode; name: string }, Boundary
 
 /** One contribution, its errors kept to itself: its `render` runs inside the boundary, where a
  *  throw is caught, never in the component that holds it. */
-export function ContributionView({ item }: { item: Registered }) {
+export function ContributionView({ item, place }: { item: Registered; place?: Place }) {
   return (
     <Boundary key={item.key} name={item.key}>
-      <Rendered item={item} />
+      <Rendered item={item} place={place} />
     </Boundary>
   )
 }
 
-function Rendered({ item }: { item: Registered }) {
-  return <>{item.render()}</>
+function Rendered({ item, place }: { item: Registered; place?: Place }) {
+  return <>{item.render(place)}</>
+}
+
+/** What the plugins' screens add to a place of an executor (screen version 4): by a session's
+ *  box (`session`), or under an executor in the sidebar (`executor`), each given the place. */
+export function PlaceContributions({
+  area,
+  place,
+  plugin
+}: {
+  area: Extract<Area, 'connection' | 'executor' | 'project' | 'session' | 'workspace'>
+  place: Place
+  /** Only this plugin's parts (a connection offered in the conversation). */
+  plugin?: string
+}) {
+  const items = inArea(useStore($contributions), area).filter(item => plugin === undefined || item.plugin === plugin)
+
+  return (
+    <>
+      {items.map(item => (
+        <ContributionView item={item} key={item.key} place={place} />
+      ))}
+    </>
+  )
 }
 
 /** The plugin page the main area shows. */

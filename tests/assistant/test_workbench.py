@@ -17,6 +17,7 @@ from typing import Any, cast
 
 import pytest
 
+from accounts_support import AccountsPlugin, Stop
 from atlas.__main__ import SCHEMAS
 from atlas.assistant import (
     HANDOFF_MARK,
@@ -27,11 +28,20 @@ from atlas.assistant import (
     InstanceChanged,
     WorkbenchEvent,
 )
+from atlas.assistant import workbench as workbench_module
 from atlas.assistant.model import UsageWindowView
 from atlas.assistant.workbench import not_compacted
 from atlas.conversations import WORKBENCH
-from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
-from atlas.jobs import InstanceRecord, RouteTarget
+from atlas.home import (
+    Database,
+    Home,
+    ModelSettings,
+    Settings,
+    WorkspaceSettings,
+    format_utc,
+    migrate,
+)
+from atlas.jobs import InstanceRecord
 from atlas.models import CallLedger, UserMessage
 from atlas.plugins import (
     Answers,
@@ -87,6 +97,8 @@ class Bench:
         self.heard = heard
         self.root = root
         self.scripts = root / "scripts"
+        #: The accounts plugin Atlas ships, on, as a home that uses other accounts has it.
+        self.accounts = AccountsPlugin(assistant, root / "accounts-plugin")
 
     def script(self, folder: str, *steps: dict[str, Any], resumed: bool = False) -> Path:
         """What the fake `claude` does for each prompt in `folder` (a folder of the workspace)."""
@@ -170,6 +182,17 @@ async def _idle(bench: Bench, instance_id: str) -> None:
     raise AssertionError("The instance kept working.")
 
 
+async def _saying(bench: Bench, instance_id: str, text: str) -> None:
+    """Wait until the harness says *text*: a steer sent then lands mid-turn. A fixed wait guessed
+    how long the harness takes to start, and on a machine busy with the other test processes the
+    guess landed before it."""
+    for _ in range(1500):
+        if ("said", text) in bench.activity(instance_id):
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError(f"The harness never said {text!r}.")
+
+
 def test_an_instance_of_the_users_takes_prompts_steers_and_asks_on_its_card(
     bench: Callable[[Screen | None], Bench],
 ) -> None:
@@ -188,7 +211,7 @@ def test_an_instance_of_the_users_takes_prompts_steers_and_asks_on_its_card(
     async def scenario() -> tuple[str, bool, bool]:
         run = await b.workbench.start("claude-code", site)
         first = await b.workbench.prompt(run.id, "Fix the header.")
-        await asyncio.sleep(0.3)
+        await _saying(b, run.id, "Looking at the header.")
         steered = await b.workbench.prompt(run.id, "Keep the logo.")
         await _idle(b, run.id)
         await b.assistant.close()
@@ -256,7 +279,7 @@ def test_a_prompt_and_a_steer_take_the_files_the_user_attached(
     async def scenario() -> tuple[str, str]:
         run = await b.workbench.start("claude-code", site)
         await b.workbench.prompt(run.id, "What is wrong here?", (shot,))
-        await asyncio.sleep(0.3)
+        await _saying(b, run.id, "Looking.")
         await b.workbench.prompt(run.id, "", (notes,))
         await _idle(b, run.id)
         blind = await b.workbench.start("blind", site)
@@ -435,6 +458,62 @@ def test_the_harnesss_own_auto_mode_switches_mid_session(
     requests = [entry["request"] for entry in b.log() if "request" in entry]
     modes = [r["mode"] for r in requests if r.get("subtype") == "set_permission_mode"]
     assert modes == ["auto", "default"]
+
+
+def test_the_harnesss_permission_modes_switch_mid_session(
+    bench: Callable[[Screen | None], Bench],
+) -> None:
+    b = bench(Screen())
+    site = b.script("modes", {"result": "Ok."})
+
+    async def scenario() -> tuple[list[str], str, str, bool, str]:
+        run = await b.workbench.start("claude-code", site)
+        listed = list(run.view().modes)
+        first = run.view().mode
+        await b.workbench.set_mode(run.id, "plan")
+        await b.workbench.set_mode(run.id, "auto")
+        auto = run.auto
+        await b.workbench.set_auto(run.id, False)
+        after = run.view().mode
+        with pytest.raises(ExecutorError):
+            await b.workbench.set_mode(run.id, "bypassPermissions")
+        await b.assistant.close()
+        return listed, first, after, auto, run.view().mode
+
+    listed, first, after, auto, last = _run(scenario)
+
+    # Its default first, and never the mode that checks nothing.
+    assert listed == ["default", "acceptEdits", "plan", "auto"]
+    assert first == "default"
+    # `auto` is the automatic mode the box's switch turns on and off.
+    assert auto
+    assert after == last == "default"
+    requests = [entry["request"] for entry in b.log() if "request" in entry]
+    modes = [r["mode"] for r in requests if r.get("subtype") == "set_permission_mode"]
+    assert modes == ["plan", "auto", "default"]
+
+
+def test_a_sessions_context_is_its_tokens_against_its_models_window(
+    bench: Callable[[Screen | None], Bench],
+) -> None:
+    b = bench(Screen())
+    site = b.script("context", {"result": "Ok."})
+
+    async def scenario() -> tuple[tuple[int | None, int | None], tuple[int | None, int | None]]:
+        run = await b.workbench.start("claude-code", site, model="opus[1m]")
+        await b.workbench.prompt(run.id, "Go.")
+        await _idle(b, run.id)
+        on_million = await b.workbench.context(run.id)
+        run.model = "a-model-nobody-knows"
+        run.chosen_model = None
+        unknown = await b.workbench.context(run.id)
+        await b.assistant.close()
+        return on_million, unknown
+
+    on_million, unknown = _run(scenario)
+
+    assert on_million[1] == 1_000_000
+    assert unknown[1] is None
 
 
 def test_an_instance_is_duplicated_moved_and_stopped(
@@ -954,9 +1033,9 @@ def test_two_accounts_work_at_once_each_in_its_own_folder(
 
     async def scenario() -> tuple[Any, ...]:
         workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
+        added = await b.accounts.add_account("claude-code", "company-b")
         await workbench.switch_executor_account(added.name, "b@example.com")
-        await workbench.set_folder_account("claude-code", str(api), added.account_id)
+        await b.accounts.set_folder_account("claude-code", str(api), added.account_id)
         mine = await workbench.start("claude-code", site)
         theirs = await workbench.start("claude-code", api)
         await workbench.prompt(mine.id, "Fix the site.")
@@ -990,12 +1069,13 @@ def test_two_accounts_work_at_once_each_in_its_own_folder(
     assert listed.can_add
 
 
-def test_a_switch_goes_on_in_a_copy_on_the_other_account_and_deletes_the_original_once_kept(
+def test_a_switch_goes_on_in_a_copy_on_the_other_account_and_leaves_the_original_as_it_was(
     bench: Callable[[Screen | None], Bench], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Decided with the user on 19/10/2026: each account keeps its own history, so the other
-    account's Claude Code reads this one's session and keeps a copy of its own. Asked for by the
-    user on 22/10/2026: the original, left dead, is deleted once the copy is kept."""
+    account's Claude Code reads this one's session and keeps a copy of its own. Decided with the
+    user on 03/11/2026: the original stays as it was, Atlas deleting no session (it was deleted
+    once the copy was kept, from 22/10/2026)."""
     root = _main_sessions(monkeypatch)
     monkeypatch.setenv("FAKE_CLAUDE_SESSION", ORIGINAL)
     b = bench(Screen())
@@ -1004,7 +1084,7 @@ def test_a_switch_goes_on_in_a_copy_on_the_other_account_and_deletes_the_origina
 
     async def scenario() -> tuple[Any, ...]:
         workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
+        added = await b.accounts.add_account("claude-code", "company-b")
         await workbench.switch_executor_account(added.name, "")
         run = await workbench.start("claude-code", site)
         await workbench.prompt(run.id, "Build the site.")
@@ -1020,7 +1100,7 @@ def test_a_switch_goes_on_in_a_copy_on_the_other_account_and_deletes_the_origina
 
     added, run, moved, original, check = _run(scenario)
 
-    assert not original.exists(), "the original, its copy kept, is gone"
+    assert original.exists(), "the original stays as it was"
     assert moved.id == run.id, "the card stays"
     assert (moved.name, moved.account) == (added.name, "other@example.com")
     assert moved.session_id, "a copy, with an id of its own"
@@ -1050,7 +1130,7 @@ def test_a_session_not_running_started_on_another_account_goes_on_there_in_a_cop
 
     async def scenario() -> tuple[Any, ...]:
         workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
+        added = await b.accounts.add_account("claude-code", "company-b")
         await workbench.switch_executor_account(added.name, "")
         first = await workbench.start("claude-code", site)
         await workbench.prompt(first.id, "Build it.")
@@ -1058,7 +1138,7 @@ def test_a_session_not_running_started_on_another_account_goes_on_there_in_a_cop
         await workbench.stop(first.id)
         original = next((root / "projects").glob(f"*/{ORIGINAL}.jsonl"))
         before = original.read_bytes()
-        await workbench.set_folder_account("claude-code", str(site), added.account_id)
+        await b.accounts.set_folder_account("claude-code", str(site), added.account_id)
         stays = await workbench.start("claude-code", site, resume=ORIGINAL)
         await workbench.stop(stays.id)
         moved = await workbench.start(
@@ -1076,55 +1156,10 @@ def test_a_session_not_running_started_on_another_account_goes_on_there_in_a_cop
     assert before, "it was kept before"
     assert moved.name == added.name
     assert _said(moved) == "Again."
-    assert not original.exists(), "the copy replaced it"
+    assert original.read_bytes() == before, "the original stays as it was"
     assert moved.session_id
     assert moved.session_id != ORIGINAL
     assert list((Path(added.folder) / "projects").glob(f"*/{moved.session_id}.jsonl"))
-
-
-def test_a_copy_replaces_no_session_the_user_forked_or_an_instance_here_still_has_open(
-    bench: Callable[[Screen | None], Bench], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Asked for by the user on 22/10/2026: the session a copy replaced is deleted only when
-    nothing needs it. A fork is the user's asking for two; and a session still open on its own
-    account here goes on there."""
-    root = _main_sessions(monkeypatch)
-    monkeypatch.setenv("FAKE_CLAUDE_SESSION", ORIGINAL)
-    b = bench(Screen())
-    site = b.script("site", {"result": "Started."})
-    b.script("site", {"account": True}, {"result": "Again."}, resumed=True)
-
-    async def scenario() -> tuple[Any, ...]:
-        workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
-        await workbench.switch_executor_account(added.name, "")
-        first = await workbench.start("claude-code", site)
-        await workbench.prompt(first.id, "Build it.")
-        await _idle(b, first.id)
-        beside = await workbench.start(
-            "claude-code", site, resume=ORIGINAL, account=added.account_id
-        )
-        await workbench.prompt(beside.id, "Go on.")
-        await _idle(b, beside.id)
-        await _settled(b)
-        open_here = list((root / "projects").glob(f"*/{ORIGINAL}.jsonl"))
-        await workbench.stop(first.id)
-        forked = await workbench.start(
-            "claude-code", site, resume=ORIGINAL, account=added.account_id, fork=True
-        )
-        await workbench.prompt(forked.id, "Try it another way.")
-        await _idle(b, forked.id)
-        await _settled(b)
-        after_fork = list((root / "projects").glob(f"*/{ORIGINAL}.jsonl"))
-        await b.assistant.close()
-        return beside, forked, open_here, after_fork
-
-    beside, forked, open_here, after_fork = _run(scenario)
-
-    assert beside.session_id != ORIGINAL, "a copy"
-    assert open_here, "its own instance still has it open"
-    assert forked.session_id not in (ORIGINAL, beside.session_id)
-    assert after_fork, "the user forked it"
 
 
 def test_an_account_is_nicknamed_checked_and_removed_its_folder_left_as_it_is(
@@ -1142,20 +1177,20 @@ def test_an_account_is_nicknamed_checked_and_removed_its_folder_left_as_it_is(
             ("w" * 41, "at most 40"),
         ):
             with pytest.raises(ExecutorError, match=why):
-                await workbench.add_account("claude-code", nickname)
-        side = await workbench.add_account("claude-code", " side ")
+                await b.accounts.add_account("claude-code", nickname)
+        side = await b.accounts.add_account("claude-code", " side ")
         with pytest.raises(ExecutorError, match="another account's already"):
-            await workbench.add_account("claude-code", "side")
+            await b.accounts.add_account("claude-code", "side")
         with pytest.raises(ExecutorError, match=r"named 'Side' already|another account's"):
-            await workbench.add_account("claude-code", "Side")
-        await workbench.set_folder_account("claude-code", str(site), side.account_id)
+            await b.accounts.add_account("claude-code", "Side")
+        await b.accounts.set_folder_account("claude-code", str(site), side.account_id)
         run = await workbench.start("claude-code", site)
         await workbench.prompt(run.id, "Go.")
         with pytest.raises(ExecutorError, match="runs on side"):
-            await workbench.remove_account("claude-code", side.account_id)
+            await b.accounts.remove_account("claude-code", side.account_id)
         await _idle(b, run.id)
         await workbench.stop(run.id)
-        await workbench.remove_account("claude-code", side.account_id)
+        await b.accounts.remove_account("claude-code", side.account_id)
         after = await workbench.accounts("claude-code")
         gone = b.assistant.executor(side.name)
         await b.assistant.close()
@@ -1182,7 +1217,7 @@ def test_a_session_is_deleted_on_its_account_alone_and_never_while_it_works(
 
     async def scenario() -> tuple[Any, ...]:
         workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
+        added = await b.accounts.add_account("claude-code", "company-b")
         await workbench.switch_executor_account(added.name, "")
         run = await workbench.start("claude-code", site)
         await workbench.prompt(run.id, "Build it.")
@@ -1204,7 +1239,7 @@ def test_a_session_is_deleted_on_its_account_alone_and_never_while_it_works(
     assert not list((Path(added.folder) / "projects").glob(f"*/{copy}.jsonl"))
     assert not history.exists(), "what Claude Code keeps of it alone, as `claude purge` does"
     assert [s.session_id for s in listed] == []
-    assert list((root / "projects").glob(f"*/{ORIGINAL}.jsonl")) == [], "the copy had replaced it"
+    assert list((root / "projects").glob(f"*/{ORIGINAL}.jsonl")), "the original, on its account"
 
 
 # -- an account's plan limit hands over to the next (asked for by the user on 21/10/2026) ---------
@@ -1237,7 +1272,7 @@ def test_a_session_at_its_plan_limit_goes_on_by_itself_on_the_next_account_in_a_
 
     async def scenario() -> tuple[Any, ...]:
         workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
+        added = await b.accounts.add_account("claude-code", "company-b")
         await workbench.switch_executor_account(added.name, "")
         run = await workbench.start("claude-code", site)
         await workbench.prompt(run.id, "Build the site.")
@@ -1253,7 +1288,7 @@ def test_a_session_at_its_plan_limit_goes_on_by_itself_on_the_next_account_in_a_
     assert (moved.name, moved.account) == (added.name, "other@example.com"), "the next account"
     assert moved.session_id, "a session there"
     assert moved.session_id != ORIGINAL, "a copy of its own there"
-    assert original == [], "the original, dead on the main account, is gone"
+    assert original, "the original stays on the main account"
     assert _said(moved) == "All of it is done."
     prompts = [e["message"]["content"] for e in b.log() if e.get("type") == "user"]
     # Compacted first, by default, its harness having `/compact` (decided on 25/10/2026).
@@ -1274,12 +1309,12 @@ def test_the_hand_over_follows_the_users_order_passes_over_an_account_not_logged
 
     async def scenario() -> tuple[Any, ...]:
         workbench = b.workbench
-        first = await workbench.add_account("claude-code", "first")
-        second = await workbench.add_account("claude-code", "second")
+        first = await b.accounts.add_account("claude-code", "first")
+        second = await b.accounts.add_account("claude-code", "second")
         await workbench.switch_executor_account(first.name, "")
         # The order: second, the main account, first. After the main one comes `first`... which
         # is logged in; `second` is not, so round to the start it is passed over.
-        listed = await workbench.set_failover(
+        listed = await b.accounts.set_failover(
             "claude-code", [second.account_id, "", first.account_id], enabled=True, compact=True
         )
         run = await workbench.start("claude-code", site)
@@ -1307,16 +1342,16 @@ def test_with_the_hand_over_off_a_session_at_its_limit_stays_on_its_account(
 
     async def scenario() -> ExecutorRun:
         workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
+        added = await b.accounts.add_account("claude-code", "company-b")
         await workbench.switch_executor_account(added.name, "")
-        await workbench.set_failover("claude-code", [], enabled=False, compact=False)
+        await b.accounts.set_failover("claude-code", [], enabled=False, compact=False)
         run = await workbench.start("claude-code", site)
         await workbench.prompt(run.id, "Build the site.")
         await _idle(b, run.id)
         await asyncio.sleep(0.2)
         kept = workbench.get(run.id)
         with pytest.raises(ExecutorError, match="has no account 'nobody'"):
-            await workbench.set_failover("claude-code", ["nobody"], enabled=True, compact=False)
+            await b.accounts.set_failover("claude-code", ["nobody"], enabled=True, compact=False)
         await b.assistant.close()
         return kept
 
@@ -1324,6 +1359,91 @@ def test_with_the_hand_over_off_a_session_at_its_limit_stays_on_its_account(
 
     assert kept.name == "claude-code", "the main account still"
     assert all(kind != "account" for kind, _text in b.activity(kept.id))
+
+
+# -- going on when the plan's limit resets (decided with the user on 03/11/2026) -----------------
+
+
+def _turns(b: Bench, folder: str, *turns: list[dict[str, Any]]) -> Path:
+    """What the fake `claude` does in `folder`, a turn after another, the last one again after."""
+    project = b.root / "work" / folder
+    project.mkdir(parents=True, exist_ok=True)
+    (b.scripts / f"{folder}.json").write_text(json.dumps({"turns": list(turns)}), encoding="utf-8")
+    return project
+
+
+async def _resumed(bench: Bench, instance_id: str) -> None:
+    """Until a second turn ran on the instance and ended."""
+    for _ in range(500):
+        if sum(kind == "prompted" for kind, _text in bench.activity(instance_id)) >= 2:
+            break
+        await asyncio.sleep(0.02)
+    else:
+        raise AssertionError("The session did not go on.")
+    await _idle(bench, instance_id)
+
+
+def test_a_session_stopped_at_its_plans_limit_goes_on_once_a_minute_after_it_resets(
+    bench: Callable[[Screen | None], Bench], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(workbench_module, "RESUME_CHECK_SECONDS", 0.02)
+    b = bench(Screen())
+    # Reset two minutes ago: a computer that slept past it goes on as it wakes.
+    reset = int(datetime.now(UTC).timestamp()) - 120
+    site = _turns(b, "site", [{"say": "Half of it."}, {"limit": reset}], [{"result": "All of it."}])
+
+    async def scenario() -> ExecutorRun:
+        workbench = b.workbench
+        run = await workbench.start("claude-code", site)
+        await workbench.prompt(run.id, "Build the site.")
+        await _resumed(b, run.id)
+        await asyncio.sleep(0.1)
+        kept = workbench.get(run.id)
+        await b.assistant.close()
+        return kept
+
+    kept = _run(scenario)
+
+    assert kept.name == "claude-code", "where it was"
+    assert _said(kept) == "All of it."
+    prompts = [e["message"]["content"] for e in b.log() if e.get("type") == "user"]
+    assert prompts == ["Build the site.", "Continue the task from where you stopped."], "once"
+    told = [text for kind, text in b.activity(kept.id) if kind == "resume"]
+    assert told == [format_utc(datetime.fromtimestamp(reset + 60, UTC))], "the card says when"
+
+
+def test_a_session_taken_up_by_hand_or_whose_limit_says_no_reset_does_not_go_on_by_itself(
+    bench: Callable[[Screen | None], Bench], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(workbench_module, "RESUME_CHECK_SECONDS", 0.02)
+    monkeypatch.setattr(workbench_module, "RESUME_AFTER_SECONDS", 0)
+    b = bench(Screen())
+    # A whole second at least before the reset, so the user's own prompt always comes first.
+    soon = int(datetime.now(UTC).timestamp()) + 2
+    site = _turns(b, "site", [{"limit": soon}], [{"result": "Done by hand."}])
+    docs = b.script("docs", {"say": "Stopped."}, {"limit": None})
+
+    async def scenario() -> tuple[ExecutorRun, ExecutorRun]:
+        workbench = b.workbench
+        run = await workbench.start("claude-code", site)
+        await workbench.prompt(run.id, "Build the site.")
+        await _idle(b, run.id)
+        await workbench.prompt(run.id, "Go on, please.")
+        await _idle(b, run.id)
+        unsaid = await workbench.start("claude-code", docs)
+        await workbench.prompt(unsaid.id, "Write the docs.")
+        await _idle(b, unsaid.id)
+        await asyncio.sleep(max(0.0, soon - datetime.now(UTC).timestamp()) + 0.5)  # past it
+        kept = workbench.get(run.id), workbench.get(unsaid.id)
+        await b.assistant.close()
+        return kept
+
+    by_hand, unsaid = _run(scenario)
+
+    prompts = [e["message"]["content"] for e in b.log() if e.get("type") == "user"]
+    assert prompts == ["Build the site.", "Go on, please.", "Write the docs."], "never again"
+    assert ("resume", "") not in b.activity(by_hand.id)
+    assert ("resume", "") in b.activity(unsaid.id), "the card says it waits for the user"
 
 
 # -- a session's own route, across executors (asked for by the user on 21/10/2026) ---------------
@@ -1381,21 +1501,21 @@ def test_a_route_inside_one_executor_goes_to_the_account_it_names_not_the_execut
 
     async def scenario() -> tuple[Any, ...]:
         workbench = b.workbench
-        first = await workbench.add_account("claude-code", "first")
-        second = await workbench.add_account("claude-code", "second")
+        first = await b.accounts.add_account("claude-code", "first")
+        second = await b.accounts.add_account("claude-code", "second")
         await workbench.switch_executor_account(first.name, "")
         await workbench.switch_executor_account(second.name, "")
         run = await workbench.start("claude-code", site)
         # The executor's own order would take `first`; the session's route names `second`.
-        route = await workbench.set_route(
+        route = await b.accounts.set_route(
             run.id,
-            [RouteTarget("claude-code"), RouteTarget("claude-code", second.account_id)],
+            [Stop("claude-code"), Stop("claude-code", second.account_id)],
             enabled=True,
         )
         await workbench.prompt(run.id, "Build the site.")
         await _told(b, run.id, "account")
         moved = workbench.get(run.id)
-        kept = await workbench.route(run.id)
+        kept = await b.accounts.route(run.id)
         await b.assistant.close()
         return second, route, moved, kept
 
@@ -1449,12 +1569,12 @@ def test_a_switch_keeps_the_model_and_effort_or_takes_the_stops_own(
 
     async def scenario() -> str:
         workbench = b.workbench
-        second = await workbench.add_account("claude-code", "second")
+        second = await b.accounts.add_account("claude-code", "second")
         await workbench.switch_executor_account(second.name, "")
         run = await workbench.start("claude-code", site, effort=started)
-        other = RouteTarget("claude-code", second.account_id, **stop)
-        targets = [RouteTarget("claude-code"), other]
-        await workbench.set_route(run.id, targets, enabled=True)
+        other = Stop("claude-code", second.account_id, **stop)
+        targets = [Stop("claude-code"), other]
+        await b.accounts.set_route(run.id, targets, enabled=True)
         await workbench.prompt(run.id, "Build the site.")
         await _told(b, run.id, "account")
         await b.assistant.close()
@@ -1524,9 +1644,7 @@ def test_a_route_across_executors_starts_a_new_session_there_with_the_handoff_pa
         workbench = b.workbench
         run = await workbench.start("claude-code", site, effort="max")
         transcript = run.transcript.id
-        await workbench.set_route(
-            run.id, [RouteTarget("claude-code"), RouteTarget("codex")], enabled=True
-        )
+        await b.accounts.set_route(run.id, [Stop("claude-code"), Stop("codex")], enabled=True)
         await workbench.prompt(run.id, "Fix the header and the footer.")
         await _told(b, run.id, "route")
         moved = workbench.get(run.id)
@@ -1577,19 +1695,20 @@ def test_a_route_passes_over_a_destination_not_logged_in_and_says_when_none_can_
 
     async def scenario() -> ExecutorRun:
         workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
+        added = await b.accounts.add_account("claude-code", "company-b")
         run = await workbench.start("claude-code", site)
-        await workbench.set_route(
+        await b.accounts.set_route(
             run.id,
             [
-                RouteTarget("claude-code"),
-                RouteTarget("claude-code", added.account_id),
-                RouteTarget("codex"),
+                Stop("claude-code"),
+                Stop("claude-code", added.account_id),
+                Stop("codex"),
             ],
             enabled=True,
         )
         await workbench.prompt(run.id, "Build the site.")
-        await _told(b, run.id, "route", times=2)
+        await _told(b, run.id, "route")
+        await _told(b, run.id, "account")
         moved = workbench.get(run.id)
         await b.assistant.close()
         return moved
@@ -1599,7 +1718,7 @@ def test_a_route_passes_over_a_destination_not_logged_in_and_says_when_none_can_
     told = [(kind, text) for kind, text in b.activity(moved.id) if kind in ("route", "account")]
     assert told == [
         ("route", "Codex · main account"),
-        ("route", "No destination in the session's route can go on now."),
+        ("account", "No destination in the session's route can go on now."),
     ], "company-b was passed over; then nothing was left"
     assert moved.name == "codex", "it stays where the route ended"
     assert len(_codex_sent(log, "turn/start")) == 1, "Codex is not prompted again at its limit"
@@ -1621,22 +1740,20 @@ def test_a_route_is_checked_kept_for_a_session_opened_again_and_off_leaves_the_a
         workbench = b.workbench
         run = await workbench.start("claude-code", site)
         with pytest.raises(ExecutorError, match="has no account 'nobody'"):
-            await workbench.set_route(run.id, [RouteTarget("codex", "nobody")], enabled=True)
+            await b.accounts.set_route(run.id, [Stop("codex", "nobody")], enabled=True)
         with pytest.raises(ExecutorError, match="names an account"):
-            await workbench.set_route(run.id, [RouteTarget("claude-code@ab12")], enabled=True)
+            await b.accounts.set_route(run.id, [Stop("claude-code@ab12")], enabled=True)
         with pytest.raises(ExecutorError, match="not installed"):
-            await workbench.set_route(run.id, [RouteTarget("pi")], enabled=True)
-        empty = await workbench.route(run.id)
-        await workbench.set_route(
-            run.id, [RouteTarget("codex"), RouteTarget("codex")], enabled=False
-        )
+            await b.accounts.set_route(run.id, [Stop("pi")], enabled=True)
+        empty = await b.accounts.route(run.id)
+        await b.accounts.set_route(run.id, [Stop("codex"), Stop("codex")], enabled=False)
         await workbench.prompt(run.id, "Start.")
         await _idle(b, run.id)
         session = workbench.get(run.id).session_id
         assert session is not None
         await workbench.stop(run.id)
         again = await workbench.start("claude-code", site, resume=session)
-        kept = await workbench.route(again.id)
+        kept = await b.accounts.route(again.id)
         await b.assistant.close()
         return run, empty, again, kept
 
@@ -1661,10 +1778,10 @@ def test_with_its_route_off_a_session_at_its_limit_follows_its_executors_account
 
     async def scenario() -> tuple[Any, ...]:
         workbench = b.workbench
-        added = await workbench.add_account("claude-code", "company-b")
+        added = await b.accounts.add_account("claude-code", "company-b")
         await workbench.switch_executor_account(added.name, "")
         run = await workbench.start("claude-code", site)
-        await workbench.set_route(run.id, [RouteTarget("codex")], enabled=False)
+        await b.accounts.set_route(run.id, [Stop("codex")], enabled=False)
         await workbench.prompt(run.id, "Build the site.")
         await _told(b, run.id, "account")
         moved = workbench.get(run.id)

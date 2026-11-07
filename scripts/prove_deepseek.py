@@ -39,7 +39,7 @@ from typing import Any
 
 from atlas.home import Redactor, load_settings, open_home
 from atlas.plugins import (
-    BUNDLED_FOLDER,
+    OFFICIAL_FOLDER,
     Answers,
     Called,
     Executor,
@@ -145,7 +145,7 @@ def executor(
     program: str, data: Path, api_key: str | None = None, *, session_logs: bool = False
 ) -> Executor:
     """The plugin's executor, as Atlas makes it, its folder in `data`."""
-    package = import_plugin(BUNDLED_FOLDER / "deepseek", "deepseek")
+    package = import_plugin(OFFICIAL_FOLDER / "deepseek", "deepseek")
     made: Executor = package.DeepSeek(
         package.program(program),
         logger=logging.getLogger("prove_deepseek"),

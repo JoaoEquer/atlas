@@ -1,6 +1,6 @@
 """A real Atlas server on a temporary home, its model the fake model server."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -31,15 +31,21 @@ def serve(
     database = Database(home.database_file)
     migrate(database, SCHEMAS)
 
-    def serve(*, providers: tuple[str, ...] = (), **gateway: Any) -> AtlasServer:
+    def serve(
+        *,
+        providers: tuple[str, ...] = (),
+        adjust: Callable[[Settings], Settings] = lambda settings: settings,
+        **gateway: Any,
+    ) -> AtlasServer:
         """`providers`: more built-in providers pointed at the fake, so a key a test stores for
-        one of them (a plugin's) never sends a side call, a title, to the real provider."""
+        one of them (a plugin's) never sends a side call, a title, to the real provider.
+        `adjust`: the settings the server starts with, changed."""
         chosen = ModelSettings(provider="openrouter")
         models = connect(
             fake, "openrouter", *providers, settings=chosen, ledger=CallLedger(database)
         )
         settings = Settings(home=home.root, model=chosen, workspace=WorkspaceSettings(work))
-        server = AtlasServer(home, settings, models, vault, **gateway).__enter__()
+        server = AtlasServer(home, adjust(settings), models, vault, **gateway).__enter__()
         started.append(server)
         return server
 

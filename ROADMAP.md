@@ -55,6 +55,12 @@ Atlas Cloud, que vende crédito em reais e usa uma chave da OpenRouter por clien
 - **Plugins oficiais** (vêm desligados): executores (Claude Code, Codex, Hermes, Pi, DeepSeek;
   ligados no onboarding quando detectados), canais (Telegram, WhatsApp), voz, juiz e aprendizado,
   linha do tempo, notificação inteligente e laboratório (replay, bancada de modelos, visualização).
+- **Revisto em 03/11** (A poda do núcleo, passo 26, abaixo): o núcleo são as capacidades do
+  agente, com o navegador, o uso do computador, a transcrição e o ditado; o que liga a um serviço,
+  a uma conta ou a um programa específico é plugin, instalado da loja e não mais embutido: os
+  executores (Claude Code, Codex, Gemini CLI, DeepSeek), o Telegram, a voz falada e ao vivo, o gh
+  e o gws, e as várias contas com as rotas. Da lista de cima, o Hermes, o Pi, o WhatsApp, o juiz,
+  a linha do tempo, a notificação inteligente e o laboratório não foram feitos e não estão na linha.
 - **Ficam no V3 e não vêm:**
   - grafo de conhecimento;
   - acontecimentos extraídos por IA;
@@ -1632,8 +1638,19 @@ assinatura de instaladores em 2026.
   - **o login OAuth da OpenRouter fica de fora.**
 - **O app empacotado vem em duas partes** (decidido pelo usuário em 15/10). A assinatura não é
   necessária para empacotar, só para tirar o aviso de programa desconhecido:
-  - **18b, sem assinatura e grátis:** o instalador, o atalho na área de trabalho e a atualização
-    pelo próprio app. No Windows, o `Setup.exe` do NSIS (electron-builder) abre a tela do
+  - **18b refeito pelo usuário em 01/11: o Setup é um instalador gráfico, não o app empacotado.**
+    Desde 18/10 o app se atualiza pelo botão (git e `uv sync`, várias vezes por dia), e um app
+    empacotado traria um segundo atualizador, uma versão por push e a tela num protocolo diferente
+    do servidor. Então o `Atlas-Setup.exe` (portátil, sem instalar a si mesmo), o DMG e o AppImage
+    levam um app pequeno, `apps/setup/`, que roda o `install.ps1` ou o `install.sh` que leva dentro,
+    mostra cada etapa e o erro com saída, e abre o Atlas instalado; com o Atlas já instalado, abre
+    ou conserta. O resto fica como no comando de uma linha: o app construído na máquina, o atalho,
+    a atualização pelo botão. O aviso do Windows e do Mac aparece só no Setup, porque o app
+    construído na máquina não leva a marca de quarentena. Saem o electron-updater e o atualizador
+    nosso do Mac; voltam se o Atlas um dia tiver versões. O CI constrói os três a cada mudança do
+    Setup ou dos scripts e os põe na release `setup` do GitHub, e o site os oferece.
+  - **18b como decidido em 15/10, trocado acima:** o instalador, o atalho na área de trabalho e a
+    atualização pelo próprio app. No Windows, o `Setup.exe` do NSIS (electron-builder) abre a tela do
     SmartScreen na primeira vez ("Mais informações", "Executar assim mesmo"), e o electron-updater
     atualiza sem assinatura; o Smart App Control, ligado só em Windows 11 instalado do zero,
     bloqueia sem opção, e antivírus acusam falso positivo com mais facilidade. No Mac, o DMG leva
@@ -3503,6 +3520,23 @@ lista ao próprio provedor.
   Gemini falso e os do app com um WebSocket falso. **Falta** a conversa ao vivo falada e ouvida no
   app, com o microfone do usuário.
 
+### Limites da memória configuráveis (pedidos e feitos em 29/10, sem passo)
+
+Pedido do usuário em 29/10: poder mexer no tamanho do `USER.md` (1.375) e do `MEMORY.md` (2.200), e
+os plugins verem isso pelo SDK.
+
+- **O usuário decide:** `[memory] user_limit` e `memory_limit` no `config.toml`, de 500 a 20.000,
+  e um campo embaixo de cada arquivo em Configurações → Personalização. A próxima escrita já
+  respeita o limite novo; o prompt mostra a partir da próxima conversa. Baixar abaixo do que está
+  escrito não corta nada: o agente abre espaço antes de acrescentar. Os bots seguem o mesmo limite.
+- **Plugin só lê** (SDK versão 26, `ctx.memory_limits()`), decidido com o usuário: o limite é pago
+  em toda chamada, e dois plugins poderiam brigar por ele sem ninguém ver. Plugin que precisa de
+  mais espaço guarda uma memória própria.
+- **A conversar depois:** provedores de memória externos (serviços que tiram conclusões das conversas) como um papel exclusivo
+  de plugin, escolhido nas configurações e somado à memória embutida, e plugins de memória
+  aditivos (uma linha do tempo de episódios) que usam só hooks e ferramentas. Reabre o princípio 2
+  e o "sem vetores por ora".
+
 ### Site e documentação pública (decididos em 25/10, passo 19)
 
 Pedido do usuário em 25/10: um site com uma home bonita, uma página de novidades e uma documentação
@@ -3977,6 +4011,619 @@ confiança. **Sem redesenho:** polimento, fluidez, percepção de velocidade e i
   Fiscais: 2.757 testes do Python com 91,50% de cobertura (2.756 na rodada e o do workbench
   sozinho), o `npm run check` (490 do Vitest) e os 81 do e2e.
 
+### Primeira abertura em passos (pedida e decidida em 01/11, passo 18d)
+
+Pedido do usuário em 01/11: trocar a tela da chave por uma primeira abertura em passos, que diga o
+que o Atlas é: um assistente pessoal, bots especializados e uma bancada de agentes (Claude Code,
+Codex) que troca de conta sozinha quando uma bate o limite. Inspirada na estrutura de outro app,
+não na cara dele: nada de marca-texto colorido, título em serifa itálica ou mascote; o título
+destaca a última palavra só com a cor de destaque do tema (decidido com o usuário).
+
+- **Os passos, um por tela, numerados na lateral**, cada um com o que já foi feito ("Conectado",
+  "2 contas", "Pulado") e o aviso de que se reabre em Configurações. Todo passo se pula, e ninguém
+  fica preso.
+  1. **Modelo**: a tela da chave de hoje (OpenRouter primeiro, conferida sem custo).
+  2. **Executores**: os harnesses achados neste PC, ligados com a confirmação ali mesmo (o que o
+     `ExecutorOffers` já faz), e "Tem mais de uma conta? Quando uma bater o limite, o Atlas segue
+     na outra sozinho", que leva a adicionar a conta.
+  3. **Telegram**: o token do bot, e o pareamento aprovado na própria tela.
+  4. **Conexões**: GitHub com botão de verdade, pelo login do próprio `gh` no navegador, e o
+     estado pelo `gh auth status`; Gmail e Agenda com "Configurar com o Atlas", que abre uma
+     conversa onde o agente conduz o `gws auth setup` (o caminho do passo 14b, o mesmo dos pares),
+     e "Conectado" quando o `gws auth status` responder.
+  5. **Trazer seu trabalho**: "Trazer minhas sessões do [Claude Code] e do [Codex] dos [últimos
+     30 dias]", com a contagem ao lado do botão. Nada é copiado: o que ficou fora da janela vai
+     para as Arquivadas, e os originais não mudam. Pedido do usuário: hoje a lista vem inteira e
+     precisa ser arquivada à mão até sobrar o que ele está usando. Embaixo, "Começar uma conversa".
+- **Quem já usa o Atlas** reabre os passos em Configurações; o 5 serve para limpar a lista de hoje.
+  Decidido com o usuário em 01/11: quem já tinha chave vê o "Trazer seu trabalho" sozinho, uma vez,
+  na primeira abertura em que um executor ligado tem pasta parada há mais de um mês; sem isso, a
+  casa só é marcada e nunca pergunta.
+- **Depois, em passos à parte (pedidos em 01/11 e feitos no mesmo dia nos passos 18e, 18f e 18g,
+  na tabela):** a caixa de mensagem
+  com seletores em pílulas (projeto, onde roda: local, worktree ou nuvem, e branch; o modelo com
+  abas por provedor e harness, busca e esforço ao lado) e uma lista de primeiros passos depois da
+  primeira abertura, com 5 tarefas que ensinam o Atlas fazendo (delegar ao Claude Code, trocar de
+  conta no limite, falar pelo Telegram, uma rotina, um bot).
+  - **A lista de primeiros passos é o passo 18e** (começada em 01/11, escolhida pelo usuário como a
+    primeira dos dois).
+  - **Onde roda, decidido com o usuário em 01/11:** a worktree vale só para as sessões dos
+    executores, não para os bots nem para a conversa do Atlas; a nuvem fica para o Atlas Cloud.
+  - **Referências novas do usuário em 01/11, feitas no 18f e no 18g** (o que ficou de fora está na
+    linha do 18g: o Remote Control e o detalhe do contexto por parte):
+    - **A linha embaixo da caixa:** o modelo e o esforço, o modo de permissão e um anel com o uso do
+      plano. Passando o mouse no anel aparece "76% do limite de 5 horas, redefine às 16:40".
+    - **O menu do modelo:** os quatro principais numerados, o esforço num submenu e "Mais modelos"
+      num segundo submenu.
+    - **O menu do modo:** Automático, Manual, Aceitar edições, Plano e Ignorar permissões,
+      numerados de 1 a 5, cada um com uma linha que diz o que faz.
+    - **Ações do app na barra de título**, à direita.
+    - **No painel da direita:**
+      - **Ambiente:** a máquina, a pasta, a branch e um "Remote Control" ligável.
+      - **Contexto:** o quanto da janela de contexto está usado (barra e total), o detalhe por parte
+        (mensagens, ferramentas, MCP, prompt de sistema, skills, memória, espaço livre), e as
+        ferramentas MCP e os arquivos de memória com os tokens de cada um.
+  - **O que vem de cada executor (o plugin dele):**
+    - **Já existe:** os modelos com os esforços (`executor.models`) e as janelas do plano
+      (`executor.usage`). O anel só precisa desenhá-las.
+    - **Falta pedir ao plugin:** os modos de permissão e o detalhe do contexto. Cada harness tem os
+      seus, e um que não informe não mostra a parte.
+    - **A conversa do Atlas:** não tem plano. O anel some e o contexto é o do próprio Atlas.
+- **Adiado, decidido com o usuário em 01/11:** o login do Google de um clique, com um projeto OAuth
+  do próprio Atlas publicado sem verificação (o aviso do Google e o limite de 100 usuários),
+  passado ao `gws` pelas variáveis do cliente, e o caminho de hoje como saída quando lotar.
+
+### Uma casa, três faces (estudada com o usuário em 01/11, sem passo ainda)
+
+O Atlas é um núcleo só, a casa (memória, skills, o portão de aprovação, rotinas, contas e
+conectores), visto de três jeitos: o **assistente pessoal** (a conversa do Atlas), os **bots
+especialistas** e a **aba Executores**, que é um ambiente de desenvolvimento com agentes (ADE). O
+assistente delega aos bots e aos executores, os bots usam as mesmas skills e conectores, e os
+executores entram nas mesmas contas e rotas. Os produtos comparados em 01/11 cobrem uma face cada.
+
+- **O que vale para as três:** seguro por padrão (o portão, os pisos e o consentimento ao ligar um
+  plugin, onde os outros vêm com tudo liberado; a loja deixou de ser revisada pelo usuário em
+  03/11, A base D, abaixo, e a segurança passa a morar no portão, na varredura e no
+  consentimento); seu (código aberto, na sua máquina, memória em texto); todos os
+  harnesses, cada um com a conta do usuário (várias contas num plugin da loja, decidido em 03/11);
+  e o Brasil (português, Pix e reais no Atlas Cloud).
+- **Um teste para cada recurso novo:** se só faz sentido com o usuário olhando a tela, é coisa de
+  ADE; se faz sentido com ele longe, é coisa do Atlas. A aba Executores fica boa, mas como janela
+  para acompanhar e intervir; o diferencial é quem segura o fio entre uma sessão e outra.
+- **De fora, de propósito:** agir com dinheiro sem o usuário, liberar tudo por padrão e um sistema
+  só. A "loja sem revisão", que estava nesta lista, foi escolhida pelo usuário em 03/11 (A base D,
+  abaixo), com as defesas da revisão da sequência.
+
+**As lacunas, por base, na ordem proposta (A → B → C → D → E; F só com uma decisão de mercado).**
+A e B rodam locais e não esperam a nuvem.
+
+| Base | O que fecha |
+|---|---|
+| **A. Workspace, revisão e PR** | uma worktree por tarefa, o diff com comentário na linha que volta ao agente, checkpoints por turno, git, PR e CI no app, a issue que vira tarefa |
+| **B. Gatilhos e metas** | gatilhos por evento (e-mail, agenda, webhook), metas duradouras com progresso para os bots, um laço de atenção que sabe ficar quieto, e o registro do que cada um fez sem ninguém olhando (decidido em 03/11: só os eventos no núcleo, o resto em plugins) |
+| **C. Atlas Cloud** | o passo 20, abaixo |
+| **D. Conectores** | o login de um clique, um intermediário de apps no lugar do MCP à mão, e o índice dos dados conectados (decidido em 03/11: a loja aberta e o ajuste do login; o intermediário e o índice em plugins) |
+| **E. Canais** | SMS, ligação, o app no celular e o bot chamado pelo nome num canal de equipe (decidido em 03/11: o app é um PWA depois do relé; todo canal é plugin, inclusive o Telegram) |
+| **F. Equipes** | login único e memória da equipe, só se o Atlas Cloud mirar empresas |
+
+#### A base A, a workspace (desenhada em 01/11, decidida em 03/11, passo 21)
+
+Uma workspace é uma tarefa: uma cópia isolada do repositório (worktree), uma branch e um PR. Dentro
+dela rodam sessões de qualquer harness, e a rota entre harnesses continua na mesma
+worktree. Serve para agentes em paralelo sem pisar um no outro, revisar sem sair do Atlas,
+comentar uma linha em vez de descrever o problema, voltar atrás e entregar.
+
+- **Fatias, cada uma vale sozinha:** A1, a workspace (worktree, script de setup, arquivos copiados,
+  faixa de portas, arquivar); A2, o diff com o comentário na linha que vira mensagem ao agente (o
+  coração); A3, os checkpoints (uma ref privada por turno, voltar cria uma cópia da sessão, sem
+  apagar nada); A4, git, PR e checks; A5, a issue que vira workspace.
+- **Revisto com o usuário em 01/11, para não quebrar nada:**
+  - **Quem escreve no git é o servidor do Atlas, não o agente:** criar e remover a worktree, os
+    checkpoints, o commit, o PR. Um harness protege o `.git` de propósito (escrever nos hooks roda
+    código fora do sandbox dele), e assim nenhum plugin muda.
+  - **Nada de mexer na pasta do harness**, nem na lista de pastas confiáveis de um deles: o aviso
+    que o plugin já dá passa a sugerir confiar uma vez na pasta das workspaces.
+  - **Nada de workspace criada sozinha ao delegar:** a `delegate` ganha a opção explícita
+    `workspace: "new"`; sem ela, roda na pasta como hoje, e o resultado avisa se outro agente
+    trabalhava ali.
+  - **O projeto de uma worktree vem do git** (`git rev-parse --git-common-dir`, com cache), para
+    agrupar na lista, inclusive as worktrees criadas por fora.
+  - **Os arquivos locais copiados** são só os listados no `.worktreeinclude`, na criação, nunca de
+    volta.
+  - **O "o que mudou" pelo git** só dentro de uma workspace, onde a base é conhecida.
+- **Por que não quebra:** o modo local não muda, os plugins não mudam (a worktree é só mais uma
+  pasta no `ExecutorSpec.folder`), e tudo é acrescentado: tabela nova, campos opcionais no
+  protocolo, opção nova na `delegate`. O git do servidor é testado contra repositórios de verdade,
+  com os casos do Windows (arquivo preso, caminho longo).
+- **Ordem:** 1, o serviço de git no servidor; 2, a workspace no banco, com a conta e o agrupamento
+  pelo git; 3, começar uma sessão numa workspace; 4, a `delegate` com `workspace: "new"` e o
+  resultado com a branch e o resumo do que mudou; 5, a tela, e então A2 a A5.
+- **Decididas pelo usuário em 03/11** (as seis do estudo, todas pela recomendação):
+  1. **O git é do Atlas, por botões no app:** criar e apagar a worktree, o ponto de volta de cada
+     turno, o commit e o PR. O agente só mexe nos arquivos, e qualquer harness funciona igual;
+     pedir um commit ao agente pelo chat continua possível.
+  2. **Entregar:** abre um PR, com o CI no app, quando o remoto é o GitHub; nos outros casos junta
+     as mudanças na branch de origem, perguntando antes. (Revisto em 03/11, A revisão da sequência,
+     abaixo: o PR, os checks e a issue vêm do plugin do GitHub; sem ele, a workspace junta na
+     branch de origem e envia a branch.)
+  3. **As worktrees que já existem se agrupam sob o projeto, todas:** as do Atlas, as do harness e
+     as criadas por fora, pelo `git rev-parse --git-common-dir`.
+  4. **Na delegação, só a opção explícita** `workspace: "new"`, sem trava na pasta; sem ela, roda na
+     pasta como hoje e o resultado avisa se outro agente trabalhava ali.
+  5. **As worktrees ficam na casa**, numa pasta fora do backup, e apagar a casa avisa quando há
+     trabalho não entregue. A nova worktree do 18g, hoje ao lado do projeto, passa a ir para lá.
+  6. **O preparo de uma cópia nova:** o script de setup e a faixa de portas nas configurações do
+     projeto no app; os arquivos a copiar (o `.env`, por exemplo) listados no `.worktreeinclude` do
+     projeto.
+- **Em aberto, para quando a A1 chegar (o usuário prefere ver funcionando antes de escolher):**
+  - **O preparo num arquivo do repositório:** os scripts de preparo e de limpeza versionados no
+    projeto, ao lado do `.worktreeinclude`, valem para quem clonar; a alternativa à decisão 6.
+  - **Arquivar sem perder nada:** o trabalho não entregue salvo num commit no branch da workspace,
+    a pasta apagada e o branch guardado; desarquivar recria a pasta e desfaz esse commit. Apagar de
+    vez continua pedindo confirmação.
+- Os termos novos (workspace, checkpoint, comentário de revisão, script de setup) entram no
+  `docs/GLOSSARY.md` antes do código.
+
+#### O Atlas Cloud, passo 20 (estudado em 01/11, decidido em 03/11)
+
+Duas partes sob o mesmo nome, juntas só na cobrança: **computadores** (a casa, os bots e os
+executores em máquinas isoladas, sempre ligadas) e **créditos** (todos os modelos com uma chave só,
+pagos em reais, para o Atlas, os bots e os executores na nuvem). Uma carteira só.
+
+- **O plano de controle, pequeno e sempre ligado:** o relé, a API de contas, o orquestrador que
+  cria, acorda, suspende e apaga as máquinas, a cobrança com Pix, o despertador das rotinas e os
+  webhooks do Telegram. O banco de contas e créditos é gerenciado, e os backups vão num object
+  storage, para a máquina de controle poder morrer sem perder nada.
+- **O relé:** a casa e o app discam para fora até ele, que emenda as duas pontas e só repassa bytes,
+  com heartbeat (uma conexão de um notebook dormindo parece aberta por minutos). Serve também fora
+  da nuvem: qualquer máquina no app sem Tailscale, e o celular. Pode morar no Worker que o site já
+  tem na Cloudflare, sem máquina.
+- **O plano de dados: uma microVM por casa, com disco local, que dorme quando ociosa.** Um serviço
+  que escala por requisição não serve: o SQLite em WAL quer disco local (docs/ARCHITECTURE.md), o
+  Atlas trabalha sem ninguém pedindo nada, e o WebSocket teria teto de tempo. E o agente roda
+  shell: entre clientes, a barreira é uma VM (ou gVisor), não um container dividindo o kernel.
+- **O que muda no Atlas:** o relé como mais um tipo no código de conexão (já versionado para isso,
+  passo 15); o sinal de ocioso; o próximo despertar; o Telegram por webhook; o executor com crédito,
+  por chave de API; a sandbox de sessão (a pílula "nuvem"); o backup agendado; e a saída de rede
+  controlada (sem o endereço de metadados da nuvem, com limite de banda).
+- **Riscos aprendidos com quem já faz isso:** memória (o kernel mata o maior processo, que é o
+  orquestrador, e o agente não vê o limite real), disco cheio por build, processos órfãos depois de
+  uma queda, logins que não podem ir no snapshot, e a velocidade do disco de nuvem para o WAL.
+- **O executor na nuvem, estudado em 01/11:** crédito ou chave de API, não o login da assinatura.
+  Na máquina do usuário, o Atlas roda o harness sem modificação, com o login dele, e nunca toca no
+  token; num servidor do Atlas, cobrado, isso fica perto do que os termos proíbem ("rotear pedidos
+  pelas credenciais do plano em nome dos usuários"). Revisto em 03/11: o usuário quer a assinatura
+  também (decisão 2, abaixo).
+- **Fases:** 0, a máquina de controle, o relé e uma casa sempre ligada para poucos convidados, com
+  cobrança à mão, para medir o consumo; 1, suspender e acordar, Pix e créditos; 2, a sandbox por
+  sessão e o executor com crédito; 3, servidores próprios, se o volume pedir.
+- **Decididas pelo usuário em 03/11:**
+  1. **A casa inteira vai para a nuvem:** a memória, os bots, o Telegram, as rotinas e os
+     executores, numa microVM que dorme quando ociosa e acorda sozinha; tudo funciona com o
+     computador do usuário desligado. Não uma máquina por tarefa com a casa ficando no computador.
+  2. **O executor na nuvem aceita o crédito Atlas e também a assinatura do usuário**, com o
+     consentimento dele, conta por conta, e só pelo caminho que cada fornecedor permitir; o crédito
+     é sempre o caminho que funciona. Os termos lidos em 03/11 (fontes secundárias, a conferir nas
+     páginas da Anthropic e da OpenAI antes do código):
+     - **Anthropic:** desde fevereiro de 2026 o login de Free, Pro e Max vale só no Claude Code e no
+       Claude.ai, não em produtos de terceiros nem no Agent SDK; o `claude setup-token` é o caminho
+       para o próprio Claude Code em CI. Rodar o Claude Code de verdade, com o token do próprio
+       usuário, numa máquina só dele, é o caso mais perto do permitido, mas não está claro para um
+       serviço pago: perguntar à Anthropic antes; sem resposta, só o crédito.
+     - **OpenAI:** o "Sign in with ChatGPT" passou a deixar o plano do usuário pagar o uso em
+       ferramentas parceiras (DevDay 2026); o caminho é o Atlas entrar como parceiro, e não copiar o
+       `auth.json`.
+  3. **O relé fica na Cloudflare**, no Worker que o site já tem, sem máquina; serve também para
+     alcançar de fora o computador de casa.
+  4. **Cifrado de ponta a ponta desde a primeira versão:** só o app e a casa leem; o relé vê bytes
+     embaralhados.
+- **A conferir antes do código:** com o roteador de modelos, se a revenda de crédito é permitida.
+  Os nomes (Atlas Cloud, crédito, computador) entram no GLOSSARY antes do código.
+- **A troca automática de conta no limite do plano**, na máquina do usuário, era a parte da aba
+  Executores mais perto do que os termos apertam ("uso comum e individual"). Decidido em 03/11 (O
+  futuro dos executores, abaixo): sai do núcleo para um plugin da loja, e na nuvem a troca é com
+  crédito Atlas.
+
+#### O futuro dos executores (estudado e decidido em 03/11, passo 22)
+
+Em 03/11 o usuário pôs em dúvida as várias contas da aba Executores (passo 16h, a troca no limite e
+as rotas): pareciam remendo, não algo seguro e consistente para tarefas curtas e longas. Estudado
+com ele numa sessão e decidido na seguinte, no mesmo dia.
+
+- **O que se viu na máquina dele:**
+  - a troca de conta copia a sessão para a pasta da outra conta (`--fork-session`) e depois apaga
+    a original: 42 sessões apagadas, e com elas o histórico de edições que o "voltar atrás" usa;
+  - a memória automática de um projeto ficou espalhada por cinco pastas de conta, com arquivos que
+    só uma delas tinha e outros que divergiram; uma decisão de produto inteira estava numa só;
+  - as pastas das outras contas tinham configurações diferentes da principal: sem os hooks, sem as
+    permissões e sem as instruções do usuário;
+  - mover o projeto de pasta deixou sete memórias no caminho antigo, que nenhuma sessão lê mais.
+- **A raiz:** cada conta tem a sua pasta, e a pasta guarda o login junto com o trabalho. Trocar de
+  conta virou trocar de pasta, e trocar de pasta é copiar.
+- **Os pares, estudados em 03/11:** nenhum produto grande põe várias contas de assinatura, com
+  troca no limite, no núcleo. Os que rodam o harness do usuário usam o login dele, uma conta, e
+  trocar é entrar de novo; os que cobram créditos próprios trocam de fornecedor dentro da
+  capacidade que compraram; a troca entre contas só aparece em plugins e em programas pequenos de
+  terminal.
+- **Decidido pelo usuário em 03/11:**
+  - **No núcleo:** uma conta por harness, a do login dele (trocar é entrar de novo, na mesma pasta,
+    e as sessões continuam); e, no limite do plano, a mesma sessão retomada sozinha quando o plano
+    volta.
+  - **Num plugin da loja:** várias contas e a troca entre elas no limite, para quem quiser (o
+    usuário acha que vale criar). O núcleo daria só o aviso de limite e o "continuar esta sessão".
+  - **No Atlas Cloud:** as tarefas longas e a troca no limite que os termos permitem, com créditos
+    Atlas: a mesma sessão segue por outra chave ou outro provedor do mesmo modelo.
+  - **O diferencial** passa a ser as três faces sobre a mesma casa, e a nuvem; não "toda conta,
+    todo harness".
+  - **A memória de cada projeto num lugar só, na casa, fica para depois** (pelo usuário, em 03/11):
+    pela configuração `autoMemoryDirectory` do Claude Code no `.claude/settings.local.json` do
+    projeto, que vale também fora do Atlas. Por ora ela fica onde o harness guarda, e a prova abaixo
+    vem antes de mudar.
+- **Por que a memória num lugar só, mesmo com uma conta:** o caminho do projeto muda (pasta movida,
+  worktree, outro clone); a nuvem precisa da memória dentro da casa; o assistente e os bots passam
+  a ler o que os executores aprenderam; e o plugin de contas volta a ter várias pastas.
+- **A provar antes de mudar a memória:** o `autoMemoryDirectory` na versão do usuário, contra o
+  `claude` de verdade, perguntando antes do gasto. Houve relatos, de março a junho de 2026, de ele gravar no
+  lugar novo enquanto o modelo ainda ouvia o caminho antigo.
+- **Em aberto:**
+  1. A passagem entre harnesses (do Claude Code para o Codex), que perde por natureza: elaborar
+     depois.
+  2. O que o núcleo oferece ao plugin de contas.
+  3. Juntar as memórias espalhadas, arquivo por arquivo, com o usuário, antes de remover qualquer
+     coisa.
+  4. As sessões que o próprio harness apaga depois de 30 dias sem uso (`cleanupPeriodDays`).
+  5. A tarefa longa na máquina do usuário quando o plano acaba de madrugada.
+
+#### A base B, os gatilhos (estudada e decidida em 03/11)
+
+Proposta em 03/11 com quatro fatias: gatilhos por evento, metas duradouras, um laço de atenção e
+um diário do que foi feito sem ninguém olhando. **Decidido pelo usuário em 03/11: só os eventos
+entram no núcleo; metas, atenção e diário são caso de plugin.**
+
+- **O que a pesquisa mostrou, para quem escrever esses plugins:**
+  - **O pulso fixo é pior que nada.** No V3, de 100 reflexões medidas em 02/10, o único valor real
+    foi resgatar a rotina atrasada, que já é regra do cron no V4. No PM-Bench (arXiv 2607.12385), o
+    pulso de 30 ou 60 min ficou abaixo de pulso nenhum (57,8 contra 60,0) e deu o dobro de alarmes
+    falsos (489 contra 199). O melhor resultado foi o despertar que o próprio agente marca (65,1), e
+    a lista de pendências teve a melhor precisão (73,2%).
+  - **Perguntar "preciso agir?" antes de agir** derrubou as ações desnecessárias de 93,4% para 40,8%
+    (ProEvent, arXiv 2607.17701).
+  - **O registro sai das chamadas de ferramenta, não do relato do modelo.** No V3, uma rodada que
+    respondeu "nada a fazer" tinha disparado 14 rotinas.
+- **No núcleo, os eventos (decididos pelo usuário em 03/11, passo 23):** a rotina passa a disparar
+  também por evento, e não só por horário.
+  - **A sonda:** um comando barato, sem modelo, que roda de tempos em tempos e só acorda o agente
+    quando imprime alguma coisa. Exemplo: o `gws gmail` a cada 5 min; chegou e-mail do fornecedor, o
+    bot de compras acorda com ele; não chegou, nada se gasta. É o "script que decide se acorda o
+    agente" que as rotinas deixaram de fora em 11/10.
+  - **O webhook vem com o relé** (pelo usuário, em 03/11), no passo 20: um endereço por rotina,
+    com segredo próprio, que o relé entrega à casa. Sem webhook só local antes disso.
+  - **A execução é a de uma rotina:** conversa nova, ou a conversa fixa do bot dono; sem ninguém
+    para aprovar (`cron_mode: deny`); com as guardas de laço. O que o evento traz é texto de fora:
+    marcado e varrido como a saída do `gh` e do `gws` (passo 14b).
+  - **Uma abertura no SDK** para o plugin trazer a sua fonte de evento (o GitHub, a agenda) e ser
+    chamado quando um evento chega: é sobre ela que os plugins de metas, de atenção e de diário se
+    apoiam.
+- **Na linha:** passo 23, depois do 21 e antes do 20, porque roda local (pelo usuário, em 03/11).
+  Os termos novos (gatilho, sonda) entram no `docs/GLOSSARY.md` antes do código.
+
+#### A base D, a loja aberta (estudada e decidida em 03/11, passo 24)
+
+A base D eram três ideias: conectar um serviço com um clique, um intermediário de apps no lugar do
+MCP à mão, e um índice dos dados conectados. A pesquisa de 03/11 mostrou que metade do clique já
+existe: o MCP remoto entra com OAuth e o botão Entrar desde 28/10. Faltava achar o serviço. **A
+base D passou a ser a loja cheia e aberta, mais um ajuste no login.**
+
+- **Os pares, estudados em 03/11:** nenhum usa uma fonte só para tudo; cada tipo tem uma fonte que
+  virou o padrão. Um harness tem o seu diretório de plugins e aceita qualquer loja que o usuário
+  junte; outro tem a sua loja aberta, com instalações, estrelas e uma análise de segurança
+  automática; outro lê várias fontes direto, com um verificador ao instalar. Os clientes de MCP
+  leem o registro oficial do MCP. Nenhum catálogo oficial traz o número de downloads; só a busca do
+  skills.sh traz as instalações das skills.
+- **Decidido pelo usuário em 03/11:**
+  1. **Uma fonte pública por tipo, lida direto pelo Atlas, sem revisão nem cópia** (no lugar de
+     "cada item entra por um PR que ele revisa", da Loja, acima):
+     - **MCPs:** o MCP Registry oficial (`registry.modelcontextprotocol.io`), feito para ser lido
+       por outras lojas: nome verificado pelo domínio ou pelo GitHub do autor, descrição, versão,
+       pacote ou remoto, e as datas.
+     - **Plugins:** o diretório oficial de plugins do Claude Code (`anthropics/claude-plugins-official`,
+       315 plugins em 03/11), no formato que os plugins do Atlas já usam; muitos são do dono do
+       serviço.
+     - **Skills:** o skills.sh. A busca devolve só o que se pediu, já com as instalações (em 03/11:
+       "gmail" deu o `gws-gmail` com 83.307, em 0,2 s): abrir a aba é uma consulta (as mais
+       instaladas), cada busca é outra, e instalar baixa só aquela skill do GitHub. A varredura
+       contra texto malicioso (passo 7) roda ao instalar. A API não é documentada: o Atlas guarda a
+       última lista lida e avisa quando a busca quebra.
+     - **O `atlas-marketplace` fica com o que é do Atlas** (os executores, a voz, o Telegram, o gh e
+       o gws), aberto: um PR entra quando o CI passa.
+     - **O cartão mostra o que a fonte dá:** as instalações (só nas skills), a categoria, o autor,
+       a licença, a data da última versão e de onde veio. Nada de contador próprio (pelo usuário:
+       contar pelo Worker do site seria remendo).
+     - O que já protege continua: o consentimento ao ligar um plugin, o portão, a lista de
+       retirados e a pergunta quando é o agente quem instala.
+  2. **O gh e o gws saem do núcleo para plugins na loja** (no lugar das skills embutidas do 14b;
+     feito no passo 26, a poda, e não no 24, conferido em 03/11).
+     As regras de pergunta (`gws gmail send`, `gh pr merge` e as outras) vão na declaração do
+     plugin, aceitas no consentimento ao ligar e fora do alcance do agente, nunca na skill. O passo
+     Conexões da primeira abertura (18d) passa a instalar o plugin. Para o GitHub, conferir antes o
+     plugin oficial do diretório.
+- **O ajuste no login:** o Atlas se apresenta aos servidores MCP pelo documento de cliente publicado
+  num endereço dele (CIMD, a forma que a especificação de 2026-07-28 prefere), no atlasv4.com, e
+  continua com o registro a cada login (RFC 7591, o de hoje) onde o servidor ainda não aceita.
+- **O Google segue como hoje:** cada um com o seu projeto, pelo `gws` (agora plugin). Um projeto
+  único do Atlas pede ao Google uma auditoria de segurança todo ano (o Gmail é escopo restrito;
+  as fontes de 03/11 dão de US$ 540 a US$ 15 mil ou mais), e sem ela fica com o aviso e o teto de
+  100 usuários. Volta com o Atlas Cloud.
+- **Fora do núcleo, como plugin se alguém quiser:** o intermediário de apps (os tokens do usuário
+  numa empresa de fora, cobrado por chamada) e o índice dos dados conectados.
+- Os termos novos (fonte da loja, CIMD) entram no `docs/GLOSSARY.md` antes do código.
+
+#### As rotinas num executor e os modelos (pedidos e decididos em 03/11, passo 25)
+
+O usuário mostrou em 03/11 a tela de laços de um ADE como referência: uma visão geral com o que
+rodou sozinho, o que precisou dele e o que falhou; uma aba de modelos por categoria, em três níveis
+(essencial, recomendado, útil), cada cartão com o modelo, o esforço, a frequência e o Adicionar; e
+o detalhe com o prompt editável, a agenda, o agente, onde roda, os segredos e o Rodar agora. Lá,
+cada laço roda um harness dentro de um repositório.
+
+- **A rotina passa a rodar também num executor, numa pasta** (decidido pelo usuário em 03/11): além
+  do Atlas e de um bot, a rotina escolhe um executor (o Claude Code, o Codex...) e a pasta, e cada
+  execução é uma sessão dele ali. É opcional, e o Atlas também cria uma assim: ao criar, mostra uma
+  vez a pasta, o executor e o modo de permissão e pergunta, como já pergunta pela rotina com
+  comando, porque ela vai rodar sem ninguém olhando com as permissões do harness. Casa com a
+  workspace (passo 21).
+- **Criar e editar rotina no app** (pelo usuário, na revisão da sequência em 03/11), no lugar de
+  "criar continua pela conversa e pelo terminal" (11/10): um formulário com o prompt, quando
+  (horário ou sonda), quem roda (o Atlas, um bot ou um executor numa pasta), o modelo, o esforço e
+  o Rodar agora.
+- **Uma aba Modelos na tela de Rotinas,** e não um tipo da loja (pelo usuário): categorias, os três
+  níveis, o cartão com o modelo, o esforço e a frequência, e o Adicionar, que abre a rotina pronta
+  para ajustar. Nenhum catálogo público tem modelos de rotina, então os primeiros são escritos pelo
+  Atlas, em português, em dois grupos:
+  - **de projeto,** num executor: varredura de segurança, PRs parados há 3 dias, testes faltando;
+  - **pessoais,** no Atlas ou num bot: o resumo dos e-mails às 8h, a agenda de amanhã às 20h, o
+    backup diário.
+- **Um placar no alto da tela de Rotinas:** "esta semana: 12 rodaram sozinhas · 2 precisaram de
+  você · 1 falhou", contado das execuções que o Atlas já guarda. Não é o diário da base B, que é de
+  plugin.
+- Os termos novos (modelo de rotina, placar) entram no `docs/GLOSSARY.md` antes do código.
+
+#### A base E, os canais (estudada e decidida em 03/11)
+
+- **Os pares, estudados em 03/11:** os apps de celular dos agentes pessoais se pareiam com a máquina
+  por QR, e as notificações passam por um servidor do fornecedor (o push do Android e do iPhone
+  pede um servidor com credencial); um harness deixa o celular comandar a sessão do computador pelo
+  servidor dele. A ligação telefônica chega à OpenAI por um número da Twilio, e a OpenAI avisa o
+  servidor por webhook, que precisa de endereço público. O bot do Slack recebe as mensagens por uma
+  conexão de saída (Socket Mode), sem endereço público; desde 2025 o Slack limita a leitura do
+  histórico de apps de terceiros fora da loja dele a 1 pedido por minuto, e o app criado pelo
+  próprio usuário no workspace dele fica de fora do limite.
+- **Decidido pelo usuário em 03/11:**
+  - **O app no celular é um PWA com poucas funções, e só depois do relé** (passo 20), para não
+    precisar do Tailscale. A notificação vem pelo relé.
+  - **Todo canal é plugin, inclusive o Telegram,** fora da instalação (A poda do núcleo, abaixo).
+    O telefone (sobre o plugin `voice`), o WhatsApp e o Slack vêm como plugins quando fizerem
+    falta, os dois primeiros depois do relé; nenhum foi desenhado ainda.
+
+#### A poda do núcleo (pedida e decidida em 03/11, passo 26)
+
+O usuário quer podar o núcleo e formalizar o que foi construído: lapidar o Atlas antes de crescer.
+Em 03/11 o núcleo tinha uns 62 mil linhas de Python, e a instalação trazia junto 8.860 linhas de
+plugins embutidos (os quatro executores, 6.942; o `voice`, 1.297; o `telegram`, 620) e as 13 skills
+do gh e do gws.
+
+- **A regra do núcleo** (decidida pelo usuário em 03/11, escrita no `docs/ARCHITECTURE.md`):
+  - **o núcleo são as capacidades do próprio agente:** conversar, ler e escrever arquivos, rodar
+    comandos, lembrar, aprender skills, agendar e reagir a eventos, delegar (o contrato), **usar o
+    navegador e usar o computador**, e as peças que as seguram (confiança, servidor, casa, loja,
+    cliente MCP, SDK). Uma capacidade é do núcleo mesmo quando roda sobre um programa de fora (o
+    Chrome, o motor de tela): trocar o programa não tira a capacidade do agente;
+  - **é plugin a ligação com um serviço, uma conta ou um programa específico:** um canal (o
+    Telegram), um harness de fora (os executores), uma API de terceiros (a voz pela OpenAI), o
+    GitHub e o Google pelo terminal;
+  - os adaptadores de modelo ficam no núcleo: sem modelo não há conversa.
+- **O navegador e o uso do computador são nativos** (pelo usuário: "partes que precisamos trabalhar
+  muito bem ainda"). O passo 14c, que decidiu o motor de tela como MCP em 20/10, é revisto por
+  esta regra quando chegar.
+- **Saem da instalação para a loja, como itens oficiais:** os quatro executores, o `voice`, o
+  `telegram`, e o gh e o gws. **Ficam embutidas** (pelo usuário) as skills `atlas`, a
+  documentação do Atlas sobre si, e `write-plugin`, que é o próprio SDK.
+- **A voz se divide** (decidido pelo usuário em 03/11):
+  - **no núcleo, grátis e sem chave:** gravar e mandar áudio pelo 🎤, e todo áudio que chega, de
+    qualquer canal, transcrito no próprio computador (um modelo local, baixado no primeiro áudio e
+    não na instalação; o Whisper small roda a umas 7 vezes o tempo real num processador comum, e o
+    Parakeet v3 é provado contra ele com áudio em português do Brasil antes da escolha); com uma
+    chave da OpenAI ou do Gemini, a transcrição na nuvem fica à escolha nas configurações;
+  - **o ditado em qualquer lugar (17b) vem para o núcleo,** grátis pela mesma transcrição,
+    **opcional e desligado de fábrica**, com a troca do atalho refeita: aceitar botão do mouse e
+    combinação de teclas, o que o atalho global do Electron não ouve e pede um ouvinte de teclado e
+    mouse do sistema, opcional como o `node-pty`;
+  - **no plugin `voice` ficam** a fala (o Atlas responder em áudio) e a conversa ao vivo.
+- **As várias contas e as rotas saem com o passo 22**, que é poda também: as pastas por conta, a
+  cópia da sessão entre contas, a troca automática no limite e a rota da sessão entre harnesses
+  (21/10) vão para um plugin oficial de contas, feito no mesmo passo, para quem usa não perder nada
+  no caminho. O núcleo dá ao plugin o aviso de limite, o "continuar esta sessão" e a troca do login
+  de um executor. **Escolha própria, marcada:** é o que resolve o item 2 em aberto do 22.
+- **As telas que dependiam disso mudam junto:** o convite "mais de uma conta?" da primeira abertura
+  (18d) vira o convite do plugin de contas na loja; a tarefa "adicionar uma segunda conta" dos
+  Primeiros passos (18e) vira "instalar algo da loja"; a página Ditados sai da tela do plugin e
+  vira do app.
+- **O gh e o gws saem aqui, não no 24:** saem as skills, a instalação do programa e o passo de
+  conexão. **As defesas ficam no núcleo** (corrigido na revisão de 03/11, abaixo): a lista de ações
+  para fora (`atlas.trust.outward`), a saída marcada como texto de fora e o login dos programas
+  fora do backup são do portão e da casa, e valem venha o programa de onde vier, inclusive das
+  skills do `gws` pelo skills.sh. Um plugin pode acrescentar regras na declaração dele, nunca tirar.
+  Para o GitHub, o plugin oficial do diretório do Claude Code é conferido antes; se servir, a loja
+  aponta para ele, como fez com o da Cloudflare.
+- **Como fica:** os plugins oficiais continuam no repositório do Atlas, numa pasta própria, testados
+  no mesmo CI, e a loja os oferece fixados no commit da versão; a primeira abertura (18d) instala da
+  loja o que o usuário escolhe; a atualização instala da loja o que já estava ligado, sem perder
+  dado nem configuração; os testes de ponta a ponta instalam os executores falsos de uma loja falsa,
+  como os da loja já fazem.
+- **Conferido contra os outros passos em 03/11:**
+  - o 24 deixa de tirar o gh e o gws (vêm para cá) e passa a aceitar MCP com OAuth no item `mcp`,
+    porque o registro oficial tem servidores remotos assim (16s os aceitava só dentro de um plugin);
+  - o 25 depende dos executores já como plugins e do 21 (a rotina de executor roda numa
+    workspace);
+  - o 21 usa a pílula de onde a sessão roda (18g) e fecha a caixa com pílulas que ficou por desenhar
+    no 18d;
+  - o 14c passa a capacidade nativa e precisa de um novo desenho antes do código;
+  - o Atlas Cloud (20) instala os plugins da loja como qualquer casa.
+- **Na linha:** antes do 21 (pelo usuário), porque cada passo construído antes dela põe mais coisa
+  no núcleo. O 22 vem junto, antes dele, para os executores irem à loja já com uma conta só.
+
+#### A revisão da sequência (pedida e feita em 03/11)
+
+O usuário pediu, antes de ligar a sequência, uma revisão atrás de incoerências, regras que brigam
+entre si, problemas não mapeados e cenários específicos, para a sequência rodar inteira sem nova
+revisão. Conferida contra o texto e contra o código em 03/11. O que ela resolveu sem o usuário vai
+como **escolha própria, marcada**, para ele vetar quando quiser; nada aqui muda uma decisão dele.
+
+**As regras que valem para toda a sequência:**
+- **A prova de cada passo, sem gastar crédito:** os fiscais nos dois sistemas, os testes contra os
+  falsos (modelo, harnesses, GitHub, loja) e o e2e. A prova com modelo ou conta real de cada passo
+  entra na lista do dia de provas (item 4 da linha) e não segura o passo seguinte. **Escolha
+  própria, marcada:** sem ela, "cada passo fecha com prova" pararia a sequência a cada passo para
+  perguntar pelo crédito.
+- **Cada passo:** os termos novos no `docs/GLOSSARY.md` antes do código; a página do usuário em
+  `src/atlas/docs/pages/` no mesmo commit; `gen_protocol` e `gen_docs` quando o protocolo ou um
+  comando mudam; um commit por fatia, direto na `main` depois dos fiscais, conferindo o CI.
+- **Nunca contra a casa real:** a sessão pode estar rodando dentro do Atlas instalado; nada da
+  sequência reinicia, atualiza ou migra a casa de `~/.atlas`. A prova no app usa uma instalação
+  temporária com `APPDATA` próprio.
+- **Uma parada também acontece** quando um passo esbarra numa decisão de produto que esta revisão
+  não previu: a sequência anota a pergunta com o exemplo concreto e segue para o que não depende
+  dela, se houver.
+
+**As incoerências achadas e corrigidas:**
+1. **A loja sem revisão estava na lista do que fica de fora de propósito** (Uma casa, três faces) e
+   o "seguro por padrão" citava a loja revisada. Corrigidas para a decisão de 03/11.
+2. **As regras de pergunta do gh e do gws iriam para a declaração do plugin**, e assim o `gws` que
+   chegasse pelas skills do skills.sh (o `gws-gmail` com 83 mil instalações) mandaria e-mail sem
+   perguntar. Ficam no núcleo (A poda do núcleo, acima).
+3. **A detecção dos executores mora no plugin** (`Executor.detect`): um executor que ainda não foi
+   instalado não pode ser detectado. **Escolha própria, marcada:** o item de executor da loja
+   declara o programa que procura (`bins`, como a skill já declara), e o núcleo procura esses
+   programas para oferecer o plugin na primeira abertura e na tela de Executores.
+4. **O PR, os checks e a issue da workspace (A4, A5) falam com o GitHub**, que pela regra do núcleo
+   é plugin. **Escolha própria, marcada:** a workspace do núcleo entrega juntando na branch de
+   origem e enviando a branch (`git push`, perguntando, que é ação para fora); o plugin do GitHub
+   acrescenta o "abrir PR", os checks no app e a issue que vira workspace. A decisão 2 do 21 continua
+   valendo quando o plugin está ligado.
+5. **"Atualizar é um botão, nunca sozinho" (Loja) e os plugins oficiais**, que falam o protocolo
+   interno de cada versão do Atlas. **Escolha própria, marcada:** os plugins oficiais se atualizam
+   junto com o Atlas, no commit da mesma versão; os de fora continuam no botão.
+6. **O 22 ficava sem lugar** na ordem e a base saudável sem número: ela vira o passo 28.
+
+**Os cenários, passo a passo, com o que fazer:**
+- **28, a base saudável:**
+  - pronto quando dez rodadas seguidas do CI na `main` passam sem nova tentativa; um teste
+    instável é consertado na causa (tempo, ordem, recurso preso), nunca pulado nem marcado para
+    tentar de novo;
+  - um alerta de dependência sem conserto publicado (o katex, que espera o mermaid 12) fica aberto
+    e anotado, sem segurar o passo.
+- **22, uma conta por harness:**
+  - o `_drop_replaced` e a cópia da sessão para a pasta de outra conta saem já; nenhuma sessão é
+    apagada pelo Atlas;
+  - quem tem mais de uma pasta de conta hoje: a atualização instala o plugin de contas sozinha (é
+    o que ele já usava) e nenhuma pasta é mexida; sem o plugin, o núcleo lista só as sessões da
+    pasta principal do harness;
+  - vale para o Codex (cada conta com o seu `CODEX_HOME`) como para o Claude Code;
+  - **retomar quando o plano volta:** só a sessão que parou no meio de um turno pelo limite; na
+    hora em que o harness diz que o limite acaba, mais um minuto, uma vez, com a mensagem
+    "continue"; com o computador dormindo, na volta, se ainda fizer sentido (o turno não foi
+    retomado à mão). A rotina que bateu no limite segue a mesma regra;
+  - o apagamento de sessões pelo próprio harness depois de 30 dias (`cleanupPeriodDays`) fica como
+    está: o Atlas não mexe na configuração do harness (regra do 21).
+- **26, a poda:**
+  - **para quem desenvolve:** rodando do repositório (`uv run atlas serve`), os plugins oficiais
+    carregam da pasta local, sem rede, e o e2e usa a mesma pasta;
+  - **sem rede na primeira abertura:** os passos que instalam dizem que não conseguiram e ficam
+    para depois em Configurações; o resto da primeira abertura segue;
+  - **a transcrição** vem como um extra (`transcribe`), instalado com o modelo no primeiro áudio,
+    depois de perguntar uma vez com o tamanho, como o `anthropic` já é carregado só quando preciso;
+    o Telegram passa o áudio ao núcleo, que transcreve com ou sem o plugin `voice`;
+  - **o ditado:** no Linux com Wayland, que não deixa ouvir o teclado de fora, a tela diz que não
+    há ditado em qualquer lugar ali; no Mac, pede a permissão de Acessibilidade; o ouvinte de teclado
+    e mouse é opcional como o `node-pty`, e sem ele o atalho aceita só o que o Electron ouve.
+- **21, a workspace:**
+  - as duas em aberto (o preparo num arquivo do repositório e o arquivar) seguem pela recomendação
+    marcada; o usuário troca na parada depois da A1;
+  - a pasta que não é repositório git não tem workspace: a sessão roda nela como hoje.
+- **23, os gatilhos:**
+  - **a sonda que repete:** um comando que lista os e-mails não lidos imprime os mesmos a cada 5
+    min. O Atlas guarda a última saída de cada sonda e só acorda quando ela muda; a sonda recebe
+    também uma pasta própria (`ATLAS_PROBE_STATE`) para guardar o seu cursor;
+  - **o evento que chega com a rotina rodando:** fica para uma execução logo depois, com todos os
+    que chegaram juntos, nunca perdido e nunca uma execução por evento;
+  - **enxurrada:** no máximo uma execução por minuto por rotina, juntando o resto;
+  - **a sonda que falha:** saída de erro não acorda o agente; na terceira falha seguida, avisa o
+    usuário uma vez, e o aviso volta só se ela voltar a funcionar e falhar de novo;
+  - **o intervalo** mínimo é 1 minuto; com o computador dormindo, a sonda roda uma vez na volta, sem
+    recuperar as perdidas;
+  - o comando da sonda passa pelo portão ao ser criado e ao ser mudado, como o da rotina sem modelo,
+    e o bot não cria sonda.
+- **24, a loja aberta:**
+  - **plugin de fora que o Atlas não carrega** (os 12 do diretório com servidor LSP, por exemplo):
+    um teste no CI da loja, de noite, instala cada item das fontes e grava num arquivo do
+    `atlas-marketplace` só o resultado (compatível ou o motivo); o cartão mostra "não funciona no
+    Atlas" e não instala. Nenhum código de fora é copiado;
+  - **o PR de fora no `atlas-marketplace`:** o CI roda o `check` sem segredo nenhum, e quem junta é
+    outro fluxo, que não roda o código do PR; o selo de oficial e a lista de retirados mudam só pelo
+    dono do repositório, e o CI recusa o PR que mexe neles;
+  - **a skill instalada do skills.sh** é fixada no commit que estava no GitHub na hora, e o
+    Atualizar aparece quando o repositório andou;
+  - **o MCP do registro** com versão de pacote exata entra como está; o remoto com OAuth ganha o
+    Entrar; o que pede chave pede pelo cofre; o retirado vale também para os de fora, pelo nome;
+  - a lista dos MCPs, sem número de uso, mostra primeiro os do próprio fornecedor (o nome
+    verificado pelo domínio dele) e depois os atualizados há menos tempo.
+- **25, as rotinas num executor:**
+  - **o executor pede permissão sem ninguém olhando:** a execução para ali, a sessão fica guardada
+    para continuar à mão, e conta no placar como "precisou de você", que é exatamente isso; nunca
+    aprova sozinho além do modo de permissão escolhido na criação;
+  - **onde roda:** a rotina que só lê (a varredura) roda na pasta; a que muda código roda numa
+    workspace nova a cada execução, arquivada sozinha quando termina sem mudança;
+  - **entregar:** a rotina não abre PR sozinha. **Escolha própria, marcada:** na criação, o usuário
+    pode marcar "abrir PR em rascunho ao terminar" (com o plugin do GitHub), desligado de fábrica;
+  - **o modelo de rotina que precisa de um plugin** ("PRs parados" precisa do gh) diz isso no
+    cartão, e o Adicionar oferece instalar antes;
+  - o bot continua só com rotina de prompt: não cria rotina de executor nem sonda;
+  - **o placar:** "sozinha" é a execução que terminou sem pedir nada; "precisou de você" é a que
+    parou numa pergunta ou numa aprovação negada por falta de quem aprovasse; "falhou" é erro.
+- **14c:** parada para o desenho novo, já marcada na linha.
+- **20, o Atlas Cloud:** a parte do Atlas é provada contra um relé falso local, com a cifra de ponta a
+  ponta e o pareamento pelo código de conexão do passo 15; subir o Worker na Cloudflare é da parada,
+  como o site.
+- **27, o app no celular:** sem desenho de tela ainda; entra quando o 20 fechar, começando por
+  desenhar as poucas funções com o usuário (conversas, aprovações, sessões dos executores e o 🎤).
+
+**As perguntas que faltavam** (uma segunda análise, em 03/11, atrás do que travaria a execução por
+falta de resposta):
+- **Decididas pelo usuário em 03/11:**
+  1. **O plugin de contas aparece onde se usa hoje:** o SDK ganha pontos de encaixe, e o plugin
+     põe a pílula da conta e a rota no alto da sessão e no cartão do executor; não só numa tela
+     própria. Feito no 22, junto com o plugin.
+  2. **O 25 traz criar e editar rotina no app** (no lugar de "criar continua pela conversa e pelo
+     terminal", de 11/10): um formulário com o prompt, quando (horário ou sonda), quem roda (o
+     Atlas, um bot ou um executor numa pasta), o modelo, o esforço, e o Rodar agora.
+  3. **A parte do Atlas no 20 vem antes do 14c**, para a sequência rodar direto até só sobrar o que
+     depende do usuário.
+- **Escolhas próprias, marcadas:**
+  - as rotas que já existem (`jobs_session_routes`) migram para o plugin de contas na atualização;
+  - "qualquer harness" na workspace inclui o próprio Atlas: uma conversa dele pode rodar numa
+    workspace;
+  - os modelos de rotina começam com uns 12, metade de projeto e metade pessoais, cada um no modelo
+    padrão do executor ou da conversa, sem modelo fixo;
+  - a escolha entre o Whisper e o Parakeet é feita com áudio público em português (sem nada do
+    usuário);
+  - sem o documento do CIMD publicado, o login segue pelo registro de hoje: a parada de publicar
+    não segura a sequência; a parada depois da A1 também não (segue a recomendação, e o usuário
+    revisa a tela da workspace e as duas escolhas quando quiser);
+  - cada passo deixa a `main` usável: quem atualizar no meio da sequência não pega o Atlas pela
+    metade.
+- **Fora da sequência, com o usuário:** juntar as memórias espalhadas pelas pastas de conta,
+  arquivo por arquivo (o item 3 em aberto do 22).
+
 ## Assuntos de desenho ainda abertos
 
 A arquitetura do código foi decidida em 07/10 e está em `docs/ARCHITECTURE.md`: laço próprio sem
@@ -4001,6 +4648,23 @@ servidor em Starlette.
    telemetria (desligável) e o foco no Windows (clicar e ler em segundo plano funcionam, digitar
    não). Decidido pelo usuário em 20/10: no Auto a tela roda sem perguntar, e só apagar, pagar,
    enviar ou confirmar algo para fora pergunta sempre.
+
+9. As faces do Atlas. Estudadas em 01/11 (Uma casa, três faces, acima): as bases A a F, a
+   workspace desenhada e o Atlas Cloud, cada uma com as decisões que são do usuário.
+
+10. Os executores e as contas. Decidido em 03/11 (O futuro dos executores, acima): uma conta por
+    harness no núcleo, várias contas num plugin e a troca no limite no Atlas Cloud; a memória de
+    cada projeto na casa fica para depois.
+
+11. Os gatilhos. Decidido em 03/11 (A base B, os gatilhos, acima): só os eventos no núcleo, pela
+    sonda; o webhook com o relé; metas, atenção e diário em plugins.
+
+12. Os conectores e a loja. Decidido em 03/11 (A base D, a loja aberta, acima): uma fonte pública
+    por tipo lida direto, sem revisão; o gh e o gws como plugins; o CIMD; o Google como hoje.
+
+13. Os canais e o núcleo. Decidido em 03/11 (A base E e A poda do núcleo, acima): o app no
+    celular é um PWA depois do relé; todo canal é plugin; o núcleo são as capacidades do agente,
+    com o navegador e o computador nativos, e o que liga a um serviço é plugin.
 
 Cada um é decidido quando o passo que depende dele chegar.
 
@@ -4035,16 +4699,60 @@ cumpriu.
 **A ordem até o fim, decidida pelo usuário em 27/10,** vale no lugar da ordem da tabela para os
 passos que faltam:
 
-1. O app redondo: o 9e, e as vulnerabilidades das dependências que o GitHub aponta na `main`.
+1. O app redondo: o 9e, o 18d, e as vulnerabilidades das dependências que o GitHub aponta na `main`.
 2. Distribuir: o 18b, o 18c e o resto do 19 (o domínio, o português, as News e o link do guia no
-   app). Sem a conta paga da Apple, o app do Mac abre só depois do "Abrir mesmo assim" nos Ajustes
+   app). Em 01/11: o 18b ✅, e do 19 o domínio, o link do guia e o português da home e do Começar;
+   **o resto do 19 (a documentação inteira em português, a rotina das News, a nota do Is It Agent
+   Ready e a prova com modelo real) ficou para depois, pelo usuário em 01/11**. Sem a conta paga da Apple, o app do Mac abre só depois do "Abrir mesmo assim" nos Ajustes
    na primeira vez e se atualiza pelo atualizador nosso; a conta vale quando o Atlas for para quem
    não é técnico.
-3. Crescer: o 14c, o 16r e o 17.
+3. Crescer: o 14c, o 16r e o 17. **Em 01/11, pelo usuário: o 16r e o 17 fechados sem código (não
+   precisamos mais deles); o 14c fica, mas não agora, porque usar o computador precisa ser muito bem
+   feito.**
 4. Um dia de provas, as adiadas todas juntas, perguntando antes de gastar crédito: o 15, o 17a e o
    17b na OpenAI, o 16q com uma chave da DeepSeek, o 19 com um modelo real, o Cmd+W do 9d num Mac
    e o uso da tela do 15b.
-5. O 20, o Atlas Cloud.
+
+**Revista em 03/11 para rodar em sequência,** pelo usuário: a intenção não é escolher um passo
+depois do outro, e sim ligar o agente e seguir construindo até o fim. Cada item começa quando o
+anterior fecha com prova; só as **paradas** marcadas esperam o usuário. Conferida passo a passo em
+03/11 (A poda do núcleo, acima: o que cada passo muda nos outros).
+
+5. **O 28, a base saudável.** O CI da `main` verde de forma estável: em 03/11, três das seis últimas
+   rodadas falharam sem defeito no que mudou (um teste de plugin com tempo curto no Windows, o
+   desktop no Linux e o e2e do Windows). Junto, o plano dos testes de 01/11 e os alertas de
+   dependência (12 em 03/11, com o Electron 43.8.1 liberado no mesmo dia). Uma sequência longa
+   trava em CI vermelho que não é dela.
+6. **O 22,** uma conta por harness, com o plugin oficial de contas feito no mesmo passo.
+7. **O 26,** a poda do núcleo.
+8. **O 21,** a workspace. **Parada:** depois da A1, o usuário escolhe o preparo e o arquivar vendo
+   funcionar (as duas em aberto no desenho); a sequência segue com a recomendação marcada.
+9. **O 23,** os gatilhos por sonda.
+10. **O 24,** a loja aberta. **Parada:** publicar o documento do CIMD no atlasv4.com, porque o site
+    não sobe pelo CI.
+11. **O 25,** as rotinas num executor e os modelos.
+12. **O 20, a parte do Atlas** (antes do 14c, pelo usuário em 03/11): o relé no Worker como tipo
+    de conexão, a cifra de ponta a ponta, o sinal de ocioso, o próximo despertar, o Telegram por
+    webhook, o backup agendado e a saída de rede controlada, provados contra um relé falso local.
+13. **As paradas, quando só resta o que depende do usuário:**
+    - **o 14c,** o uso do computador, agora capacidade nativa: um desenho novo com o usuário antes
+      do código;
+    - **o 20, a infraestrutura e a cobrança:** as contas pagas, o Pix, a pergunta à Anthropic e a
+      revenda de crédito;
+    - **o 27,** o app no celular: o desenho das poucas funções com o usuário.
+14. **Depois do relé no ar:** o webhook dos gatilhos (23) e o 27.
+
+**Rodada de 03/11 a 05/11,** com o agente ligado: o 28 (em andamento, abaixo), o 22, o 26, o 21, o
+23, o 24, o 25 e a parte do Atlas do 20, nessa ordem, cada um na `main` com a suíte toda e o e2e
+do Windows verdes. Ficam as paradas do item 13 e as do 24 (publicar o site e os fluxos do
+`atlas-marketplace`), quatro perguntas ao usuário (o `gh` no instalador, o nome "workspace",
+consentir de novo um plugin oficial que só ganhou chamadas da própria tela, e os fluxos do
+`atlas-marketplace`) e as provas de cada passo para o dia de provas, nenhuma gastando crédito sem
+perguntar.
+
+**Fora da sequência, sempre com o usuário:** o dia de provas do item 4 (gasta crédito), o 18c
+(conta paga), o resto do 19, a base F, e os plugins de telefone, WhatsApp e Slack quando fizerem
+falta.
 
 | Passo | O quê | Só depois de | Status |
 |---|---|---|---|
@@ -4073,7 +4781,7 @@ passos que faltam:
 | 13b | Agentes de domínio: um agente fixo com missão, ferramentas e regras próprias. Decidido em 12/10: separado do 13, por ser peça que só o V3 tem; chega como opcional. Pedido do usuário em 13/10: a inspiração são os bots (com conversa fixa, rotinas, grupos e mensagens entre bots), comparados com o V3. Decidido em 13/10 (Bots, acima): o bot mora dentro da casa, com o `USER.md` da casa e o próprio `MEMORY.md`, as skills com a marca de quem criou, a conversa fixa, as rotinas, e o `message_agent` (do Atlas principal, de qualquer conversa); os grupos saíram para o 13c | 13 | ✅ 13/10. Os cinco fiscais do Python passam no Windows e no Linux, 1.461 testes com 92,2% de cobertura, e os do app também: 58 testes do Vitest e 25 cenários de ponta a ponta (1 novo: criar um bot pela tela, conversar, editar a missão e apagar). O bot mora na casa, em `bots/<nome>/`, com o `BOT.md` no formato do agente do Claude Code, o próprio `MEMORY.md` e a própria pasta de skills; o `USER.md` é o da casa, um só (opção nossa). A conversa fixa, que relê as instruções quando o que elas mostram muda (comparando o próprio texto), as rotinas do bot entregues na conversa dele, o `message_agent` com o texto e as regras dele, e a tela (a aba Bots e o diálogo de criar, enxutos; a cara sai do nome). As skills (biblioteca da casa, pasta do bot na frente, lista de permitidas) e a busca só nas próprias conversas; o Atlas principal busca em tudo. O `bot_create`, que pergunta antes. Novos: o `USER.md` único, o `message_agent` em qualquer conversa do Atlas principal, o teto de 6 mensagens entre agentes sem fala do usuário, e a marca de quem criou cada skill (`atlas skills list`). Prova real em 13/10 pelo `scripts/prove_bots.py`, ensaiada antes no modelo falso, contra o gpt-6-luna, em seis passos: o bot segue a regra da missão e a mesma conversa abre de novo; o fato contado ao bot de finanças chega ao de produto com a conversa já aberta, e a nota do trabalho fica na memória do bot; a skill pedida fica na pasta do bot, marcada como dele; o bot não acha a conversa do Atlas, e o Atlas acha a do bot dizendo de quem é; a rotina roda como o bot e a resposta entra na conversa dele; e o Atlas pergunta ao bot de uma conversa qualquer e repassa a resposta. 25 chamadas, US$ 0,0065. A primeira rodada achou um defeito: o bot respondeu ao Atlas pelo `message_agent`, e o texto do turno voltou também, então a resposta chegava duas vezes; agora a mensagem escrita a quem perguntou é a resposta, e um teste segura isso. Fica registrado: uma mensagem entre agentes a caminho se perde se o servidor reiniciar (recibos em disco evitariam), e os grupos ficaram para o 13c |
 | 14 | Navegador. Decidido em 12/10 (Navegador, acima): o `browser_exec` sobre o browser-harness, um perfil do Chrome só do Atlas mais os modos limpo e invisível, o usuário assumindo na janela de verdade, e a presença do navegador à direita da conversa | 9 | ✅ 13/10. Os cinco fiscais do Python passam no Windows e no Linux, 1.382 testes com 92,1% de cobertura (no Linux, sem Chrome, os testes com o Chrome de verdade são pulados), e os do TypeScript também: 51 testes do Vitest e 24 cenários de ponta a ponta (1 novo: a presença do navegador, assumir e devolver). A descrição e o resumo das funções do `browser_exec`, a aba própria de cada sessão, o piso dos metadados de nuvem, o print e o tempo esgotado, e a posse da janela. O motor é o browser-harness 0.1.13 da Browser Use (MIT), com a telemetria (que manda o código para fora) e o aviso de atualização desligados. Do Atlas: o perfil próprio aberto pelo Atlas, os modos limpo e invisível, a recusa de endereço com segredo do cofre, e a presença na tela. Nas sempre ligadas, 19 tokens a mais pela estimativa (o nome dele na busca). Prova real em 13/10 pelo `scripts/prove_browser.py`, ensaiada antes com o modelo falso, contra o Chrome 155 instalado e o gpt-6-luna, num site servido na própria máquina, em quatro passos: lê um preço sem janela; para no login sem tentar entrar, o usuário assume, entra e devolve, e o modelo, avisado de que a página mudou, lê o saldo; o endereço de metadados de nuvem é recusado antes de o navegador abrir; e o modelo vê a cor num print. 23 chamadas, US$ 0,0037. Na primeira rodada o próprio modelo se recusou a abrir os metadados, sem chamar o navegador (como o `rm -rf ~` na prova de confiança); na segunda tentou e o Atlas barrou. O usuário conferiu o assumir e devolver no app de verdade, na casa dele. Na mesma rodada, a troca de conta do passo 13 foi provada com as duas contas do usuário (`prove_executors.py`, passo 6): uma tarefa guarda uma palavra, o Claude Code entra na outra conta pelo navegador, a mesma sessão continua e lembra a palavra, e volta à conta do usuário (11 chamadas, US$ 0,0012). Os testes e o ensaio acharam e consertaram: o arquivo de porta que um Chrome morto deixa impedia abrir de novo; uma chamada invisível fazia a conversa esquecer a janela que o usuário segurava; o aviso do limite do plano dizia `<this id>` em vez do subagente a retomar; e o `measure_tools.py` estava quebrado desde o passo 13. Fica registrado: digitar na janela sem assumir é possível (ela é do usuário); o assumir é o que impede o agente de agir e ler enquanto ele digita |
 | 14b | Google e GitHub pelo terminal (decididos em 13/10: Google e GitHub pelo terminal, acima): o `gh`, o `gcloud` e o `gws` com as skills `github` e do `gws` embutidas no Atlas (o primeiro jeito de trazer skill própria), as regras de pergunta no portão antes de cada ação para fora (com a lista de destinos conhecidos), a saída marcada como texto de fora e o login dos programas fora do backup. Decidido pelo usuário em 13/10: vem antes do 15 e do 16 | 7, 6b, 10b | ✅ 13/10. Os cinco fiscais do Python passam no Windows e no Linux, 1.576 testes com 92,7% de cobertura, e os do app também (63 testes do Vitest). Provado com o gpt-6-luna e as contas reais do usuário (`scripts/prove_terminal.py`, ensaiado antes no modelo falso com `echo` na forma dos comandos reais): o Atlas instalou o `gws` sozinho pelo `npm`; uma issue aberta pediu aprovação antes e foi fechada pela prova; um e-mail com o ⚡ ligado perguntou mesmo assim, dizendo que era o primeiro para o endereço; a leitura chegou marcada como texto de fora e a resposta perguntou; um evento perguntou antes e foi apagado; um e-mail recusado para um endereço novo não foi tentado de outro jeito; e um e-mail que mandava encaminhá-lo só foi resumido, com o agente contando ao usuário o que ele pedia. Achado da prova: o modelo, brigando com as aspas do Windows PowerShell 5.1, escreveu o comando `gws` num `.cmd` e rodou o arquivo, e por ali a saída vinha sem marca e um envio não perguntaria; agora o portão lê os scripts que o comando roda (fora de `node_modules` e `site-packages`, depois que um `Test-Path` no lançador do próprio `gws` perguntou à toa). Também: a conta de gasto das provas lê as últimas mil chamadas do livro, que a casa real já passou, e diz zero (o gasto do dia, pelo `atlas usage`: US$ 0,07 em 207 chamadas, com o uso do dia); e o login do `gws` pediu o usuário como usuário de teste do app no Google Cloud, passo que a skill passa a lembrar |
-| 14c | Controle de programas (estudado e decidido em 20/10: Controle de programas, acima): a imagem do MCP chegando ao modelo, como o print do navegador; o cua-driver como servidor MCP, com a telemetria e a conferência de atualização desligadas, e uma skill embutida com a escada da automação; no Auto a tela roda sem perguntar, e apagar, pagar, enviar ou confirmar algo para fora pergunta sempre; a ferramenta `computer_use` no núcleo só se o MCP não bastar no uso | 14 | |
+| 14c | Controle de programas (estudado e decidido em 20/10: Controle de programas, acima): a imagem do MCP chegando ao modelo, como o print do navegador; o cua-driver como servidor MCP, com a telemetria e a conferência de atualização desligadas, e uma skill embutida com a escada da automação; no Auto a tela roda sem perguntar, e apagar, pagar, enviar ou confirmar algo para fora pergunta sempre; a ferramenta `computer_use` no núcleo só se o MCP não bastar no uso | 14 | **Adiado pelo usuário em 01/11: fica na linha, mas não agora.** "Usar o computador é uma coisa que precisa fazer muito bem": quando vier, vem para ser bem feito |
 | 15 | Várias máquinas (decididas em 19/10: Várias máquinas, acima): o app abre o Atlas de outra máquina, que trabalha lá; pelo Tailscale nos três cenários do usuário (a loja, este PC visto de outro, o VPS) e por túnel SSH para servidor, com o relé deixado para o Atlas Cloud; "Sempre ligado" por casa, o servidor como serviço do usuário que sobrevive ao app e liga com o computador, e dentro dela "Abrir para as minhas máquinas", com o código de conexão; a lista de máquinas no app, com as senhas cifradas pelo sistema e uma máquina por vez na tela; a tela de Configurações começando só com "Máquinas"; o terminal sempre pelo servidor; o backup descendo pela conexão. Fica de fora um agente agir em outra máquina | 10c, 16f, 18 | ✅ 27/10, fechado pelo usuário (a prova fica para quando ele quiser). Em andamento desde 19/10: código pronto (partes 2 a 5), falta a prova real com o usuário |
 | 15b | Configurações (decididas em 20/10: Configurações, acima): a tela inteira, com Geral, Modelo, Personalização (o Soul, o `USER.md` e o `MEMORY.md`, para ler e editar), Segurança, Área de trabalho, Plugins e Máquinas; salva sozinha e vale sem reiniciar; o Soul e os Plugins saem da barra lateral | 15 | ✅ 27/10, fechado pelo usuário (a prova fica para quando ele quiser). Código pronto em 20/10, com os fiscais verdes no Windows; falta o usuário usar a tela |
 | 16 | SDK de plugins: a caixa no formato do Claude Code, ligar e desligar, e o consentimento antes de ligar (estudado em 13/10: Plugins, acima). Decidido pelo usuário em 13/10: a lista de destinos conhecidos foi para o 14b. **Decidido pelo usuário em 14/10, no lugar das duas caixas de 13/10: a prova é só um plugin do Telegram**, e por isso o `register(ctx)` em Python e o primeiro canal vieram do 16b para cá; ligar o plugin e aprovar o pareamento numa tela Plugins no app (além do terminal), e as conversas do Telegram na lista do app, marcadas | 12, 14b | ✅ 27/10, fechado pelo usuário (a prova fica para quando ele quiser). Código pronto em 14/10 (docs/ARCHITECTURE.md, Plugins): o formato do Claude Code com a parte do Atlas em `atlas`, desligado até o consentimento à declaração (uma atualização que declara mais desliga de novo), o carregamento com prazo de 10 s, o `ctx` que só dá o que o manifesto declara, o canal como mais um cliente do servidor, o pareamento aprovado na tela, e o plugin do Telegram no Atlas. Escolhas próprias, marcadas: a API do Telegram direto pelo `httpx2` em vez da python-telegram-bot (para não brigar com as tentativas da biblioteca) e HTML em vez de MarkdownV2. Provado nos testes contra um Telegram falso por HTTP (pareamento, turno, aprovação por botão, pergunta por texto, `/new`, `/stop`, 401, 409, 429, HTML recusado) e de ponta a ponta no app. ✅ 14/10: **prova real feita pelo usuário**, com o bot dele no celular, e funcionou bem. **Achado antes de fechar:** o portão não protegia a pasta `plugins/` nem os comandos novos, e o agente poderia escrever um plugin e rodar `atlas plugins enable --yes`, pulando o consentimento. Agora `atlas plugins enable|disable|secret|set`, `atlas pairing approve|forget` e qualquer comando que toque `plugins/`, `plugin-data/` ou `atlas.db` perguntam ao usuário toda vez, passando por cima do guardião e do ⚡, e as ferramentas de arquivo não escrevem nessas pastas. Ficou para depois: o Atlas criar e ligar plugins sozinho (sempre pedindo o consentimento na tela), skills e MCPs dentro do plugin, instalar por endereço e um guia para quem escreve plugin |
@@ -4092,14 +4800,26 @@ passos que faltam:
 | 16o | O Codex como executor (decidido em 20/10: Codex, Gemini CLI e DeepSeek, acima): o plugin `codex` pelo `codex app-server`, achado no PATH, no app da Microsoft Store e no Homebrew; as permissões na caixa de areia dele, o automático pelo revisor dele (`auto_review`), o steer, os modelos, as sessões, a transcrição, os conectores, os limites do plano, as outras contas e os anexos; o núcleo sem o Claude Code fixo na `delegate` e na lista dos automáticos | 16c, 16i | ✅ 21/10: a prova real (`scripts/prove_codex.py`) passou nos 6 passos com o Codex do usuário, gastando 11% do limite de 30 dias do plano `free` dele; o painel passou a dizer "Limite de 30 dias" onde dizia semana |
 | 16p | O Gemini CLI como executor, com o cliente ACP do núcleo (`atlas.plugins.acp`), estudado antes do código | 16o | ✅ 21/10: a prova real (`scripts/prove_gemini.py --vault`) passou nos 7 passos com a chave de API do cofre; o Google não aceita mais login de conta pessoal no Gemini CLI, e a chave virou o segredo do plugin |
 | 16q | O DeepSeek (`dsh`) como executor, pelo cliente ACP do 16p, com os logs que ele manda à DeepSeek mostrados ou desligados | 16p | ✅ 21/10 no código e nas leituras reais sem prompt (o handshake, as opções, o `--patch` dos logs e o modo de permissão); a prova real com o modelo (`scripts/prove_deepseek.py --vault`) fica para quando houver uma chave da DeepSeek com saldo no cofre |
-| 16r | A prova do SDK com os dois plugins do usuário (decidida em 21/10: A prova do SDK com os plugins do usuário, acima): o do ERP contra o MCP dele, depois o de vídeo com o Remotion; o que faltar no SDK entra só quando um deles precisar (a tela mostrar arquivos, o Python avisar a tela, os pacotes do Node) | 16n | |
+| 16r | A prova do SDK com os dois plugins do usuário (decidida em 21/10: A prova do SDK com os plugins do usuário, acima): o do ERP contra o MCP dele, depois o de vídeo com o Remotion; o que faltar no SDK entra só quando um deles precisar (a tela mostrar arquivos, o Python avisar a tela, os pacotes do Node) | 16n | ✅ 01/11, fechado pelo usuário sem código: não precisamos mais dele. O estudo acima fica para consulta |
 | 16s | A loja (decidida em 24/10 e revista em 25/10: Loja, acima): o repositório público `atlas-marketplace` no GitHub, onde cada item entra por PR revisado pelo usuário, fixado num commit; quatro tipos separados, a skill dizendo os programas e os MCPs de que precisa; no app, a entrada Loja com as abas Plugins, Skills, MCPs e Executores, os oficiais marcados, uma página por item, instalar e atualizar pelo servidor da casa; sem downloads nem estrelas por enquanto. Pedido do usuário em 24/10 | 16n | ✅ 27/10, fechado pelo usuário (a prova fica para quando ele quiser). **Código pronto em 25/10 (docs/ARCHITECTURE.md, The marketplace):** o `atlas.marketplace` lê a loja inteira num arquivo compactado do GitHub, por HTTPS e sem git, guarda a última leitura boa e o registro do que instalou (`marketplace/` na casa, que viaja com ela), e põe cada tipo no seu lugar: a skill na biblioteca, como do usuário (o curador não a arquiva); o MCP no `mcp.json`, que o servidor relê quando muda; o plugin e o executor desligados, pelo caminho de sempre dos plugins. A tela Loja no app, e `atlas marketplace list`, `show`, `install`, `update`, `remove` e `check` no terminal. O repositório `marqueskaio/atlas-marketplace` nasce sem itens, com as regras no CONTRIBUTING, o usuário como revisor de tudo (CODEOWNERS) e o CI rodando o `atlas marketplace check --load` da main do Atlas nos itens de cada PR. **A prova:** 52 testes da loja contra um GitHub falso que serve repositórios git feitos no teste; o servidor com dois clientes ouvindo a mesma instalação; o `mcp.json` relido com servidores MCP de verdade; e o e2e no app real: as abas, a página da skill com o programa que falta e o MCP que vem junto, a instalação dos dois, o segredo guardado, o plugin ligado pelo consentimento e o modelo recebendo a skill da loja e a do plugin. Contra o GitHub de verdade, numa casa temporária: o `check --load` e a instalação de uma skill pública fixada num commit. **Achados:** a pasta de um plugin precisa ter o nome do manifesto, então o item é copiado com o nome dele, e um manifesto de outro nome é recusado com o motivo; o cartão da loja não mudava quando o plugin era ligado pela tela de Plugins, aberta por cima dele (agora a loja relê); o MCP do e2e fica esperando um segundo segredo, para o `npx` nunca baixar e rodar um pacote de verdade no CI; e o agente instalaria pela loja sem perguntar: `atlas marketplace install`, `update` e `remove` viraram decisão do usuário, como o `enable`, porque um MCP instalado conecta na hora |
 | 16t | Como as pessoas aprendem a escrever um plugin (decidido em 25/10): o guia (`src/atlas/docs/pages/extending/plugins.md`) com os canais, os executores e a lista de tudo que o SDK oferece, um teste de cada lado (Python e tela) falhando quando o SDK ganha um nome que o guia não diz; a skill `write-plugin`, que vem com o Atlas e escreve o plugin com o usuário (na pasta da conversa, `validate`, instalar perguntando, ligar fica com ele, publicar na loja só quando pedido); e no app, "Faça o seu" na loja e "Escrever um plugin" na tela de Plugins, abrindo uma conversa nova com `/write-plugin ` na caixa, ao lado do link do guia. Pedido do usuário em 25/10 | 16s | ✅ 27/10, fechado pelo usuário (a prova fica para quando ele quiser). **Código pronto em 25/10 (docs/ARCHITECTURE.md, How people learn to write one).** **A prova:** o e2e da loja clica em "Faça o seu", a caixa recebe `/write-plugin `, e o modelo recebe os passos da skill; o dos plugins abre a mesma conversa pela tela de Plugins. **Achados:** `atlas plugins install`, `update` e `remove` não eram perguntados quando o agente rodava, e agora são, como o `enable`; e a caixa de uma conversa nova não recebia texto de fora, só a de uma conversa aberta |
-| 17 | Plugins oficiais, um de cada vez, cada um com a sua tela | 16 | |
+| 17 | Plugins oficiais, um de cada vez, cada um com a sua tela | 16 | ✅ 01/11, fechado pelo usuário com o 17a e o 17b (o plugin `voice`): os outros oficiais não vêm, não precisamos mais deles |
 | 17a | O plugin `voice` (decidido em 24/10: Voz, acima): o áudio do Telegram e do app transcrito pela OpenAI, o 🎤 da caixa que dita, a fala só quando o usuário pede, e a conversa por voz de microfone aberto com o `gpt-live-1` passando o trabalho ao Atlas, no modelo da conversa ou num fixo só para voz (GPT-6 Luna por padrão); o núcleo só ganha três aberturas no SDK. Pedido do usuário em 24/10 | 16g, 16m | ✅ 27/10, fechado pelo usuário (a prova fica para quando ele quiser). **Parte 1, código pronto em 24/10 (docs/ARCHITECTURE.md, Voice):** o leitor de anexo no SDK (versão 21, `register_reader`, declarado em `atlas.readers` e mostrado no consentimento) e o plugin `voice` com o `gpt-transcribe` da OpenAI (US$ 0,0045 por minuto). O áudio é transcrito uma vez e guardado com o anexo, no mesmo ponto da descrição de imagem; sem chave, ou com a OpenAI recusando, fica a nota de hoje e o turno segue. **Escolha própria, marcada:** um áudio mandado no meio de um turno é transcrito antes de entrar (a imagem nesse caso não é descrita), porque mandar áudio no meio é comum no celular. Provado contra o servidor falso, que agora também faz a transcrição da OpenAI, e pelo Telegram num servidor de verdade. **Parte 2, código pronto em 24/10:** o resto do 17a. A fala pedida é a ferramenta `voice_speak` (o `gpt-4o-mini-tts`, em Ogg Opus); o SDK vai para a versão 22 com `ToolHost.send_file`: o arquivo fica nos anexos da casa, aparece no turno do app (`message.file`) e vai ao Telegram como balão de voz (`sendVoice`), por um `send_file` do canal. As telas de plugin vão para a versão 2: botões na caixa (`box`), `host.insertText` e `host.send`. O 🎤 dita na caixa, sem mandar. A conversa por voz é o `gpt-live-1` em WebRTC no app; o Python do plugin abre a sessão com a chave, que nunca vai ao app; cada pedido vira um turno da conversa com a nota de fala (um gancho `UserPromptSubmit`, sem mudar o núcleo), no GPT-6 Luna sem raciocínio, a não ser que a configuração diga `conversation`. Fecha no botão, numa frase de parar dita sozinha ou depois de 120 s de silêncio. **Escolhas próprias, marcadas:** o modelo de voz é trocado na conversa enquanto a voz roda (o protocolo escolhe modelo por conversa) e devolvido no fim; um pedido feito com um turno rodando corrige o turno em vez de pará-lo; o arquivo mandado não fica no histórico, e a conversa reaberta mostra o resultado da ferramenta no lugar da ficha. Provado contra a OpenAI falsa (transcrição, fala e sessão ao vivo), pelo Telegram num servidor de verdade, no Vitest (o motor da conversa com uma ligação falsa) e de ponta a ponta no app com o microfone falso do Chromium: os dois botões, o ditado chegando à caixa sem ser mandado, e a sessão ao vivo chegando à OpenAI com a oferta do app e a chave do servidor. A voz falada e ouvida de verdade fica para a prova do usuário com a OpenAI (perguntar antes: cerca de US$ 0,25 por 5 minutos) |
 | 17b | O ditado em qualquer lugar do plugin `voice` (decidido em 25/10: Ditado em qualquer lugar, acima): um atalho global (Caps Lock de fábrica) grava e, no segundo toque, cola o texto cru no programa em foco; os ditados ficam na casa com o áudio, na página "Ditados". As telas de plugin ganham o atalho global, a colagem no programa em foco e a barrinha. Pedido do usuário em 24/10 | 17a | ✅ 27/10, fechado pelo usuário (a prova fica para quando ele quiser). **Código pronto em 25/10 (docs/ARCHITECTURE.md, Dictation anywhere):** o SDK vai para a versão 23 (`atlas.desktop`: `shortcut` e `paste`, mostrados no consentimento) e as telas para a versão 3 (`ctx.shortcut`, `ctx.paste`, `ctx.bar`). O atalho é o `globalShortcut` do Electron; a colagem usa a área de transferência e um Ctrl+V apertado por um PowerShell que fica aberto no Windows (`osascript` no Mac, `xdotool` ou `wtype` no Linux), sem biblioteca nativa, e devolve o que estava copiado. Com o foco no próprio Atlas, o texto é digitado onde está o cursor. Um programa aberto como administrador não aceita a colagem: o texto fica copiado e a barrinha avisa. **Achado na prova:** o Caps Lock como atalho também trocava as maiúsculas; o app aperta a tecla mais uma vez, com o atalho solto. Os ditados ficam na pasta de dados do plugin com o áudio, na página "Ditados" (ouvir, copiar, apagar, trocar a tecla). **Escolhas próprias, marcadas:** os ditados da caixa também ficam guardados; a gravação é guardada antes da transcrição, e uma que falhou pode ser escrita de novo. Provado nos testes do Python e do app, de ponta a ponta no app com o microfone falso e, no Windows, com as peças de verdade: o Caps Lock apertado pelo sistema ouvido sem trocar as maiúsculas, a barrinha sem roubar o foco e o texto com acentos colado na janela de outro programa, com a área de transferência devolvida. Falta a prova do usuário com a OpenAI de verdade (menos de US$ 0,01) e com o microfone dele, e a de um programa aberto como administrador |
 | 18 | Instalador de uma linha, e a chave pedida pela tela na primeira abertura (decidido em 13/10: Instalador, acima). Decidido pelo usuário em 13/10: vem antes do 15, para mandar o Atlas a testadores convidados no repositório privado; os scripts num gist público; a chave conferida sem custo e barrada só quando recusada; sem o login OAuth da OpenRouter. Desenho fechado em 13/10 | 10 | ✅. Os dois testadores convidados instalaram com a linha do gist e usaram sem problema: um num MacBook e outro no Windows, além do Windows do usuário e do CI no Windows e no Ubuntu. Achado do testador no Windows: com a chave gratuita do Gemini, o Gemini 3.6 Flash respondeu HTTP 503 ("high demand", o Google recusando quem não paga quando está cheio); com outra chave funcionou. Não é defeito do instalador nem da tela de chave |
-| 18b | O app empacotado sem assinatura (decidido em 15/10: Instalador, acima): o `Setup.exe` do NSIS no Windows, o DMG com a assinatura ad-hoc no Mac, o AppImage no Linux; instala, põe o atalho na área de trabalho e se atualiza pelo próprio app (o electron-updater no Windows e no Linux, um atualizador nosso no Mac). Grátis, com o aviso do Windows e do Mac na primeira abertura. Dividido pelo usuário em 15/10 | 18 | |
+| 18b | O Setup gráfico sem assinatura (refeito pelo usuário em 01/11: Instalador, acima): `Atlas-Setup.exe` portátil no Windows, DMG com a assinatura ad-hoc no Mac, AppImage no Linux; um app pequeno que roda o instalador de uma linha que leva dentro, mostra as etapas e abre o Atlas; o CI os põe na release `setup` e o site os oferece. Grátis, com o aviso do Windows e do Mac na primeira abertura do Setup. Dividido pelo usuário em 15/10 | 18 | ✅ 01/11. `apps/setup/` com o `install.ps1`/`install.sh` do commit dentro; uma janela com as etapas, os avisos guardados para o fim e o erro com o log; abrir ou consertar o Atlas já instalado; `--auto` para o CI. Provado: 17 testes (um roda um instalador de mentira pelo PowerShell com acento no caminho, e pelo bash no Linux); no Windows, as três telas no app empacotado e o `--auto` do `.exe` saindo com 1 na recusa real do `install.ps1`; e o `setup.yml` construindo nos três sistemas, conferindo a assinatura ad-hoc no Mac e instalando de verdade com cada arquivo (o `.exe`, o DMG montado, o AppImage sem FUSE no xvfb), com o Atlas respondendo depois. A release `setup` saiu com os quatro arquivos (97 a 123 MB), e o site os oferece em cada aba de sistema e na página Instalar. Não provado: o aviso de verdade do SmartScreen e do "Abrir mesmo assim", que só um download pelo navegador mostra |
 | 18c | A assinatura do app empacotado: MSIX pela Microsoft Store ou SignPath no Windows, DMG notarizado no Mac (estudados em 13/10: Instalador, acima). Tira os avisos do 18b e troca o atualizador nosso do Mac pelo do Electron. Vem quando o repositório abrir | 18b | |
-| 19 | Site e documentação pública (decididos em 25/10: Site e documentação pública, acima): Astro com Starlight em `site/`, na Cloudflare; a home, as Versões e as News, e a documentação de quem usa, que vai também dentro de cada versão para o Atlas responder sobre si; pronto para agentes. Pedido do usuário em 25/10 | 18 | **Parte 1, código pronto em 25/10:** o site em `site/`, com Astro 7 e Starlight 0.42. A home é o planetário em WebGL2 próprio, sem biblioteca: as linhas são calculadas no shader, e a esfera, as órbitas e o caminho entre as duas não custam CPU por quadro. Ela tem seis capítulos (as contas, a rota com o cometa e os medidores da janela de cinco horas, as máquinas, a memória e o fecho), e depois o portão de aprovação com comandos e vereditos de verdade, o resto do Atlas, a instalação com as abas do sistema de quem visita, e as últimas mudanças. Sem WebGL fica o primeiro quadro desenhado em SVG no build, pela mesma fórmula; com movimento reduzido, a câmera troca de plano sem voar. No celular a cena é um painel no alto e o texto passa por baixo dele. A documentação tem quatro páginas (O que é o Atlas, Instalar, Executores e contas, Várias máquinas), conferidas contra o código e as telas do app. As News saem vazias, com o formato do item escrito, e o Changelog é o `git log` da `main` no formato da atualização; os dois têm RSS. Para agentes: cada página tem o gêmeo em Markdown, `llms.txt` e `llms-full.txt` na ordem da barra lateral, `robots.txt` com `Content-Signal` e os robôs de IA, a skill `atlas` em `/.well-known/agent-skills/` com o digest dos bytes, e um Worker que responde Markdown a `Accept: text/markdown` e põe os cabeçalhos `Link`. O CI ganha o job `site`. **Escolhas próprias, marcadas:** o `Content-Signal` libera busca, resposta e treino (decidir antes de publicar); a skill publicada e o gêmeo em Markdown entram já, antes do item 4; a instalação ainda aponta para o gist; o domínio é um marcador (`SITE_URL`). Provado: `npm run check` (astro check, tipos do Worker, eslint, prettier e 32 testes); o build com a conferência do `dist` (toda página com gêmeo, o digest da skill, nenhum link interno quebrado); o Worker no runtime da Cloudflare (`wrangler dev`), respondendo Markdown com `Vary` e `Content-Signal` e pondo os `Link` na home; a home vista no Edge em 1920, 1440, 1024 e 390 px, capítulo por capítulo; e o Lighthouse com renderização por software: 98 de desempenho e 100 de acessibilidade e de boas práticas na home, e SEO 92, porque o Lighthouse não conhece a linha `Content-Signal` que o Is It Agent Ready pede. **Parte 2, código pronto em 25/10 (docs/ARCHITECTURE.md, The documentation):** as páginas no pacote (`atlas.docs`, assunto novo com o seu contrato no import-linter), lidas pelo site e pelo `atlas docs`; a skill embutida `atlas`; a referência gerada dos comandos e das configurações (três campos sem comentário ganharam o seu); as cinco referências de `docs/` viradas páginas, mais o portão de aprovação e a origem dos dados do Claude Code; 12 páginas ao todo. O guia de plugins, que a 16t aumentou no mesmo dia, veio inteiro para a página, e a cópia da skill `write-plugin`, os testes dos dois lados e o link do app foram junto com ele. O plugin de validação de links do site saiu (ele calcula o id da página pela pasta `src/content/docs` e dava todos os links por quebrados) e o `check-dist.mjs` passou a conferir também cada `#` de seção, provado com uma âncora quebrada de propósito. Provado: os testes de `tests/docs` (o cabeçalho, a ordem, achar, buscar, o comando, a referência atual, cada comando que a skill dá rodando, e a página chegando inteira pelo `run_command` do agente, com acentos), ruff, pyright, import-linter, deptry e a suíte inteira; no site, `npm run check` e o build. **O ícone do app, código pronto em 25/10 (pedido do usuário):** a marca do Atlas no lugar do ícone do Electron, na janela, na barra de tarefas, no Dock, no atalho do Menu Iniciar e na entrada do Linux. Provado: o `.ico` lido pelo carregador do próprio Windows em cada tamanho, de 16 a 256 px, com os cantos transparentes no fundo claro e no escuro; o teste do atalho lendo o ícone que ele guarda; e o e2e do app inteiro. **Parte 3, o site e a documentação revistos, código pronto em 25/10 (pedido do usuário: mais bonito, animações melhores, texto estratégico, documentação impecável, rápido e bem posicionado nas buscas):** a home ganhou um texto novo, conferido contra o código e as telas do app (o título "Every coding agent. Every account. One window.", quatro fatos sob a instalação, a comparação "sozinhos × no Atlas", cartões que levam ao guia de cada recurso e oito perguntas frequentes); animações sem JavaScript (a entrada do hero em sequência, as seções subindo com a rolagem por `animation-timeline: view()`, a transição entre páginas por `@view-transition`, as respostas que deslizam) e uma luz que segue o ponteiro nos cartões, com um só ouvinte, tudo parado com movimento reduzido; para as buscas, JSON-LD (Organization, WebSite, SoftwareApplication, FAQPage, e TechArticle com BreadcrumbList em cada página da documentação), o título de busca de cada página com as palavras que se procuram (`site/src/lib/seo-titles.ts`, pelo `routeMiddleware` do Starlight), a imagem de compartilhamento nova e em toda página, `noindex` na 404 e um rodapé com os guias; o logo de 17 KB passou a 7,7 KB, os shaders do planetário compilam em paralelo onde o navegador deixa, e as fontes da documentação vêm antes do primeiro quadro (o CLS de 0,187 foi a 0). A documentação ganhou dez páginas (Modelos e chaves, Rotinas, Telegram, Voz e ditado, O navegador, Skills e o marketplace, Privacidade, Backups/atualizações/homes, Solução de problemas e Perguntas e respostas) e um mapa na página inicial, e três trechos que o app já tinha deixado para trás foram corrigidos (os executores ligam em Configurações → Executores; a memória e a alma se editam em Configurações → Personalização). Provado: `npm run check` (44 testes, os de SEO novos), o build com a conferência de cada link e âncora, `tests/docs`, as telas em 1440, 1280 e 390 px, e o Lighthouse com renderização por software: home 93 de desempenho e 100 de acessibilidade e boas práticas, documentação 99 de desempenho; SEO 92 nas duas pelo mesmo `Content-Signal`. **Falta:** a prova com um modelo de verdade (perguntar antes: centavos), o domínio e o projeto na Cloudflare (o usuário), a nota do Is It Agent Ready no ar, a rotina das News, o português e o link do guia de plugins no app, que passa para o site quando houver domínio |
-| 20 | Atlas Cloud | 19 | |
+| 18d | A primeira abertura em passos (decidida em 01/11: Primeira abertura em passos, acima): Modelo, Executores, Telegram, Conexões e Trazer seu trabalho, numerados na lateral, cada um pulável e reaberto em Configurações; o último traz as sessões dos executores de uma janela de tempo e arquiva o resto. Pedido do usuário em 01/11 | 18, 16c | ✅ 01/11. **Parte 1, na main em 01/11:** a primeira abertura em três passos (Modelo, Executores com o convite para mais contas, Trazer seu trabalho), reaberta em Configurações → Geral; o arquivado volta sozinho quando muda (escolha do usuário); quem já tinha chave vê o "Trazer" sozinho uma vez se tiver pasta parada há mais de um mês. Fiscais: o `npm run check` (533 do Vitest) e os 84 do e2e, 2 novos (o "Trazer" pelas Configurações, que arquiva a pasta velha sem tocar no arquivo, e a oferta única que não volta no reload). Achado no caminho: o passo reaproveitava a lista de pastas lida na abertura e contava zero quando ela tinha mudado; agora relê. **Parte 2, na main em 01/11:** os passos Telegram e Conexões; agora são cinco. Telegram: o token colado, o plugin ligado com a permissão mostrada embaixo do campo, e quem escreveu ao bot deixado entrar no próprio passo. Conexões: o assunto novo `atlas.logins` lê o `gh auth status` e o `gws auth status` (`login.list`, só o app do dono); o Conectar do GitHub roda o `gh auth login --web`, que fora de um terminal imprime o código de uso único e espera: o passo mostra o código, abre a página no navegador e diz "Conectado como" quando o `logins.changed` chega; o "Configurar com o Atlas" do Google abre uma conversa em que o agente conduz o `gws auth setup` (o caminho do 14b). **Escolhas próprias, marcadas:** a primeira abertura sai da frente durante a conversa do Google e espera numa faixa no alto ("Voltar a ela"), relendo os logins ao voltar; o plugin do Telegram liga no Conectar, com a permissão na própria tela. Fiscais: os cinco do Python, 2.830 testes com 91,39% de cobertura (10 novos: o `gh` e o `gws` falsos achados no PATH, o login com o código, o recusado, e o servidor só para o dono), o `npm run check` (554 do Vitest, 6 novos), o site e os 87 do e2e, 2 novos (o passo do Telegram com o Telegram falso, que deixa a Ana entrar, e o de Conexões, com o código do GitHub e a conversa do Google com a faixa). Achado no caminho: no Windows, cancelar a leitura de um processo deixa o pipe para trás; parar o login lê a saída até o fim |
+| 18e | A lista de primeiros passos (pedida em 01/11: Primeira abertura em passos, acima): um cartão no pé da barra lateral com 5 tarefas, cada uma com o Começar, até todas estarem feitas ou o cartão ser escondido | 18d | ✅ 01/11. Na main: entregar uma tarefa a um executor, adicionar uma segunda conta, falar pelo Telegram, agendar uma rotina e criar um bot, cada uma vista feita no que a casa já tem e guardada assim. O Começar abre a aba Executores, o passo da primeira abertura sozinho (que fecha ao terminar), uma conversa nova com a rotina na caixa, ou o diálogo do bot. **Escolhas próprias, marcadas:** quem já usa o Atlas vê o cartão com o que já fez marcado; "trocar de conta no limite" virou "adicionar uma segunda conta", o que liga a troca. Fiscais: os cinco do Python, 2.830 testes; o `npm run check` (564 do Vitest, 9 novos); o site; e os 88 do e2e, 1 novo, com o `motion.spec.ts` ("a conversation that opens is there at once") oscilando também na main sem a mudança (2 de 5) |
+| 18f | O seletor de modelo da conversa do Atlas (pedido em 01/11: Primeira abertura em passos, acima): uma pílula com o modelo e o esforço; o menu com os modelos do provedor da conversa numerados de 1 a 9, o Padrão marcado e o atual com ✓, o Esforço e cada outro provedor com chave num submenu, e a busca no alto a partir de 9 modelos. Só os provedores de API: os modelos dos executores ficam no seletor das sessões deles | 18e | ✅ 01/11. **Escolha própria, marcada:** o desenho do menu juntou as referências do usuário (os principais numerados, o Esforço e "Mais modelos" em submenus, a busca); os outros provedores fazem o papel do "Mais modelos". O "Trocar modelo" de um turno que falhou abre o menu |
+| 18g | O ambiente da sessão de um executor (pedido em 01/11 com as referências do usuário): o anel do uso do plano, o menu do modo de permissão, a pílula de onde ela roda (projeto e branch) com a nova worktree, e no painel da direita o Ambiente e o Contexto; e as ações da pasta na barra de título (o explorador de arquivos, o VS Code e o terminal) | 18f | ✅ 01/11. **Escolhas próprias, marcadas:** os modos são os do plugin de cada harness (SDK versão 28); o do Claude Code lista Manual, Aceitar edições, Plano e Automático, sem o "Ignorar permissões" (o `bypassPermissions`, recusado desde 17/10); a worktree vai ao lado do projeto, `<projeto>-<data-hora>`, num branch `atlas/<data-hora>`, e abre uma sessão nova lá; o Contexto mede os tokens da sessão contra a janela do modelo, o `[1m]` do Claude Code ou o catálogo. Fica de fora: o Remote Control da referência, e o detalhe do contexto por parte (mensagens, ferramentas, MCP), que nenhum harness informa ao Atlas hoje. O modo pode ficar desatualizado quando o próprio Claude Code sai do plano por conta própria |
+| 19 | Site e documentação pública (decididos em 25/10: Site e documentação pública, acima): Astro com Starlight em `site/`, na Cloudflare; a home, as Versões e as News, e a documentação de quem usa, que vai também dentro de cada versão para o Atlas responder sobre si; pronto para agentes. Pedido do usuário em 25/10 | 18 | **Parte 1, código pronto em 25/10:** o site em `site/`, com Astro 7 e Starlight 0.42. A home é o planetário em WebGL2 próprio, sem biblioteca: as linhas são calculadas no shader, e a esfera, as órbitas e o caminho entre as duas não custam CPU por quadro. Ela tem seis capítulos (as contas, a rota com o cometa e os medidores da janela de cinco horas, as máquinas, a memória e o fecho), e depois o portão de aprovação com comandos e vereditos de verdade, o resto do Atlas, a instalação com as abas do sistema de quem visita, e as últimas mudanças. Sem WebGL fica o primeiro quadro desenhado em SVG no build, pela mesma fórmula; com movimento reduzido, a câmera troca de plano sem voar. No celular a cena é um painel no alto e o texto passa por baixo dele. A documentação tem quatro páginas (O que é o Atlas, Instalar, Executores e contas, Várias máquinas), conferidas contra o código e as telas do app. As News saem vazias, com o formato do item escrito, e o Changelog é o `git log` da `main` no formato da atualização; os dois têm RSS. Para agentes: cada página tem o gêmeo em Markdown, `llms.txt` e `llms-full.txt` na ordem da barra lateral, `robots.txt` com `Content-Signal` e os robôs de IA, a skill `atlas` em `/.well-known/agent-skills/` com o digest dos bytes, e um Worker que responde Markdown a `Accept: text/markdown` e põe os cabeçalhos `Link`. O CI ganha o job `site`. **Escolhas próprias, marcadas:** o `Content-Signal` libera busca, resposta e treino (decidir antes de publicar); a skill publicada e o gêmeo em Markdown entram já, antes do item 4; a instalação ainda aponta para o gist; o domínio é um marcador (`SITE_URL`). Provado: `npm run check` (astro check, tipos do Worker, eslint, prettier e 32 testes); o build com a conferência do `dist` (toda página com gêmeo, o digest da skill, nenhum link interno quebrado); o Worker no runtime da Cloudflare (`wrangler dev`), respondendo Markdown com `Vary` e `Content-Signal` e pondo os `Link` na home; a home vista no Edge em 1920, 1440, 1024 e 390 px, capítulo por capítulo; e o Lighthouse com renderização por software: 98 de desempenho e 100 de acessibilidade e de boas práticas na home, e SEO 92, porque o Lighthouse não conhece a linha `Content-Signal` que o Is It Agent Ready pede. **Parte 2, código pronto em 25/10 (docs/ARCHITECTURE.md, The documentation):** as páginas no pacote (`atlas.docs`, assunto novo com o seu contrato no import-linter), lidas pelo site e pelo `atlas docs`; a skill embutida `atlas`; a referência gerada dos comandos e das configurações (três campos sem comentário ganharam o seu); as cinco referências de `docs/` viradas páginas, mais o portão de aprovação e a origem dos dados do Claude Code; 12 páginas ao todo. O guia de plugins, que a 16t aumentou no mesmo dia, veio inteiro para a página, e a cópia da skill `write-plugin`, os testes dos dois lados e o link do app foram junto com ele. O plugin de validação de links do site saiu (ele calcula o id da página pela pasta `src/content/docs` e dava todos os links por quebrados) e o `check-dist.mjs` passou a conferir também cada `#` de seção, provado com uma âncora quebrada de propósito. Provado: os testes de `tests/docs` (o cabeçalho, a ordem, achar, buscar, o comando, a referência atual, cada comando que a skill dá rodando, e a página chegando inteira pelo `run_command` do agente, com acentos), ruff, pyright, import-linter, deptry e a suíte inteira; no site, `npm run check` e o build. **O ícone do app, código pronto em 25/10 (pedido do usuário):** a marca do Atlas no lugar do ícone do Electron, na janela, na barra de tarefas, no Dock, no atalho do Menu Iniciar e na entrada do Linux. Provado: o `.ico` lido pelo carregador do próprio Windows em cada tamanho, de 16 a 256 px, com os cantos transparentes no fundo claro e no escuro; o teste do atalho lendo o ícone que ele guarda; e o e2e do app inteiro. **Parte 3, o site e a documentação revistos, código pronto em 25/10 (pedido do usuário: mais bonito, animações melhores, texto estratégico, documentação impecável, rápido e bem posicionado nas buscas):** a home ganhou um texto novo, conferido contra o código e as telas do app (o título "Every coding agent. Every account. One window.", quatro fatos sob a instalação, a comparação "sozinhos × no Atlas", cartões que levam ao guia de cada recurso e oito perguntas frequentes); animações sem JavaScript (a entrada do hero em sequência, as seções subindo com a rolagem por `animation-timeline: view()`, a transição entre páginas por `@view-transition`, as respostas que deslizam) e uma luz que segue o ponteiro nos cartões, com um só ouvinte, tudo parado com movimento reduzido; para as buscas, JSON-LD (Organization, WebSite, SoftwareApplication, FAQPage, e TechArticle com BreadcrumbList em cada página da documentação), o título de busca de cada página com as palavras que se procuram (`site/src/lib/seo-titles.ts`, pelo `routeMiddleware` do Starlight), a imagem de compartilhamento nova e em toda página, `noindex` na 404 e um rodapé com os guias; o logo de 17 KB passou a 7,7 KB, os shaders do planetário compilam em paralelo onde o navegador deixa, e as fontes da documentação vêm antes do primeiro quadro (o CLS de 0,187 foi a 0). A documentação ganhou dez páginas (Modelos e chaves, Rotinas, Telegram, Voz e ditado, O navegador, Skills e o marketplace, Privacidade, Backups/atualizações/homes, Solução de problemas e Perguntas e respostas) e um mapa na página inicial, e três trechos que o app já tinha deixado para trás foram corrigidos (os executores ligam em Configurações → Executores; a memória e a alma se editam em Configurações → Personalização). Provado: `npm run check` (44 testes, os de SEO novos), o build com a conferência de cada link e âncora, `tests/docs`, as telas em 1440, 1280 e 390 px, e o Lighthouse com renderização por software: home 93 de desempenho e 100 de acessibilidade e boas práticas, documentação 99 de desempenho; SEO 92 nas duas pelo mesmo `Content-Signal`. **Falta:** a prova com um modelo de verdade (perguntar antes: centavos), o domínio e o projeto na Cloudflare (o usuário), a nota do Is It Agent Ready no ar, a rotina das News e o português do resto da documentação. O link do guia de plugins no app passou para o site em 01/11. **O português, começado em 01/11 (docs/ARCHITECTURE.md, The documentation):** a home inteira em `/pt-br/` (o texto, o menu, o rodapé, as abas de instalação, os rótulos do planetário e as mudanças pelo `Notes-pt-BR`), e o Começar da documentação (O que é o Atlas e Instalar) no idioma `pt-br` do Starlight, com a barra lateral traduzida e as outras páginas em inglês com o aviso; `hreflang` e o seletor de idioma no menu, sem redirecionar; o gêmeo em Markdown de cada página nova; os termos do glossário (casa, loja) e os nomes de tela do app em português. Provado: `npm run check` (144 testes; os novos conferem a forma da home contra a inglesa, as palavras do menu nos dois idiomas e o hash da página inglesa de cada tradução), o build com o `check-dist` (104 páginas, nenhum link quebrado) e as telas no Edge, a home inglesa igual |
+| 20 | Atlas Cloud (estudado em 01/11 e decidido em 03/11: Uma casa, três faces, acima): a casa inteira numa microVM que dorme, o relé na Cloudflare cifrado de ponta a ponta, créditos em reais, e o executor com crédito ou com a assinatura onde o fornecedor permitir | 19 | **A parte do Atlas ✅ 05/11 (81ab16f, 12e9d96, 9892076, d0d394c); a infraestrutura e a cobrança são parada.** A casa espera num relé (`[relay] url`) e serve cada app juntado ali como mais um cliente do protocolo; `atlas server code --relay` leva o endereço, a sala e uma chave que o relé nunca vê. Cada conexão combina as suas chaves (HKDF com um nonce de cada lado, uma chave por direção) e sela cada quadro numerado em AES-256-GCM, e as duas pontas provam a chave com um `ready` selado. **Escolha própria, marcada:** AES-256-GCM e não ChaCha20, porque o WebCrypto da janela não tem ChaCha20; vetores fixos provam que o Python e a janela selam os mesmos bytes. No app, o caminho "Relé, de qualquer lugar" de uma máquina. Junto: a atividade (`GET /activity` e `server.activity`: se algo trabalha, os clientes, desde quando está ocioso e o próximo despertar), o backup sozinho (`[backup] folder`, `every_hours`, `keep`) e o endereço de metadados da nuvem recusado ao `web_fetch` e no piso dos comandos. Provado contra um relé falso local. **Fica para a parada:** o relé como Worker na Cloudflare, as contas pagas, o Pix, a pergunta à Anthropic, a revenda de crédito e, depois do relé no ar, o Telegram por webhook e o webhook dos gatilhos |
+| 21 | A workspace, a base A (decidida em 03/11: Uma casa, três faces, acima): uma tarefa numa worktree da casa, com sessões de qualquer harness, o diff comentado na linha, os pontos de volta por turno, o git e o PR por botões no app, e a issue que vira workspace. Em fatias, cada uma com o seu commit: A1 a workspace, A2 o diff comentado, A3 os pontos de volta, A4 git, PR e checks, A5 a issue | 18g, 26 | ✅ 04/11 (55f935b a 3816092, nas cinco fatias). A1: a workspace (`atlas.workspaces`: worktree e branch da casa, preparo, arquivar e apagar), a `delegate` com `workspace: "new"` e a lista sob o projeto na aba dos executores; A2: as mudanças linha a linha no painel, o comentário de uma linha mandado ao agente; A3: um ponto de volta antes de cada mensagem, e voltar não perde nada; A4: commit, juntar na branch de origem ou mandar, por botões, e o PR com os checks pelo plugin do GitHub; A5: a issue que começa uma workspace. **Parada que não segurou a sequência:** o preparo e o arquivar, para o usuário escolher vendo funcionar (a recomendação marcada está em uso) |
+| 22 | Uma conta por harness (decidido em 03/11: O futuro dos executores, acima): trocar de conta é entrar de novo na mesma pasta, e as sessões continuam; no limite do plano, o aviso e a mesma sessão retomada quando o plano volta; as pastas por conta, a cópia da sessão entre contas e a troca automática saem do núcleo para um plugin oficial da loja, feito no mesmo passo, com os pontos de encaixe no SDK para a pílula da conta e a rota ficarem no alto da sessão e no cartão do executor, sem apagar nenhuma sessão de quem já usa | 16h, 28 | ✅ 03/11 (b4cd894, f54f687, 0edcf20, 43854a4, d09e7d3). A sessão no limite do plano segue quando o plano volta; as outras contas saem do núcleo para o plugin oficial de contas, com a pílula da conta no alto da sessão e no cartão do executor pelo SDK; nenhuma sessão de quem já usa se perde |
+| 23 | Os gatilhos por sonda (decididos em 03/11: A base B, os gatilhos, acima): a rotina dispara também por evento, por um comando sem modelo que roda de tempos em tempos e só acorda o agente quando imprime algo; o que ele traz chega marcado como texto de fora; uma abertura no SDK para o plugin trazer a sua fonte de evento. O webhook vem com o relé do 20; metas, atenção e diário ficam para plugins | 21 | ✅ 04/11 (bedd840, d678d0c). A rotina de prompt com agenda que se repete ganha uma sonda: um comando sem modelo que só acorda o agente quando imprime algo novo, e o que ele traz chega como texto de fora. SDK 30: o plugin traz a sua fonte de evento (`ctx.register_probe`, `atlas.probes` no manifesto), nomeada na rotina `plugin:<plugin>:<nome>`. O webhook espera o relé no ar (20) |
+| 24 | A loja aberta, a base D (decidida em 03/11: A base D, a loja aberta, acima): uma fonte pública por tipo lida direto pelo Atlas, sem revisão (o MCP Registry oficial, o diretório oficial de plugins do Claude Code e a busca do skills.sh, com as instalações); o `atlas-marketplace` só com o que é do Atlas, aberto a PR que passa no CI; o MCP com OAuth aceito no item `mcp`; o CIMD no login dos MCPs | 26 | **A parte do Atlas ✅ 04/11 (ad6a5e7, 0642102, a26138b, fd62020, e1822a4).** Cada aba da loja lista, depois dos itens do Atlas, a sua fonte pública lida direto: o MCP Registry (o do fornecedor primeiro, versão exata no npm ou no PyPI, ou o endereço https), a busca do skills.sh (fixada no commit que instala, com a varredura de ameaças) e o diretório de plugins do Claude Code (com o que não funciona no Atlas marcado em `outside.yaml`). O login dos MCPs pelo documento de cliente (CIMD) onde o servidor aceita, e `atlas marketplace check --base` recusa num PR de fora o que só o dono muda. **Paradas:** publicar o site para o `oauth/client.json` valer (o site não sobe pelo CI) e os fluxos do repositório `atlas-marketplace` (pergunta aberta) |
+| 25 | As rotinas num executor e os modelos (decididos em 03/11: As rotinas num executor e os modelos, acima): a rotina roda também num executor numa pasta, e o Atlas pergunta ao criar uma assim; criar e editar rotina no app, com a sonda e o executor no mesmo formulário; a aba Modelos na tela de Rotinas, de projeto e pessoais, em português; e o placar do que rodou sozinho, precisou do usuário ou falhou | 21, 24 | ✅ 05/11 (1142cb4, d7e0779, 99cc92d, 54ad037, a029b99). A rotina de prompt roda também num executor numa pasta, numa workspace ou não (sem mudança, a workspace é arquivada; com mudança, fica, e com o PR de rascunho se pedido), e o que o executor pergunta espera o usuário; o Atlas pergunta antes de criar uma assim. O placar da semana (rodou sozinho, precisou do usuário, falhou), o formulário de criar e mudar rotina com a sonda e o executor, e a aba Modelos com doze rotinas escritas pelo Atlas, seis de projeto e seis pessoais, em português |
+| 26 | A poda do núcleo (decidida em 03/11: A poda do núcleo, acima): a regra do núcleo no `docs/ARCHITECTURE.md` (as capacidades do agente, com o navegador e o computador nativos, ficam; a ligação com um serviço, uma conta ou um programa específico é plugin); os quatro executores, o `voice`, o `telegram`, o gh e o gws saem da instalação para a loja como oficiais, sem quem já usa perder nada; as skills `atlas` e `write-plugin` ficam; a transcrição local e grátis e o ditado em qualquer lugar (opcional, desligado de fábrica, com o atalho que aceita botão do mouse) vêm do `voice` para o núcleo | 22 | ✅ 04/11 (6b668b9, 46f4ede, c19f21e, 41c20c2). A regra do núcleo no `docs/ARCHITECTURE.md`; os plugins oficiais saem para `plugins/` no repositório e para a loja, `github` e `google` com eles, sem quem já usa perder nada; a transcrição local e grátis (`atlas.speech`) e o ditado em qualquer lugar vêm para o núcleo, desligados de fábrica. **Escolha própria, marcada:** o motor local é o Parakeet TDT (670 MB, baixado pela faixa quando o usuário liga) |
+| 27 | O app no celular (decidido em 03/11: A base E, os canais, acima): um PWA com poucas funções, alcançando a casa pelo relé, sem Tailscale, com a notificação pelo relé | 20 | |
+| 28 | A base saudável (decidida na revisão da sequência em 03/11: A revisão da sequência, acima): o CI da `main` verde em dez rodadas seguidas sem nova tentativa, cada teste instável consertado na causa; o plano dos testes de 01/11; os alertas de dependência que têm conserto | — | **Em andamento (03/11 a 05/11).** Cada falha da `main` lida e consertada na causa (eb398b1, eee2eea, 45b1da0, dc40552, 2979b00, a92ac4c, f738382, 8b0462c), o Electron 43.8.1 e o fast-uri 3.1.9, e o plano dos testes de 01/11 já em uso. Ficam abertos o minimatch 11.0.1 (passa a regra dos 14 dias em 10/11) e o katex (só com o mermaid 12). **As dez rodadas verdes seguidas ainda não:** em 05/11, o 8b0462c falhou em dois testes de tempo no Windows que passaram na nova tentativa sem mudança (o steer no meio do turno e o canal que começa), e o a029b99 num download do ripgrep que o GitHub não respondeu (504). **Escolha própria, marcada:** as rodadas são contadas nos pushes da própria sequência, sem disparar rodadas só para contar |

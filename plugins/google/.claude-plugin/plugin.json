@@ -1,0 +1,14 @@
+{
+  "name": "google",
+  "displayName": "Google Workspace",
+  "version": "0.1.0",
+  "description": "Gmail and Calendar through Google's own program, gws: read, triage, answer and send mail, and see and add events, on the login gws keeps on this computer.",
+  "author": { "name": "the Atlas contributors" },
+  "license": "MIT",
+  "keywords": ["google", "gmail", "calendar", "gws"],
+  "atlas": {
+    "api": 29,
+    "calls": ["status"],
+    "network": ["googleapis.com"]
+  }
+}

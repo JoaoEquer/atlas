@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 // @ts-expect-error -- the plugin's screen is plain JavaScript, loaded uncompiled by the app.
-import * as voice from '../../../../src/atlas/plugins/bundled/voice/desktop/plugin.js'
+import * as voice from '../../../../plugins/voice/desktop/plugin.js'
 
 interface Event {
   [key: string]: unknown

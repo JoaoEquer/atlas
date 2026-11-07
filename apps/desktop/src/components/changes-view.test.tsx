@@ -1,0 +1,164 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type { WorkspaceDiff, WorkspaceRow } from '@/protocol/protocol.generated'
+import * as app from '@/store/app'
+import * as workspaces from '@/store/workspaces'
+
+import { ChangesView } from './changes-view'
+
+const WORKSPACE = {
+  base: 'main',
+  branch: 'atlas/cart',
+  folder: '/home/worktrees/shop-1a2b3c/cart',
+  id: 'w-cart',
+  name: 'cart'
+} as WorkspaceRow
+
+const DIFF: WorkspaceDiff = {
+  ahead: 0,
+  files: [
+    {
+      added: 1,
+      binary: false,
+      lines: [
+        { kind: 'same', new: 11, old: 11, text: 'def total(cart):' },
+        { kind: 'minus', new: 0, old: 12, text: '    return sum(cart)' },
+        { kind: 'plus', new: 12, old: 0, text: '    return round(sum(cart), 2)' }
+      ],
+      path: 'shop/cart.py',
+      removed: 1,
+      status: 'modified',
+      truncated: false
+    },
+    { added: 0, binary: true, lines: [], path: 'logo.png', removed: 0, status: 'added', truncated: false }
+  ],
+  more: false,
+  uncommitted: true
+}
+
+beforeEach(() => {
+  vi.spyOn(workspaces, 'readDiff').mockResolvedValue(DIFF)
+  vi.spyOn(workspaces, 'readCheckpoints').mockResolvedValue([])
+})
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  workspaces.$reviewComments.set({})
+})
+
+describe("a workspace's changes", () => {
+  it('lists each file changed, numbered as the file has it', async () => {
+    render(<ChangesView workspace={WORKSPACE} />)
+
+    const files = await screen.findAllByTestId('changed-file')
+    expect(files.map(file => file.dataset.path)).toEqual(['shop/cart.py', 'logo.png'])
+    expect(screen.getByTestId('changes').textContent).toContain('2 files changed since main')
+    const lines = screen.getAllByTestId('diff-line')
+    expect(lines.map(line => [line.dataset.kind, line.dataset.line])).toEqual([
+      ['same', '11'],
+      ['minus', '12'],
+      ['plus', '12']
+    ])
+    expect(screen.getByText('A binary file.')).toBeTruthy()
+  })
+
+  it('gathers comments on lines and sends them to the session as one message', async () => {
+    const sent = vi.spyOn(app, 'sendToSession').mockResolvedValue(true)
+    render(<ChangesView workspace={WORKSPACE} />)
+
+    const [, removed, added] = await screen.findAllByTestId('diff-line')
+    for (const [line, text] of [
+      [added, 'Round in the view, not here.'],
+      [removed, 'Keep this one.']
+    ] as const) {
+      if (line) {
+        fireEvent.click(line)
+      }
+      fireEvent.change(screen.getByTestId('comment-text'), { target: { value: text } })
+      fireEvent.click(screen.getByTestId('comment-add'))
+    }
+
+    expect(screen.getAllByTestId('review-comment')).toHaveLength(2)
+    fireEvent.click(screen.getByTestId('review-send'))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('review-comments')).toBeNull()
+    })
+    expect(sent).toHaveBeenCalledWith(
+      'Review comments on your changes:\n\n' +
+        'shop/cart.py:12\n> return round(sum(cart), 2)\nRound in the view, not here.\n\n' +
+        'shop/cart.py:12 (a line removed)\n> return sum(cart)\nKeep this one.'
+    )
+  })
+
+  it('keeps the comments when they could not be sent', async () => {
+    vi.spyOn(app, 'sendToSession').mockResolvedValue(false)
+    render(<ChangesView workspace={WORKSPACE} />)
+
+    const [first] = await screen.findAllByTestId('diff-line')
+    if (first) {
+      fireEvent.click(first)
+    }
+    fireEvent.change(screen.getByTestId('comment-text'), { target: { value: 'Why?' } })
+    fireEvent.keyDown(screen.getByTestId('comment-text'), { ctrlKey: true, key: 'Enter' })
+    fireEvent.click(screen.getByTestId('review-send'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-send')).toHaveProperty('disabled', false)
+    })
+    expect(screen.getAllByTestId('review-comment')).toHaveLength(1)
+  })
+
+  it('goes back to a checkpoint after a yes, and says the session goes on in a copy', async () => {
+    vi.spyOn(workspaces, 'readCheckpoints').mockResolvedValue([
+      { commit: 'c2', created_at: '2026-11-04T10:05:00Z', label: 'Round the total.' },
+      { commit: 'c1', created_at: '2026-11-04T10:00:00Z', label: 'Add the cart.' }
+    ])
+    const back = vi.spyOn(workspaces, 'goBack').mockResolvedValue(undefined)
+    render(<ChangesView workspace={WORKSPACE} />)
+
+    fireEvent.click(await screen.findByTestId('checkpoints-toggle'))
+    expect(screen.getAllByTestId('checkpoint').map(row => row.textContent)).toEqual([
+      expect.stringContaining('Round the total.'),
+      expect.stringContaining('Add the cart.')
+    ])
+    const [, first] = screen.getAllByTestId('checkpoint-go-back')
+    if (first) {
+      fireEvent.click(first)
+    }
+    expect(back).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('checkpoint-go-back-yes'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('checkpoint-back').textContent).toContain('before “Add the cart.”')
+    })
+    expect(back).toHaveBeenCalledWith('w-cart', 'c1')
+  })
+
+  it('commits the changes, then merges the branch into its origin after a yes', async () => {
+    const committed = vi.spyOn(workspaces, 'commitWorkspace').mockResolvedValue(WORKSPACE)
+    const merged = vi.spyOn(workspaces, 'mergeWorkspace').mockResolvedValue(WORKSPACE)
+    render(<ChangesView workspace={WORKSPACE} />)
+
+    fireEvent.change(await screen.findByTestId('commit-message'), { target: { value: 'Round the total' } })
+    fireEvent.click(screen.getByTestId('commit'))
+    await waitFor(() => {
+      expect(screen.getByTestId('deliver-said').textContent).toBe('Committed on the branch.')
+    })
+    expect(committed).toHaveBeenCalledWith('w-cart', 'Round the total')
+
+    vi.spyOn(workspaces, 'readDiff').mockResolvedValue({ ...DIFF, ahead: 1, uncommitted: false })
+    fireEvent.click(screen.getByTestId('changes-refresh'))
+    fireEvent.click(await screen.findByTestId('merge'))
+    expect(screen.getByTestId('deliver-confirm').textContent).toContain('atlas/cart is merged into main')
+    expect(merged).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('deliver-yes'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('deliver-said').textContent).toBe('Merged into main.')
+    })
+    expect(merged).toHaveBeenCalledWith('w-cart')
+  })
+})

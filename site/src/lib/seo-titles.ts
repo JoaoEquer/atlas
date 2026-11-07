@@ -24,14 +24,16 @@ const TITLES: Record<string, string> = {
   'docs/reference/commands': 'Every atlas command, with its arguments',
   'docs/reference/settings': 'Every Atlas setting: config.toml and its ATLAS_ variables',
   'docs/reference/tools': 'Every tool the Atlas agent has, and when it has it',
-  'docs/extending/plugins': 'Write a plugin: skills, hooks, tools, channels and executors'
+  'docs/extending/plugins': 'Write a plugin: skills, hooks, tools, channels and executors',
+  'pt-br/docs': 'Documentação do Atlas: um app para Claude Code, Codex e Gemini CLI',
+  'pt-br/docs/install': 'Instalar o Atlas no Windows, macOS, Linux ou Docker'
 }
 
 /** The title tag of the page `id`, whose own title is `title`. */
 export function searchTitle(id: string, title: string): string {
   const special = TITLES[id]
   if (special === undefined) {
-    return `${title} | Atlas docs`
+    return id.startsWith('pt-br/') ? `${title} | Documentação do Atlas` : `${title} | Atlas docs`
   }
   // A title that already names Atlas does not name it twice.
   return /\bAtlas\b/.test(special) ? special : `${special} | Atlas`

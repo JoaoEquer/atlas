@@ -51,6 +51,25 @@ def test_the_app_installs_from_the_marketplace_and_every_client_hears_it(
     chosen = ModelSettings(provider="openrouter")
     models = connect(fake, "openrouter", settings=chosen, ledger=CallLedger(database))
     with FakeGitHub() as github:
+        github.registry = [
+            {
+                "server": {
+                    "name": "com.example/mcp",
+                    "description": "Example's own server.",
+                    "version": "1.0.0",
+                    "remotes": [{"type": "streamable-http", "url": "https://mcp.example.com"}],
+                },
+                "_meta": {
+                    "io.modelcontextprotocol.registry/official": {
+                        "status": "active",
+                        "updatedAt": "2026-11-01T10:00:00Z",
+                    }
+                },
+            }
+        ]
+        Repository(tmp_path, "atlas-test/plugins-directory", github).write(
+            {".claude-plugin/marketplace.json": '{"plugins": []}'}
+        ).commit()
         tools = Repository(tmp_path, "someone/tools", github)
         sha = tools.write(
             {"pdf/SKILL.md": skill_text("pdf", requires={"mcp": ["docs"]}, body="Read PDFs.")}
@@ -72,7 +91,13 @@ def test_the_app_installs_from_the_marketplace_and_every_client_hears_it(
             model=chosen,
             workspace=WorkspaceSettings(work),
             marketplace=MarketplaceSettings(
-                repository=MARKETPLACE, archive_url=github.archive_url, raw_url=github.raw_url
+                repository=MARKETPLACE,
+                archive_url=github.archive_url,
+                raw_url=github.raw_url,
+                registry_url=github.registry_url,
+                skills_url=github.skills_url,
+                github_api_url=github.github_api_url,
+                claude_plugins="atlas-test/plugins-directory",
             ),
         )
         with (
@@ -88,6 +113,16 @@ def test_the_app_installs_from_the_marketplace_and_every_client_hears_it(
             assert items["docs"]["kind"] == "mcp"
             assert items["claude-code"]["shipped"] is True
             assert items["claude-code"]["tier"] == "official"
+            # The MCP Registry, read directly (step 24), searched with what the user typed.
+            outside = items["mcp-registry:com.example/mcp"]
+            assert (outside["source"], outside["updated"], outside["installs"]) == (
+                "mcp-registry",
+                "2026-11-01",
+                None,
+            )
+            found = app.result("marketplace.list", {"query": "nothing like it"})
+            assert not [i for i in found["items"] if i["source"] != "atlas"]
+            assert found["source_problems"] == []
 
             page = app.result("marketplace.page", {"name": "pdf"})
             assert page["readme"] == "Read PDFs."

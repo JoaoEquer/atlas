@@ -1,11 +1,12 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { expect, type Page, test } from '@playwright/test'
 
 import { vscodeLink } from '../electron/editor'
 
-import { atlas, type Desktop, launch, ROOT, say } from './harness'
+import { atlas, type Desktop, launch, openApp, ROOT, say } from './harness'
 
 let desktop: Desktop | undefined
 
@@ -131,8 +132,7 @@ test('a task Atlas delegates opens from its line as a session, marked by Atlas, 
   const delegated = page.getByTestId('tool-row').filter({ hasText: 'Fix the failing test.' })
   await expect(delegated.locator('summary')).toContainText(/Delegat\w+: Fix the failing test\./)
   await delegated.getByTestId('open-delegated').click()
-  await expect(page.getByTestId('session-header')).toContainText('Claude Code')
-  await expect(page.getByTestId('session-header')).toContainText('someone@example.com')
+  await expect(page.getByTestId('session-box')).toBeVisible()
 
   const approval = page.getByTestId('executor-approval-card')
   await expect(approval).toContainText('Claude Code wants to run a command')
@@ -187,7 +187,7 @@ test('a session begun in a terminal is listed under its folder, opens as a conve
   await expect(page.getByTestId('tool-row').filter({ hasText: 'Bash' })).toHaveAttribute('data-status', 'failed')
   await expect(page.getByTestId('assistant-message').last()).toContainText('The code rounds now; the test passes.')
 
-  // The header opens the session's folder in VS Code, by VS Code's own link: kept here, not opened.
+  // The title bar opens the session's folder in VS Code, by VS Code's own link: kept here, not opened.
   await desktop.app.evaluate(({ shell }) => {
     const opened: string[] = []
     Object.assign(globalThis, { openedLinks: opened })
@@ -197,11 +197,10 @@ test('a session begun in a terminal is listed under its folder, opens as a conve
       return Promise.resolve()
     }
   })
-  await page.getByTestId('open-in-editor').click()
+  await page.getByTestId('title-open-editor').click()
   await expect
     .poll(() => desktop?.app.evaluate(() => (globalThis as unknown as { openedLinks: string[] }).openedLinks))
     .toEqual([vscodeLink(folder)])
-  await expect(page.getByTestId('open-in-editor-error')).toBeHidden()
 
   const box = page.getByTestId('session-box')
   await box.fill('Run the tests again.')
@@ -209,9 +208,7 @@ test('a session begun in a terminal is listed under its folder, opens as a conve
   await expect(page.getByTestId('session-row').first()).toHaveAttribute('data-state', 'working')
   // While it works, the box steers the turn, and its send is the stop while it is empty.
   await expect(box).toHaveAttribute('placeholder', 'It is working: this enters the turn running')
-  // Its header's only control opens the project in VS Code; stopping is the box's.
-  await expect(page.getByTestId('session-header').getByRole('button')).toHaveCount(1)
-  await expect(page.getByTestId('open-in-editor')).toBeVisible()
+  // Stopping is the box's.
   await expect(page.getByTestId('stop')).toBeVisible()
   await box.fill('Use Vitest.')
   await expect(page.getByTestId('stop')).toBeHidden()
@@ -247,20 +244,23 @@ test('a session begun in a terminal is listed under its folder, opens as a conve
   await expect(page.getByTestId('assistant-message').last()).toContainText('Context Usage', STARTED)
   await expect(page.getByTestId('user-message').last()).toContainText('/context')
 
-  // The same box as Atlas's: the harness's automatic mode is "Auto", and "Atlas answers" is gone.
-  // On from the start (20/10/2026); off goes at once, and on again only once its warning is read
-  // and confirmed (17/10/2026).
-  const auto = page.getByRole('button', { name: 'Automatic', exact: true })
-  await expect(auto).toHaveAttribute('aria-pressed', 'true')
-  await auto.click()
-  await expect(auto).toHaveAttribute('aria-pressed', 'false')
-  await auto.click()
+  // Its permission modes in a menu by the box (step 18g), "Atlas answers" gone: automatic from the
+  // start (20/10/2026); another goes at once, and automatic again only once its warning is read and
+  // confirmed (17/10/2026).
+  const mode = page.getByTestId('mode-select')
+  await expect(mode).toHaveAttribute('data-mode', 'auto')
+  await mode.click()
+  await expect(page.getByTestId('mode-option')).toHaveText([/^Manual/, /^Accept edits/, /^Plan/, /^Automatic/])
+  await page.getByTestId('mode-option').filter({ hasText: 'Plan' }).click()
+  await expect(mode).toHaveAttribute('data-mode', 'plan')
+  await mode.click()
+  await page.getByTestId('mode-option').filter({ hasText: 'Automatic' }).click()
   const warning = page.getByTestId('harness-auto-warning')
   await expect(warning).toContainText('may run commands and edit files')
-  await expect(auto).toHaveAttribute('aria-pressed', 'false')
+  await expect(mode).toHaveAttribute('data-mode', 'plan')
   await warning.getByTestId('harness-auto-confirm').click()
   await expect(warning).toBeHidden()
-  await expect(auto).toHaveAttribute('aria-pressed', 'true')
+  await expect(mode).toHaveAttribute('data-mode', 'auto')
   await expect(page.getByText('Atlas answers')).toBeHidden()
   // Claude Code takes files (step 16i): the box has Atlas's clip.
   await expect(page.getByRole('button', { name: 'Attach files' })).toBeVisible()
@@ -452,7 +452,7 @@ test('an executor has its connectors beside, and both sides of the window hide a
   await expect(account.getByTestId('connector-row')).toHaveCount(2)
   await expect(panel).toContainText('done in Claude Code itself (/mcp)')
   const marketing = panel.getByTestId('plugin-row').filter({ hasText: 'marketing' })
-  await expect(marketing).toContainText('0 of 1 MCP server')
+  await expect(marketing.locator('summary [title="0 of 1 MCP server"]')).toBeVisible()
   await marketing.locator('summary').click()
   await expect(marketing.getByTestId('connector-row')).toHaveAttribute('data-status', 'needs-auth')
   const design = panel.getByTestId('plugin-row').filter({ hasText: 'design' })
@@ -460,7 +460,7 @@ test('an executor has its connectors beside, and both sides of the window hide a
   await expect(design.getByTestId('connector-row')).toContainText('No URL configured for this server')
 
   // Its skills, read in the folder with no prompt.
-  await expect(panel.getByTestId('executor-skills').getByTestId('skill-row')).toContainText('/review')
+  await expect(panel.getByTestId('executor-skills').getByTestId('skill-row')).toHaveText('review')
 
   // Read again, on asking.
   await servers.getByTestId('connectors-refresh').click()
@@ -508,11 +508,16 @@ test('both sides open at the same width, and their edges drag them wider or narr
   const panel = page.getByTestId('side-panel')
   const width = (where: typeof nav) => where.evaluate(element => element.getBoundingClientRect().width)
   const conversation = () => page.locator('.main-pane').evaluate(element => element.getBoundingClientRect().width)
-  /** Drag an edge `by` pixels to the right, a step at a time, as a hand does. */
+  /**
+   * Drag an edge `by` pixels to the right, a step at a time, as a hand does, stopping at the
+   * window's border: a busy renderer merges the moves of one frame into the last, and a last move
+   * past the border was dropped with the ones before it.
+   */
   const drag = async (edge: string, by: number) => {
     const box = await page.getByTestId(edge).boundingBox()
+    const view = page.viewportSize()
 
-    if (!box) {
+    if (!box || !view) {
       throw new Error(`${edge} is not on screen`)
     }
 
@@ -520,32 +525,34 @@ test('both sides open at the same width, and their edges drag them wider or narr
     const y = box.y + box.height / 2
     await page.mouse.move(x, y)
     await page.mouse.down()
-    await page.mouse.move(x + by, y, { steps: 8 })
+    await page.mouse.move(Math.min(view.width - 1, Math.max(1, x + by)), y, { steps: 8 })
     await page.mouse.up()
   }
 
+  // Widths are polled: a rail takes its width a frame after the pointer moves, and on a busy
+  // machine that frame came after the read.
   // The same width on both sides.
-  expect(await width(nav)).toBe(288)
-  expect(await width(panel)).toBe(288)
+  await expect.poll(() => width(nav)).toBe(288)
+  await expect.poll(() => width(panel)).toBe(288)
 
   // The sidebar's edge drags right to widen it, the panel's left; a terminal or frame under the
   // pointer does not take the drag away.
   await drag('sidebar-edge', 100)
-  expect(await width(nav)).toBe(388)
+  await expect.poll(() => width(nav)).toBe(388)
   await drag('panel-edge', -120)
-  expect(await width(panel)).toBe(408)
+  await expect.poll(() => width(panel)).toBe(408)
   await expect(page.getByTestId('composer')).toBeVisible()
 
   // Dragged too far, a rail stops where the conversation keeps its minimum, and at its own.
   await drag('panel-edge', -900)
-  expect(await conversation()).toBeGreaterThanOrEqual(383)
-  expect(await width(panel)).toBeLessThanOrEqual(640)
+  await expect.poll(conversation).toBeGreaterThanOrEqual(383)
+  await expect.poll(() => width(panel)).toBeLessThanOrEqual(640)
   await drag('sidebar-edge', -900)
-  expect(await width(nav)).toBe(224)
+  await expect.poll(() => width(nav)).toBe(224)
 
   // A double click puts an edge back; a width dragged stays for next time, in the window's storage.
   await page.getByTestId('sidebar-edge').dblclick()
-  expect(await width(nav)).toBe(288)
+  await expect.poll(() => width(nav)).toBe(288)
   const kept = await page.evaluate(() => [
     localStorage.getItem('atlas.sidebarWidth'),
     localStorage.getItem('atlas.panelWidth')
@@ -558,10 +565,10 @@ test('both sides open at the same width, and their edges drag them wider or narr
   await drag('sidebar-edge', 200)
   await drag('panel-edge', -200)
   await page.setViewportSize({ height: 820, width: 1000 })
-  expect(await conversation()).toBeGreaterThanOrEqual(383)
-  expect(await width(nav)).toBeGreaterThanOrEqual(224)
-  expect(await width(panel)).toBeGreaterThanOrEqual(224)
-  expect(await width(nav)).toBeLessThan(488)
+  await expect.poll(conversation).toBeGreaterThanOrEqual(383)
+  await expect.poll(() => width(nav)).toBeGreaterThanOrEqual(224)
+  await expect.poll(() => width(panel)).toBeGreaterThanOrEqual(224)
+  await expect.poll(() => width(nav)).toBeLessThan(488)
 })
 
 test('a first run offers the harnesses installed here, turned on with consent right there', async () => {
@@ -573,7 +580,9 @@ test('a first run offers the harnesses installed here, turned on with consent ri
     }
   })
   const { page } = desktop
-  await expect(page.getByTestId('key-screen')).toBeVisible()
+  // The Executors step, after the Model step skipped.
+  await page.getByTestId('first-run-skip').click()
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'executors')
   // Codex is offered beside it, found here or not: this test is about Claude Code's.
   const offer = page.getByTestId('executor-offer').filter({ hasText: 'Claude Code' })
   await expect(offer).toContainText('Claude Code 2.1.140 · someone@example.com')
@@ -585,7 +594,7 @@ test('a first run offers the harnesses installed here, turned on with consent ri
   await expect(offer.getByRole('button', { name: 'Turn on' })).toBeHidden()
 
   // In the executors tab it is there to open.
-  await page.getByTestId('key-later').click()
+  await page.getByTestId('first-run-leave').click()
   await page.getByTestId('tab-executors').click()
   await expect(page.getByTestId('executor-card')).toContainText('Claude Code')
 })
@@ -598,6 +607,7 @@ test('a harness not found here is shown greyed out, with why, and nothing to tur
     }
   })
   const { page } = desktop
+  await page.getByTestId('first-run-skip').click()
   // Codex is offered beside it, found here or not: this test is about Claude Code's.
   const offer = page.getByTestId('executor-offer').filter({ hasText: 'Claude Code' })
   // The why in full (18/10/2026), where it used to say only that it was not found.
@@ -606,12 +616,146 @@ test('a harness not found here is shown greyed out, with why, and nothing to tur
   await expect(offer.getByRole('button', { name: 'Turn on' })).toBeHidden()
 })
 
+test('the first run opened again brings the sessions of a window, and archives the older ones', async () => {
+  const scripts = await scriptsFolder()
+  desktop = await launch(withClaude(scripts))
+  const { claude, folder, page } = desktop
+  // The home's one-time offer of "Bring your work" decided first, with nothing old to offer: the
+  // old folder below would otherwise open it under the test's clicks.
+  await page.waitForFunction(() => localStorage.getItem('atlas.firstRun') !== null, undefined, STARTED)
+  keepOldSession(claude, folder)
+  // A second folder, last touched two months ago.
+  const old = path.join(path.dirname(folder), 'old-shop')
+  const text = readFileSync(path.join(claude, 'projects', projectFolder(folder), `${SESSION}.jsonl`), 'utf8')
+  const project = path.join(claude, 'projects', projectFolder(old))
+  mkdirSync(project, { recursive: true })
+  const file = path.join(project, '0a1b2c3d-0000-4000-8000-000000000002.jsonl')
+  writeFileSync(file, text.split(JSON.stringify(folder).slice(1, -1)).join(JSON.stringify(old).slice(1, -1)))
+  const twoMonths = (Date.now() - 60 * 24 * 60 * 60 * 1000) / 1000
+  utimesSync(file, twoMonths, twoMonths)
+
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-first-run-open').click()
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'model')
+  await page.getByTestId('first-run-step-work').click()
+
+  const work = page.getByTestId('first-run-work')
+  await expect(work.getByTestId('first-run-executor')).toHaveText('Claude Code')
+  await expect(work.getByTestId('first-run-counts')).toHaveText('1 Claude Code', STARTED)
+  await work.getByTestId('first-run-window').selectOption('90')
+  await expect(work.getByTestId('first-run-counts')).toHaveText('2 Claude Code', STARTED)
+  await work.getByTestId('first-run-window').selectOption('30')
+  await work.getByRole('button', { name: 'Bring 1 session' }).click()
+  await expect(page.getByTestId('first-run')).toBeHidden()
+
+  // The list keeps the folder of the window; the old one waits under Archived, untouched.
+  await openClaudeCode(page)
+  await expect(page.getByTestId('session-folder')).toHaveCount(1)
+  await expect(page.getByTestId('session-folder')).toHaveAttribute('data-folder', folder)
+  expect(existsSync(file)).toBe(true)
+})
+
+test('a home that had its key before is offered "Bring your work" once, alone, for its old folders', async () => {
+  const scripts = await scriptsFolder()
+  // A folder whose only session was last touched two months ago, there before Atlas opens.
+  const claude = path.join(path.dirname(scripts), 'claude')
+  const old = path.join(path.dirname(scripts), 'old-shop')
+  keepOldSession(claude, old)
+  const file = path.join(claude, 'projects', projectFolder(old), `${SESSION}.jsonl`)
+  const twoMonths = (Date.now() - 60 * 24 * 60 * 60 * 1000) / 1000
+  utimesSync(file, twoMonths, twoMonths)
+  desktop = await launch(withClaude(scripts))
+  const { page } = desktop
+
+  await expect(page.getByTestId('first-run')).toHaveAttribute('data-step', 'work', STARTED)
+  await expect(page.getByTestId('first-run-step-model')).toHaveAttribute('data-mark', 'done')
+  await page.getByTestId('first-run-leave').click()
+  await expect(page.getByTestId('first-run')).toBeHidden()
+
+  // Once: a reload does not ask again.
+  await page.reload()
+  await expect(page.getByTestId('tab-executors')).toBeVisible(STARTED)
+  await expect(page.getByTestId('first-run')).toBeHidden()
+})
+
+test('after an update that changed its plugin, Claude Code waits for consent again, says so, and comes back', async () => {
+  const scripts = await scriptsFolder()
+  const claude = withClaude(scripts)
+  desktop = await launch(claude)
+  const { codex, dsh, folder, gemini, home, page } = desktop
+  keepOldSession(desktop.claude, folder)
+  await openClaudeCode(page)
+  await openFolder(page, folder)
+  await page.getByTestId('session-row').filter({ hasText: SESSION_TITLE }).click()
+  await expect(page.getByTestId('user-message').first()).toContainText('Make the cart total show cents.')
+  await desktop.app.close()
+
+  // The update: the consent kept was given to what an earlier version of the plugin declared.
+  const updated = spawnSync(
+    python,
+    [
+      '-c',
+      'import sqlite3, sys; db = sqlite3.connect(sys.argv[1]); ' +
+        `db.execute("UPDATE plugins_state SET consent = 'earlier' WHERE name = 'claude-code'"); db.commit()`,
+      path.join(home, 'atlas.db')
+    ],
+    { encoding: 'utf8', windowsHide: true }
+  )
+  expect(updated.status, updated.stderr).toBe(0)
+
+  const reopened = await openApp(path.dirname(home), home, {
+    CODEX_HOME: codex,
+    DSH_HOME: dsh,
+    GEMINI_CLI_HOME: gemini,
+    ...claude.environment
+  })
+
+  try {
+    const again = reopened.page
+    // The session's tab comes back saying why it cannot go on, where it used to read forever.
+    const notice = again.getByTestId('session-not-running')
+    await expect(notice).toContainText('Claude Code waits for your consent again after an update', STARTED)
+    // And the sidebar keeps Claude Code, saying the same, where it used to drop it.
+    await again.getByTestId('tab-executors').click()
+    // The sidebar's, not the tab's own.
+    const waiting = again.locator(
+      '[data-testid="executor-consent-again"][data-executor="claude-code"]:not([data-testid="session-not-running"] *)'
+    )
+    await expect(waiting).toBeVisible()
+
+    await waiting.getByTestId('executor-review-consent').click()
+    const row = again.locator('[data-testid="plugin-row"][data-plugin="claude-code"]')
+    await expect(row.getByTestId('plugin-consent-again')).toBeVisible()
+    const consent = row.getByTestId('plugin-consent')
+    await expect(consent).toContainText('Adds the executor claude-code')
+    await consent.getByTestId('plugin-consent-yes').click()
+    await expect(row.getByTestId('plugin-consent-again')).toBeHidden()
+
+    // On again: the sidebar lists it as before, and its session's tab reads the session.
+    await expect(waiting).toBeHidden(STARTED)
+    await expect(again.locator('[data-testid="executor-node"][data-executor="claude-code"]')).toBeVisible()
+    await again.getByTestId('tab').filter({ hasText: SESSION_TITLE }).click()
+    await expect(again.getByTestId('session-not-running')).toBeHidden()
+    await expect(again.getByTestId('user-message').first()).toContainText('Make the cart total show cents.', STARTED)
+  } finally {
+    await reopened.app.close().catch(() => undefined)
+  }
+})
+
 test('another account is added by its nickname, logs in in its own folder, and a session goes on there in a copy', async () => {
   const scripts = await scriptsFolder()
   // The user's home, beside which the other account's folder is made: the test's own.
   const user = path.join(path.dirname(scripts), 'user')
   mkdirSync(user)
-  desktop = await launch(withClaude(scripts, { HOME: user, USERPROFILE: user }))
+  // Other accounts are the accounts plugin's (step 22), turned on as a user does in a terminal.
+  const claudeOn = withClaude(scripts, { HOME: user, USERPROFILE: user })
+  desktop = await launch({
+    ...claudeOn,
+    setup: (home: string) => {
+      claudeOn.setup(home)
+      atlas(home, 'plugins', 'enable', 'accounts', '--yes')
+    }
+  })
   const { claude, folder, page } = desktop
   keepOldSession(claude, folder)
   writeFileSync(
@@ -620,7 +764,8 @@ test('another account is added by its nickname, logs in in its own folder, and a
   )
 
   await openClaudeCode(page)
-  await page.getByTestId('add-account').click()
+  // The plugin's part, atop Claude Code's tree once opened.
+  await page.locator('[data-testid="executor-node"][data-executor="claude-code"]').getByTestId('add-account').click()
   const form = page.getByTestId('add-account-form')
   await form.getByTestId('account-nickname').fill('work')
   await form.getByRole('button', { name: 'Add' }).click()
@@ -661,23 +806,21 @@ test('another account is added by its nickname, logs in in its own folder, and a
   await expect(workAccount).toBeEnabled(STARTED)
   const before = readFileSync(original, 'utf8')
 
-  // Switched, after the user read what changes: a copy on the other account, the original untouched
-  // until the copy is kept.
+  // Switched, after the user read what changes: a copy on the other account, the original untouched.
   await workAccount.click()
   const note = page.getByTestId('account-switch')
   await expect(note).toContainText('Go on on work (other@example.com)?', STARTED)
   await expect(note.getByTestId('account-switch-missing')).toContainText('files')
   await note.getByTestId('account-switch-confirm').click()
-  await expect(page.getByTestId('session-header')).toContainText('other@example.com', STARTED)
+  await expect(page.getByTestId('session-route')).toContainText('work', STARTED)
   expect(readFileSync(original, 'utf8')).toBe(before)
   await box.fill('Again.')
   await box.press('Enter')
   await expect(page.getByTestId('assistant-message').last()).toContainText('Running on .claude-work.', STARTED)
   const copies = path.join(user, '.claude-work', 'projects', projectFolder(folder))
   expect(readdirSync(copies).filter(name => name.endsWith('.jsonl'))).toHaveLength(1)
-  // Once the copy is kept, the original is deleted on the main account, where it would be left
-  // dead (decided with the user on 22/10/2026). It goes in the background, after the turn.
-  await expect.poll(() => existsSync(original), STARTED).toBe(false)
+  // Atlas deletes no session (decided with the user on 03/11/2026): the original stays on its account.
+  expect(readFileSync(original, 'utf8')).toBe(before)
 })
 
 test('a file pasted or picked in a session goes to Claude Code as the SDK sends it, and stays on screen reopened', async () => {
@@ -731,4 +874,151 @@ test('a file pasted or picked in a session goes to Claude Code as the SDK sends 
   await expect(prompt).toContainText('What is wrong in the cart?')
   await expect(prompt).not.toContainText('atlas-attachments')
   await expect(prompt.getByTestId('attachment-chip')).toHaveCount(2)
+})
+
+test("the box's new worktree is a workspace in the home, listed under its project, delivered and deleted from there", async () => {
+  const scripts = await scriptsFolder()
+  // The user's name in git, which their commit takes: a machine of CI has none of its own.
+  desktop = await launch(
+    withClaude(scripts, {
+      GIT_AUTHOR_EMAIL: 'ana@example.com',
+      GIT_AUTHOR_NAME: 'Ana',
+      GIT_COMMITTER_EMAIL: 'ana@example.com',
+      GIT_COMMITTER_NAME: 'Ana'
+    })
+  )
+  const { claude, folder, home, page } = desktop
+  keepOldSession(claude, folder)
+  writeFileSync(path.join(folder, 'README.md'), 'The shop.\n')
+  const identity = {
+    ...process.env,
+    GIT_AUTHOR_EMAIL: 'ana@example.com',
+    GIT_AUTHOR_NAME: 'Ana',
+    GIT_COMMITTER_EMAIL: 'ana@example.com',
+    GIT_COMMITTER_NAME: 'Ana'
+  }
+  for (const step of [
+    ['init', '--quiet', '--initial-branch', 'main'],
+    ['add', '--all'],
+    ['commit', '--quiet', '--message', 'The shop']
+  ]) {
+    spawnSync('git', ['-C', folder, ...step], { env: identity, windowsHide: true })
+  }
+
+  await openClaudeCode(page)
+  await openFolder(page, folder)
+  await page
+    .getByTestId('session-folder')
+    .filter({ hasText: path.basename(folder) })
+    .getByTestId('folder-new-session')
+    .click()
+  await page.getByTestId('where-select').click()
+  await page.getByTestId('where-worktree').click()
+
+  // Made in the home's worktrees folder, on a branch of its own, and listed under its project.
+  const workspace = page.getByTestId('workspace')
+  await expect(workspace).toHaveCount(1)
+  await expect(page.getByTestId('workspace-project')).toContainText(path.basename(folder))
+  await expect(page.getByTestId('where-branch')).toHaveText(/^atlas\//)
+  const made = readdirSync(path.join(home, 'worktrees'))
+  expect(made).toHaveLength(1)
+
+  // Delivered by the user's clicks (step 21, A4): committed, then merged into main after a yes.
+  const [name] = readdirSync(path.join(home, 'worktrees', made[0] ?? ''))
+  writeFileSync(path.join(home, 'worktrees', made[0] ?? '', name ?? '', 'NOTES.md'), 'Open late.\n')
+  if (await page.getByTestId('panel-show').isVisible()) {
+    await page.getByTestId('panel-show').click()
+  }
+  await page.getByTestId('changes-tab').click()
+  await page.getByTestId('commit-message').fill('Add the notes')
+  await page.getByTestId('commit').click()
+  await page.getByTestId('merge').click()
+  await page.getByTestId('deliver-yes').click()
+  await expect(page.getByTestId('deliver-said')).toHaveText('Merged into main.')
+  expect(readFileSync(path.join(folder, 'NOTES.md'), 'utf8').replace(/\r\n/g, '\n')).toBe('Open late.\n')
+
+  // Delivered: deleted on the first yes, its folder gone.
+  await workspace.hover()
+  await workspace.getByTestId('workspace-delete').click()
+  await page.getByTestId('workspace-delete-yes').click()
+  await expect(workspace).toHaveCount(0)
+  expect(readdirSync(path.join(home, 'worktrees', made[0] ?? ''))).toEqual([])
+})
+
+test("a comment on a line of a workspace's changes reaches its session, and its checkpoint takes the files back", async () => {
+  const scripts = await scriptsFolder()
+  const log = path.join(path.dirname(scripts), 'claude.log')
+  desktop = await launch(withClaude(scripts, { FAKE_CLAUDE_LOG: log }))
+  const { claude, folder, home, page } = desktop
+  keepOldSession(claude, folder)
+  writeFileSync(path.join(folder, 'README.md'), 'The shop.\n')
+  const identity = {
+    ...process.env,
+    GIT_AUTHOR_EMAIL: 'ana@example.com',
+    GIT_AUTHOR_NAME: 'Ana',
+    GIT_COMMITTER_EMAIL: 'ana@example.com',
+    GIT_COMMITTER_NAME: 'Ana'
+  }
+  for (const step of [
+    ['init', '--quiet', '--initial-branch', 'main'],
+    ['add', '--all'],
+    ['commit', '--quiet', '--message', 'The shop']
+  ]) {
+    spawnSync('git', ['-C', folder, ...step], { env: identity, windowsHide: true })
+  }
+
+  await openClaudeCode(page)
+  await openFolder(page, folder)
+  await page
+    .getByTestId('session-folder')
+    .filter({ hasText: path.basename(folder) })
+    .getByTestId('folder-new-session')
+    .click()
+  await page.getByTestId('where-select').click()
+  await page.getByTestId('where-worktree').click()
+  await expect(page.getByTestId('workspace')).toHaveCount(1)
+
+  // What the agent would have done: a line changed in the workspace, never in the project.
+  const [project] = readdirSync(path.join(home, 'worktrees'))
+  const [name] = readdirSync(path.join(home, 'worktrees', project ?? ''))
+  writeFileSync(path.join(home, 'worktrees', project ?? '', name ?? '', 'README.md'), 'The shop, open late.\n')
+  writeFileSync(path.join(scripts, `${name ?? ''}.json`), JSON.stringify([{ say: 'Noted.' }, { result: 'Noted.' }]))
+
+  if (await page.getByTestId('panel-show').isVisible()) {
+    await page.getByTestId('panel-show').click()
+  }
+  await page.getByTestId('changes-tab').click()
+  const added = page.locator('[data-testid="diff-line"][data-kind="plus"]')
+  await expect(added).toHaveText(/The shop, open late\./)
+  await added.click()
+  await page.getByTestId('comment-text').fill('Say until when.')
+  await page.getByTestId('comment-add').click()
+  await page.getByTestId('review-send').click()
+
+  await expect(page.getByTestId('review-comments')).toBeHidden()
+  const prompts = () =>
+    readFileSync(log, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map(line => JSON.parse(line) as { message?: { content?: unknown }; type?: string })
+      .filter(entry => entry.type === 'user')
+      .map(entry => String(entry.message?.content))
+  await expect
+    .poll(prompts, STARTED)
+    .toContain('Review comments on your changes:\n\nREADME.md:1\n> The shop, open late.\nSay until when.')
+  expect(readFileSync(path.join(folder, 'README.md'), 'utf8')).toBe('The shop.\n')
+
+  // A checkpoint was kept before that message (step 21, A3): what came after goes, and the
+  // session goes on in a copy.
+  await expect(page.getByTestId('assistant-message').last()).toContainText('Noted.', STARTED)
+  const readme = path.join(home, 'worktrees', project ?? '', name ?? '', 'README.md')
+  writeFileSync(readme, 'Something else.\n')
+  await page.getByTestId('checkpoints-toggle').click()
+  await expect(page.getByTestId('checkpoint')).toHaveCount(1)
+  await page.getByTestId('checkpoint-go-back').click()
+  await page.getByTestId('checkpoint-go-back-yes').click()
+  await expect(page.getByTestId('checkpoint-back')).toBeVisible()
+  // As git checks a file out here: on Windows, with its line endings.
+  expect(readFileSync(readme, 'utf8').replace(/\r\n/g, '\n')).toBe('The shop, open late.\n')
+  await expect(page.getByTestId('session-copy-note')).toBeVisible()
 })

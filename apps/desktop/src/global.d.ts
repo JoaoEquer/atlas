@@ -19,6 +19,7 @@ interface AtlasBridge {
   focus: () => void
   /** A session's folder opened in VS Code; `''` once handed over, else why not. */
   openInEditor: (folder: string) => Promise<string>
+  openFolder: (folder: string) => Promise<string>
   /** Stop a home's server. */
   release: (home: null | string) => Promise<void>
   /** Open this home first next time (the last home). */
@@ -31,6 +32,8 @@ interface AtlasBridge {
   remote: boolean
   /** Only under the end-to-end tests: how long a command runs before it is "still running". */
   terminalWait: null | number
+  /** The colors of the window's own buttons, as hex, where it has no title bar (Windows). */
+  titleBar?: (color: string, symbolColor: string) => void
   /** The window's tabs, as the main process tells of them (electron/keys.ts). */
   tabs?: TabsBridge
   /** The app's update (electron/updates.ts). */
@@ -50,7 +53,7 @@ interface TabsBridge {
 type Answer<T> = { error: string; ok: false } | { ok: true; value: T }
 
 /** How the app reaches a machine. */
-type Transport = 'ssh' | 'tailscale'
+type Transport = 'relay' | 'ssh' | 'tailscale'
 
 /** A machine of the list, as the window sees it: never its token. */
 interface MachineRow {
@@ -61,6 +64,8 @@ interface MachineRow {
   port: number
   sshHost: null | string
   transport: Transport
+  /** The relay and the home's room there, for a `relay` machine (step 20). */
+  relay?: null | { room: string; url: string }
 }
 
 interface MachinesBridge {

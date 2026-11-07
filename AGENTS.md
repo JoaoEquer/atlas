@@ -29,11 +29,11 @@ uv run ruff check .        # lint
 uv run ruff format .       # format
 uv run pyright             # types, strict on src/
 uv run lint-imports        # subject boundaries
-uv run deptry src          # dependency hygiene
-uv run pytest              # tests, with the coverage floor
+uv run deptry src plugins  # dependency hygiene
+uv run pytest              # tests on every core, with the coverage floor (`-n0`: one process)
 uv run atlas serve         # run the server on 127.0.0.1:18790
 docker compose up --build  # run in a container
-docker build -t atlas:local . && ATLAS_TEST_IMAGE=atlas:local uv run pytest tests/docker --no-cov
+docker build -t atlas:local . && ATLAS_TEST_IMAGE=atlas:local uv run pytest tests/docker --no-cov -n0
                            # the image's tests: an empty container, a key, a conversation
 uv run python scripts/gen_protocol.py   # the app's TypeScript protocol, after a protocol change
 uv run python scripts/gen_docs.py       # the documentation's commands and settings pages,
@@ -50,6 +50,14 @@ npm ci                     # install
 npm run check              # tsc, eslint, prettier, vitest
 npm run test:e2e           # build, then the real app, atlas serve and the fake model, end to end
 npm run dev                # run the app from source
+```
+
+The Setup, in `apps/setup/` (Node 24), the file that installs Atlas without a terminal:
+
+```bash
+npm ci                     # install
+npm run check              # tsc, eslint, prettier, vitest
+npm run package            # build this system's Setup into dist/ (CI builds all three)
 ```
 
 The website, in `site/` (Node 24):

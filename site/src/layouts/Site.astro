@@ -8,6 +8,7 @@ import monaLatin from '@fontsource-variable/mona-sans/files/mona-sans-latin-wdth
 
 import Footer from '../components/Footer.astro'
 import Nav from '../components/Nav.astro'
+import { HTML_LANG, type Lang, OG_LOCALE, WORDS } from '../lib/i18n'
 import { jsonLd, organization, website } from '../lib/seo'
 
 interface Props {
@@ -22,9 +23,25 @@ interface Props {
   schema?: Record<string, unknown>[] | undefined
   /** Kept out of search results, as the 404 is. */
   noindex?: boolean
+  lang?: Lang
+  /** The same page in each language it has, for search engines and the language switch. */
+  alternates?: Partial<Record<Lang, string>>
 }
 
-const { title, description, markdown, current, image = '/og.jpg', schema = [], noindex = false } = Astro.props
+const {
+  title,
+  description,
+  markdown,
+  current,
+  image = '/og.jpg',
+  schema = [],
+  noindex = false,
+  lang = 'en',
+  alternates = {}
+} = Astro.props
+const words = WORDS[lang]
+const other = lang === 'en' ? 'pt-br' : 'en'
+const switchTo = alternates[other]
 const site = Astro.site ?? new URL(Astro.url.origin)
 const canonical = new URL(Astro.url.pathname, site)
 const imageUrl = new URL(image, site)
@@ -32,13 +49,17 @@ const graph = jsonLd([organization(site), website(site), ...schema])
 ---
 
 <!doctype html>
-<html lang="en" dir="ltr">
+<html lang={HTML_LANG[lang]} dir="ltr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {Object.entries(alternates).map(([code, path]) => (
+      <link rel="alternate" hreflang={HTML_LANG[code as Lang]} href={new URL(path, site)} />
+    ))}
+    {alternates.en && <link rel="alternate" hreflang="x-default" href={new URL(alternates.en, site)} />}
     <meta
       name="robots"
       content={noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large, max-snippet:-1'}
@@ -64,14 +85,14 @@ const graph = jsonLd([organization(site), website(site), ...schema])
     <link rel="sitemap" href="/sitemap-index.xml" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Atlas" />
-    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale" content={OG_LOCALE[lang]} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={imageUrl} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Atlas: every coding agent, every account, one window." />
+    <meta property="og:image:alt" content={words.imageAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
@@ -81,13 +102,13 @@ const graph = jsonLd([organization(site), website(site), ...schema])
   </head>
   <body>
     <a class="skip-link" href="#main">
-      Skip to content
+      {words.skip}
     </a>
-    <Nav current={current} />
+    <Nav current={current} lang={lang} switchTo={switchTo} />
     <main id="main">
       <slot />
     </main>
-    <Footer />
+    <Footer lang={lang} />
     <script>
       import '../scripts/ascii-field'
       import '../scripts/scramble'

@@ -23,6 +23,8 @@ import {
   $workbench,
   moreConversations,
   newConversation,
+  showDictations,
+  showExtensions,
   showMarketplace,
   showProposals,
   showRoutines,
@@ -30,19 +32,31 @@ import {
   type SidebarTab
 } from '@/store/app'
 import { $sidebarOpen, toggleSidebar } from '@/store/layout'
-import { openSettings } from '@/store/settings'
 import { byLastUse, type Dot, lastUse, worst } from '@/store/status'
 
 import { ArchivedConversations } from './archived-list'
 import { BotsList } from './bots-list'
 import { Conversation } from './conversation-row'
 import { ExecutorsList } from './executors-list'
+import { FirstSteps } from './first-steps'
 import { HomeBar } from './home-bar'
 import { SearchField, SearchResults } from './list-search'
 import { RailEdge } from './rail-edge'
 import { ReadFailed } from './read-failed'
 import { StatusDot, useConversationsDot, useInstancesDot } from './status-dot'
-import { Bulb, CalendarTime, LayoutSidebar, MessagePlus, Messages, Plug, Robot, Store, Terminal } from './ui/icons'
+import {
+  Bulb,
+  CalendarTime,
+  LayoutSidebar,
+  MessagePlus,
+  Messages,
+  Microphone,
+  Plug,
+  Puzzle,
+  Robot,
+  Store,
+  Terminal
+} from './ui/icons'
 import { SkeletonRows } from './ui/skeleton'
 import { IconButton, Tip } from './ui/tip'
 import { UpdateBar, UpdateStrip } from './update-bar'
@@ -51,7 +65,8 @@ import { UpdateBar, UpdateStrip } from './update-bar'
  * The conversations, the latest activity first;
  * above them, while any wait, how many memory proposals there are (step 9b); and at the foot,
  * always, the home on screen with the others and what the app does with homes (step 10c),
- * with the app's update above it while there is one. The list is the conversations,
+ * with the app's update above it while there is one, and the first steps above that until they
+ * are done or hidden (step 18e). The list is the conversations,
  * the bots or the executors (step 16f), whose tab says
  * when one of their sessions waits for the user. Hidden (asked for by
  * the user on 16/10/2026), it leaves a strip that brings it back and still says when something
@@ -62,7 +77,7 @@ import { UpdateBar, UpdateStrip } from './update-bar'
 export function Sidebar() {
   const proposals = useStore($proposals)
   const view = useStore($view)
-  // The plugins' pages (step 16m), each an entry below the routines.
+  // The plugins' pages (step 16m), each an entry below Extensions.
   const pages = inArea(useStore($contributions), 'page')
   const pluginPage = useStore($pluginPage)
   const tab = useStore($sidebarTab)
@@ -82,17 +97,20 @@ export function Sidebar() {
     return (
       <nav
         aria-label="Conversations"
-        className="flex w-9 shrink-0 flex-col items-center gap-2 border-r border-border bg-subtle py-3"
+        className="flex w-9 shrink-0 flex-col items-center gap-2 border-r border-border bg-subtle pb-3"
       >
-        <IconButton
-          icon={LayoutSidebar}
-          label={t.layout.showSidebar(shortcut('B'))}
-          onClick={() => {
-            toggleSidebar(true)
-          }}
-          side="right"
-          testId="sidebar-show"
-        />
+        {/* The window's top row, beside the tab strip (styles.css). */}
+        <div className="title-bar grid h-9 w-full shrink-0 place-items-center">
+          <IconButton
+            icon={LayoutSidebar}
+            label={t.layout.showSidebar(shortcut('B'))}
+            onClick={() => {
+              toggleSidebar(true)
+            }}
+            side="right"
+            testId="sidebar-show"
+          />
+        </div>
         {asking > 0 ? (
           <span className="rounded-full bg-waiting px-1.5 text-xs leading-4 font-medium text-waiting-foreground">
             {asking}
@@ -107,8 +125,9 @@ export function Sidebar() {
 
   return (
     <nav aria-label="Conversations" className="sidebar-open flex flex-col border-r border-border bg-subtle">
-      <div className="space-y-1 p-3">
-        <div className="flex items-center gap-1 pb-1">
+      <div className="space-y-1 px-3 pb-3">
+        {/* The window's top row, beside the tab strip (styles.css). */}
+        <div className="title-bar -mx-3 mb-2 flex h-9 items-center gap-1 px-3">
           <IconButton
             icon={LayoutSidebar}
             label={t.layout.hideSidebar(shortcut('B'))}
@@ -139,12 +158,39 @@ export function Sidebar() {
           testId="routines-entry"
         />
         <Entry
+          current={view === 'dictations'}
+          icon={Microphone}
+          label={t.dictation.page}
+          onClick={showDictations}
+          testId="dictations-entry"
+        />
+        <Entry
           current={view === 'marketplace'}
           icon={Store}
           label={t.marketplace.title}
           onClick={showMarketplace}
           testId="marketplace-entry"
         />
+        {/* What the home has, beside where more is found (01/11/2026); someone waiting with a code
+        shows on it and opens its Plugins tab. */}
+        <Entry
+          current={view === 'extensions'}
+          icon={Puzzle}
+          label={t.extensions.title}
+          onClick={() => {
+            showExtensions(waiting > 0 ? 'plugin' : undefined)
+          }}
+          testId="extensions-entry"
+        >
+          {waiting > 0 && (
+            <span
+              className="rounded-full bg-waiting px-2 text-xs leading-5 font-medium text-waiting-foreground"
+              data-testid="plugins-waiting"
+            >
+              {t.plugins.waiting(waiting)}
+            </span>
+          )}
+        </Entry>
         {pages.map(page => (
           <Entry
             current={view === 'plugin' && pluginPage === page.key}
@@ -157,26 +203,6 @@ export function Sidebar() {
             testId={`plugin-page-${page.key}`}
           />
         ))}
-        {waiting > 0 && (
-          // The soul and the plugins live on the settings screen (step 15b); someone waiting with a
-          // code still shows here, as the proposals do, and opens them there.
-          <Entry
-            current={false}
-            icon={Plug}
-            label={t.plugins.title}
-            onClick={() => {
-              openSettings('extensions', 'plugin')
-            }}
-            testId="plugins-entry"
-          >
-            <span
-              className="rounded-full bg-waiting px-2 text-xs leading-5 font-medium text-waiting-foreground"
-              data-testid="plugins-waiting"
-            >
-              {t.plugins.waiting(waiting)}
-            </span>
-          </Entry>
-        )}
         {proposals.length > 0 && (
           <Entry
             current={view === 'proposals'}
@@ -197,6 +223,7 @@ export function Sidebar() {
         {tab === 'bots' ? t.bots.tab : tab === 'executors' ? t.executors.tab : t.conversations.tab}
       </h2>
       {tab === 'bots' ? <BotsList /> : tab === 'executors' ? <ExecutorsList /> : <Conversations />}
+      <FirstSteps />
       <UpdateBar />
       <HomeBar />
       <RailEdge rail="sidebar" />
@@ -301,8 +328,9 @@ function nearEnd(list: HTMLElement | null): void {
 /** The conversations, the last used first: one whose turn began here goes up at once, before its
  * row is read again. A page at a time (step 9e): the next one is read as the list scrolls near its
  * end. Above it, the search, whose results take its place while its field holds words; under it,
- * the archived ones. */
-function Conversations() {
+ * the archived ones. On the start screen it is `bare`: the button and the list alone, the search
+ * and the archived staying the sidebar's. */
+export function Conversations({ bare = false }: { bare?: boolean }) {
   const used = useStore($used)
   const conversations = byLastUse(useStore($conversations), row => lastUse(row.updated_at, used[row.id]))
   const selected = useStore($selected)
@@ -310,7 +338,7 @@ function Conversations() {
   const read = useStore($read).conversations
   const failed = useStore($readError).conversations
   const more = useStore($listMore)
-  const searching = useStore($search).text.trim() !== ''
+  const searching = useStore($search).text.trim() !== '' && !bare
   const list = useRef<HTMLUListElement>(null)
   const rows = conversations.length
 
@@ -326,6 +354,7 @@ function Conversations() {
       <div className="px-3 pb-2">
         <button
           className="flex w-full items-center gap-2 rounded-md border border-border-strong px-2 py-1.5 text-left text-sm font-medium hover:bg-muted"
+          data-testid="new-conversation"
           onClick={newConversation}
           type="button"
         >
@@ -333,7 +362,7 @@ function Conversations() {
           {t.conversations.new}
         </button>
       </div>
-      <SearchField />
+      {!bare && <SearchField />}
       {searching && <SearchResults />}
       {/* Hidden, not gone, while the search shows: it comes back where it was. */}
       <ul
@@ -379,7 +408,7 @@ function Conversations() {
           </li>
         )}
       </ul>
-      {!searching && <ArchivedConversations />}
+      {!searching && !bare && <ArchivedConversations />}
     </>
   )
 }

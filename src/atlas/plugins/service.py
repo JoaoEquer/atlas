@@ -23,6 +23,7 @@ own, marked). They load first.
 """
 
 import asyncio
+import dataclasses
 import hashlib
 import inspect
 import logging
@@ -41,6 +42,8 @@ from atlas.plugins.model import (
     BIN_FOLDER,
     COMMANDS_FOLDER,
     ON_SKILL,
+    PLUGIN_PROBE,
+    PROGRAMS_API,
     SCREEN_FILE,
     SKILLS_FOLDER,
     THEMES_FOLDER,
@@ -59,6 +62,7 @@ from atlas.plugins.model import (
 )
 from atlas.plugins.sdk import (
     API_VERSION,
+    Accounts,
     CallRun,
     Channel,
     CliRun,
@@ -68,16 +72,21 @@ from atlas.plugins.sdk import (
     LlmError,
     LlmMessage,
     LlmResult,
+    MemoryLimits,
     PluginLlm,
+    ProbeRun,
     ReadRun,
     ToolRun,
+    WorkbenchHost,
 )
 from atlas.plugins.store import (
-    BUNDLED_FOLDER,
+    OFFICIAL_FOLDER,
+    OFFICIAL_SOURCE,
     Found,
     PluginStore,
     find_plugins,
     import_plugin,
+    install_sources,
     plugin_hooks,
 )
 from atlas.secrets import SecretsError, Vault
@@ -117,6 +126,9 @@ class PluginView:
     secrets: dict[str, bool] = field(default_factory=dict[str, bool])
     #: Each declared setting's value, the user's or its default.
     settings: dict[str, str] = field(default_factory=dict[str, str])
+    #: In the home's plugins; one of Atlas's own not installed yet is listed from the
+    #: installation's folder, and turning it on installs it (step 26).
+    installed: bool = True
 
     @property
     def running(self) -> bool:
@@ -193,6 +205,28 @@ class LoadedReader:
 
 
 @dataclass(frozen=True, slots=True)
+class LoadedProbe:
+    """A plugin's source of events for routines (SDK version 30)."""
+
+    plugin: str
+    name: str
+    run: ProbeRun
+
+    @property
+    def typed(self) -> str:
+        """What a routine names as its probe: `plugin:<plugin>:<name>`."""
+        return f"{PLUGIN_PROBE}{self.plugin}:{self.name}"
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedAccounts:
+    """The harnesses' other accounts, from the plugin that brings them (SDK version 29)."""
+
+    plugin: str
+    accounts: Accounts
+
+
+@dataclass(frozen=True, slots=True)
 class PluginScreen:
     """A plugin's screen for the app (step 16m): its `desktop/plugin.js`, as the app loads it."""
 
@@ -217,19 +251,23 @@ SCREEN_BYTES = 2 * 1024 * 1024
 @dataclass(frozen=True, slots=True)
 class PluginParts:
     """What the Python of the plugins that are on registered for the loop: tools (version 14),
-    hooks (version 15), slash commands (version 16) and attachment readers (version 21)."""
+    hooks (version 15), slash commands (version 16), attachment readers (version 21) and
+    probes (version 30)."""
 
     tools: list[LoadedTool] = field(default_factory=list[LoadedTool])
     hooks: list[PluginCallback] = field(default_factory=list[PluginCallback])
     commands: list[LoadedCommand] = field(default_factory=list[LoadedCommand])
     calls: list[LoadedCall] = field(default_factory=list[LoadedCall])
     readers: list[LoadedReader] = field(default_factory=list[LoadedReader])
+    probes: list[LoadedProbe] = field(default_factory=list[LoadedProbe])
+    #: Folders of the plugins' data on the model's `PATH` (version 31).
+    programs: list[Path] = field(default_factory=list[Path])
 
 
 class PluginHost(Protocol):
-    """What Atlas lends a plugin from outside the plugins (SDK version 16): the user's model, and
-    its conversations. The server gives it; with none, a plugin's `llm` and `notify` say Atlas is
-    not serving (a terminal command)."""
+    """What Atlas lends a plugin from outside the plugins (SDK version 16): the user's model, its
+    conversations, and the memory's limits (version 26). The server gives it; with none, a
+    plugin's `llm`, `notify` and `memory_limits` say Atlas is not serving (a terminal command)."""
 
     async def complete(
         self,
@@ -242,6 +280,12 @@ class PluginHost(Protocol):
     ) -> LlmResult: ...
 
     async def notify(self, plugin: str, conversation: str, text: str) -> bool: ...
+
+    def memory_limits(self) -> MemoryLimits | None: ...
+
+    def workbench(self) -> WorkbenchHost | None:
+        """The executors Atlas runs (version 29); `None` when it is not serving."""
+        ...
 
 
 class _NoHost:
@@ -259,6 +303,12 @@ class _NoHost:
     async def notify(self, plugin: str, conversation: str, text: str) -> bool:
         return False
 
+    def memory_limits(self) -> MemoryLimits | None:
+        return None
+
+    def workbench(self) -> WorkbenchHost | None:
+        return None
+
 
 #: What a plugin registered to stop with it.
 type Stop = Callable[[], Awaitable[None] | None]
@@ -274,13 +324,13 @@ class Plugins:
         vault: Vault,
         *,
         clock: Callable[[], datetime] = utc_now,
-        bundled_folder: Path = BUNDLED_FOLDER,
+        official_folder: Path = OFFICIAL_FOLDER,
         load_seconds: float = LOAD_SECONDS,
     ) -> None:
         self._home = home
         self._vault = vault
         self._clock = clock
-        self._bundled = bundled_folder
+        self._official = official_folder
         self._load_seconds = load_seconds
         self.store = PluginStore(database)
         #: What failed while a plugin loaded or ran, until it is turned on again.
@@ -323,7 +373,22 @@ class Plugins:
         except SecretsError:
             stored = set[str]()
         views: list[PluginView] = []
-        for found in find_plugins(self._home.plugins_folder, self._bundled):
+        home = find_plugins(self._home.plugins_folder)
+        names = {found.name for found in home}
+        # Atlas's own (step 26) run from the installation's folder, installed when the home
+        # records them; the others are listed too, to be turned on, which installs them.
+        recorded = install_sources(self._home.plugins_folder)
+        official = [
+            dataclasses.replace(found, bundled=True)
+            for found in find_plugins(self._official)
+            if found.name not in names and found.manifest is not None
+        ]
+        present = names | {
+            found.name
+            for found in official
+            if recorded.get(found.name, "").startswith(OFFICIAL_SOURCE)
+        }
+        for found in [*home, *official]:
             state = states.get(found.name)
             manifest = found.manifest
             enabled = state is not None and state.enabled
@@ -345,6 +410,7 @@ class Plugins:
                     if manifest is None
                     else {s.name: s.name in stored for s in manifest.secrets},
                     {} if manifest is None else self._settings(manifest),
+                    installed=found.name in present,
                 )
             )
         return _with_dependencies(views)
@@ -385,6 +451,11 @@ class Plugins:
         unmet = _unmet(manifest, {other.name: other for other in self.all()})
         if unmet is not None:
             raise PluginError(f"{name} cannot be turned on yet. {unmet}")
+        if not view.installed:
+            # One of Atlas's own, turned on for the first time: installed from the installation.
+            from atlas.plugins.official import install_official  # noqa: PLC0415 - it imports this
+
+            install_official(self, name, folder=self._official, clock=self._clock)
         self.store.decide(name, enabled=True, consent=consent, now=self._clock())
         self._failures.pop(name, None)
         _logger.info("A plugin was turned on.", extra={"plugin": name})
@@ -453,19 +524,38 @@ class Plugins:
             ]
         return loaded
 
+    async def accounts(self) -> LoadedAccounts | None:
+        """The harnesses' other accounts, from the plugin that is on and brings them (version
+        29), loaded with its deadline; with two, the first one's, the other logged."""
+        found: LoadedAccounts | None = None
+        for context in await self._load(lambda m: m.accounts, None, kind="accounts"):
+            if context.accounts is None:
+                continue
+            if found is not None:
+                _logger.warning(
+                    "Two plugins bring other accounts: %s's are left out.",
+                    context.name,
+                    extra={"plugin": context.name},
+                )
+                continue
+            found = LoadedAccounts(context.name, context.accounts)
+        return found
+
     async def parts(self) -> PluginParts:
         """The tools and the Python hooks of the plugins that are on, each plugin loaded once,
         with its deadline; what the ones loaded before started is stopped first."""
         await self.stop(kind="parts")
         parts = PluginParts()
         wanted: Callable[[Manifest], bool] = lambda m: bool(  # noqa: E731
-            m.tools or m.python_hooks or m.slash_commands or m.calls or m.readers
+            m.tools or m.python_hooks or m.slash_commands or m.calls or m.readers or m.probes
         )
         for context in await self._load(wanted, None, kind="parts"):
             parts.tools.extend(context.tools)
             parts.hooks.extend(context.hooks)
             parts.commands.extend(context.commands)
             parts.calls.extend(context.calls)
+            parts.probes.extend(context.probes)
+            parts.programs.extend(context.programs)
             for reader in context.readers:
                 taken = next((r for r in parts.readers if r.kind == reader.kind), None)
                 if taken is None:
@@ -667,13 +757,17 @@ class Plugins:
                     )
 
     async def offered_executors(self) -> list[LoadedExecutor]:
-        """The executors of the plugins Atlas ships that are off, to look at before the user turns
-        them on (step 16c): the onboarding offers the harnesses installed here. Their code is
-        Atlas's own, shipped with it; a plugin of the user's runs only once consented to."""
+        """The executors of the plugins Atlas makes that are not installed in the home, or are
+        off, to look at before the user turns them on (step 16c; step 26): the onboarding and the
+        executors tab offer the harnesses installed on the computer. Their code is Atlas's own, in
+        the installation's folder at the version that runs; a plugin of the user's runs only
+        once consented to."""
         loaded: list[LoadedExecutor] = []
-        offered = _offered
+        offered = [
+            view for view in self.all() if view.bundled and not view.running and not view.problem
+        ]
         for context in await self._load(
-            lambda m: bool(m.executors), None, pick=offered, kind="offered"
+            lambda m: bool(m.executors), None, views=offered, kind="offered"
         ):
             loaded += [
                 LoadedExecutor(context.name, n, make) for n, make in context.executors.items()
@@ -686,14 +780,15 @@ class Plugins:
         only: set[str] | None,
         *,
         kind: str,
-        pick: Callable[[PluginView], bool] = lambda view: view.running,
+        views: Sequence[PluginView] | None = None,
     ) -> list["_Context"]:
-        """The registrations of the plugins `pick` takes (those that are on) that bring what is
+        """The registrations of the plugins that are on (or of `views`) that bring what is
         `wanted`."""
         contexts: list[_Context] = []
-        for view in load_order(self.all()):
+        chosen = views if views is not None else [v for v in self.all() if v.running]
+        for view in load_order(list(chosen)):
             manifest = view.manifest
-            if not pick(view) or manifest is None or not manifest.python:
+            if manifest is None or not manifest.python:
                 continue
             if not wanted(manifest) or (only is not None and view.name not in only):
                 continue
@@ -791,6 +886,9 @@ class _Context:
         self.cli: list[LoadedCli] = []
         self.calls: list[LoadedCall] = []
         self.readers: list[LoadedReader] = []
+        self.probes: list[LoadedProbe] = []
+        self.programs: list[Path] = []
+        self.accounts: Accounts | None = None
         self.stops: list[Stop] = []
         #: Set once the load gave up: what the plugin registers after is ignored.
         self.abandoned = threading.Event()
@@ -819,6 +917,9 @@ class _Context:
                 f"{self.name} asked for the setting {name}, which it does not declare."
             )
         return self._settings[name]
+
+    def memory_limits(self) -> MemoryLimits | None:
+        return self._plugins.host.memory_limits()
 
     def register_channel(self, name: str, make: Callable[[], Channel]) -> None:
         if name not in self._manifest.channels:
@@ -943,6 +1044,53 @@ class _Context:
         self.readers = [reader for reader in self.readers if reader.kind != kind]
         self.readers.append(LoadedReader(self.name, kind, run))
 
+    def register_probe(self, name: str, run: ProbeRun) -> None:
+        if name not in self._manifest.probes:
+            raise PluginError(
+                f"{self.name} registered the probe {name}, which it does not declare under "
+                "atlas.probes."
+            )
+        if not callable(run):
+            raise PluginError(f"{self.name} registered the probe {name} with nothing to run.")
+        if self.abandoned.is_set():
+            return
+        self.probes = [probe for probe in self.probes if probe.name != name]
+        self.probes.append(LoadedProbe(self.name, name, run))
+
+    def add_programs(self, folder: Path) -> None:
+        if self._manifest.api < PROGRAMS_API:
+            raise PluginError(
+                f"{self.name} put a folder on the PATH, which needs atlas.api {PROGRAMS_API}."
+            )
+        resolved = Path(folder).resolve()
+        if not resolved.is_relative_to(self.data_folder.resolve()):
+            raise PluginError(
+                f"{self.name} put {folder} on the PATH: only a folder of its own data may go there."
+            )
+        if self.abandoned.is_set() or resolved in self.programs:
+            return
+        self.programs.append(resolved)
+
+    def register_accounts(self, accounts: Accounts) -> None:
+        if not self._manifest.accounts:
+            raise PluginError(
+                f"{self.name} registered accounts, which it does not declare (atlas.accounts)."
+            )
+        if self.abandoned.is_set():
+            return
+        self.accounts = accounts
+
+    @property
+    def workbench(self) -> WorkbenchHost:
+        if not self._manifest.accounts:
+            raise PluginError(
+                f"{self.name} read the workbench, which it does not declare (atlas.accounts)."
+            )
+        found = self._plugins.host.workbench()
+        if found is None:
+            raise PluginError("Atlas is not serving here, so no executor runs.")
+        return found
+
     @property
     def llm(self) -> PluginLlm:
         return _Llm(self._plugins, self.name, self._manifest.llm)
@@ -980,11 +1128,6 @@ class _Llm:
         return await self._plugins.host.complete(
             self._name, prompt, system=system, max_tokens=max_tokens, json_schema=json_schema
         )
-
-
-def _offered(view: PluginView) -> bool:
-    """A plugin Atlas ships, off, that nothing keeps from being turned on."""
-    return view.bundled and not view.running and view.problem is None
 
 
 def _problem(found: Found) -> str | None:

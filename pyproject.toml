@@ -39,6 +39,10 @@ dependencies = [
     # The WebSocket the clients talk over (atlas.server): uvicorn speaks it through this package,
     # and scripts use its client. Pure Python with an optional C speedup, no dependencies.
     "websockets==15.0.1",
+    # The tunnel through the relay (atlas.instances.tunnel, step 20): HKDF and AES-256-GCM,
+    # so only the app and the home read what crosses it. Already brought by the OpenAI SDK's
+    # dependencies; declared because Atlas imports it.
+    "cryptography==50.0.2",
     # Documents to Markdown for read_file and web_fetch (atlas.tools.documents): PDF, Word,
     # PowerPoint, Excel, OpenDocument, RTF, EPUB. In the core, since reading a PDF is a common
     # first thing to ask. Rust, prebuilt for every system, no
@@ -73,7 +77,7 @@ mcp = ["mcp==2.2.0", "mcp-types==2.2.0", "jsonschema==4.26.0"]
 # which no OpenAI-compatible endpoint carries. An extra, as it serves one provider. 1.11.0 (30/09/2026) for the 14-day rule. It brings httpx2 and pydantic,
 # which the OpenAI SDK already brings, and docstring-parser and jiter.
 anthropic = ["anthropic==1.11.0"]
-# Zstandard, to read DeepSeek's harness's sessions (atlas/plugins/bundled/deepseek): its logs are
+# Zstandard, to read DeepSeek's harness's sessions (plugins/deepseek): its logs are
 # Zstandard frames, which Python 3.13 does not read (3.14 does, as compression.zstd). BSD, no
 # dependencies, prebuilt for every system. 0.25.0 (14/09/2025) for the 14-day rule.
 deepseek = ["zstandard==0.25.0"]
@@ -81,6 +85,13 @@ deepseek = ["zstandard==0.25.0"]
 # nothing, the standard library's pty is enough. Optional, as node-pty was in the app: without it
 # the terminal says it is unavailable.
 terminal = ["pywinpty==3.1.0; sys_platform == 'win32'"]
+# Writing down audio on this computer (atlas.speech, step 26): onnx-asr runs NVIDIA's Parakeet v3
+# (chosen against Whisper small on public Brazilian Portuguese: fewer errors, four times faster)
+# on onnxruntime, with only numpy besides; PyAV, FFmpeg's libraries in its wheel, reads any
+# recording (the app's WebM, Telegram's OGG Opus, a phone's M4A) and brings it to 16 kHz mono.
+# The model itself is downloaded once, after asking, into the root's speech/. MIT, MIT and BSD;
+# 0.12.0 (15/07/2026), 1.31.0 (09/10/2026) and 19.0.2 (21/10/2026) for the 14-day rule.
+transcribe = ["onnx-asr==0.12.0", "onnxruntime==1.31.0", "av==19.0.2"]
 
 [project.scripts]
 atlas = "atlas.__main__:main"
@@ -92,6 +103,13 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "atlas"
 
+# browser-harness 0.1.13 pins pillow 12.3.0, which carries critical advisories fixed in 13.0.0
+# (16/10/2026). It only opens, draws on and resizes screenshots, which 13 keeps; the override
+# goes when browser-harness asks for 13 itself. The installer, the update and the image sync from
+# the lock, so it holds for every install.
+[tool.uv]
+override-dependencies = ["pillow==13.0.0"]
+
 [dependency-groups]
 dev = [
     "deptry==0.25.1",         # no undeclared or unused dependencies
@@ -100,9 +118,11 @@ dev = [
     "pyright==1.1.414",       # strict typing; ty replaces it once it reaches 1.0
     "pytest==9.1.1",
     "pytest-cov==7.1.0",      # coverage floor
+    "pytest-timeout==2.5.0",  # a test that hangs fails instead of holding the run
+    "pytest-xdist==3.8.0",    # the tests on every core
     "ruff==0.16.10",          # lint and format
     "types-pyyaml==6.0.12.20260906",  # PyYAML's types, for pyright
-    "atlas-agent[ddgs,mcp,anthropic,terminal,deepseek]",  # the tests prove every extra
+    "atlas-agent[ddgs,mcp,anthropic,terminal,deepseek,transcribe]",  # the tests prove every extra
 ]
 
 # ---------------------------------------------------------------------------
@@ -112,7 +132,7 @@ dev = [
 [tool.ruff]
 target-version = "py313"
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "plugins"]
 # The host updater runs on the Compose host's own Python, 3.11 or newer (docs/ARCHITECTURE.md, The
 # update of a Compose host): no syntax newer than that.
 per-file-target-version = { "src/atlas/installation/host_updater.py" = "py311" }
@@ -144,6 +164,9 @@ select = [
 known-third-party = ["mcp"]
 
 [tool.ruff.lint.per-file-ignores]
+# A plugin's folder is named as the plugin (`claude-code`), and Atlas imports it under a name of its
+# own (`atlas_plugin_claude_code`): the folder is never a module name.
+"plugins/**" = ["N999"]
 "tests/**" = [
     "S101",  # assert is how pytest checks
     "S105",  # tests hold fake secrets on purpose, to prove they never leak
@@ -167,10 +190,11 @@ exclude = [
 
 [tool.pyright]
 pythonVersion = "3.13"
-include = ["src", "tests"]
+include = ["src", "tests", "plugins"]
 # The fake model server (tests/fake_model.py) is imported by the tests as a top-level module.
 extraPaths = ["src", "tests"]
-strict = ["src"]
+# The plugins Atlas makes (step 26: the repository's plugins/) are held to the core's rules.
+strict = ["src", "plugins"]
 
 [tool.importlinter]
 root_packages = ["atlas"]
@@ -371,34 +395,6 @@ protected_modules = ["atlas.plugins.*"]
 allowed_importers = ["atlas.plugins"]
 
 [[tool.importlinter.contracts]]
-name = "A plugin Atlas ships imports from Atlas only the SDK, as every plugin must"
-type = "forbidden"
-source_modules = ["atlas.plugins.bundled"]
-forbidden_modules = [
-    "atlas.agent",
-    "atlas.assistant",
-    "atlas.bots",
-    "atlas.browser",
-    "atlas.conversations",
-    "atlas.home",
-    "atlas.hooks",
-    "atlas.installation",
-    "atlas.jobs",
-    "atlas.mcp",
-    "atlas.memory",
-    "atlas.models",
-    "atlas.plugins.install",
-    "atlas.plugins.model",
-    "atlas.plugins.service",
-    "atlas.plugins.store",
-    "atlas.secrets",
-    "atlas.server",
-    "atlas.skills",
-    "atlas.tools",
-    "atlas.trust",
-]
-
-[[tool.importlinter.contracts]]
 name = "marketplace is reached only through its package root"
 type = "protected"
 protected_modules = ["atlas.marketplace.*"]
@@ -459,6 +455,18 @@ protected_modules = ["atlas.browser.*"]
 allowed_importers = ["atlas.browser"]
 
 [[tool.importlinter.contracts]]
+name = "workspaces is reached only through its package root"
+type = "protected"
+protected_modules = ["atlas.workspaces.*"]
+allowed_importers = ["atlas.workspaces"]
+
+[[tool.importlinter.contracts]]
+name = "speech is reached only through its package root"
+type = "protected"
+protected_modules = ["atlas.speech.*"]
+allowed_importers = ["atlas.speech"]
+
+[[tool.importlinter.contracts]]
 name = "mcp is reached only through its package root"
 type = "protected"
 protected_modules = ["atlas.mcp.*"]
@@ -516,17 +524,21 @@ package_module_name_map = { pywinpty = "winpty" }
 
 [tool.deptry.per_rule_ignores]
 # zoneinfo reads tzdata's files on Windows, and browser-harness runs as a program
-# (atlas.browser); Atlas imports neither.
-DEP002 = ["tzdata", "browser-harness"]
+# (atlas.browser); Atlas imports neither. The transcribe extra is imported by name, once a
+# recording comes (atlas.speech.local), so a home that never gets one never loads it.
+DEP002 = ["tzdata", "browser-harness", "onnx-asr", "onnxruntime", "av"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
-# The coverage is measured by folder, not by package: a plugin Atlas ships is imported under a
-# name of its own (`atlas_plugin_<name>`), as every plugin is, and is counted all the same.
-addopts = "--import-mode=importlib --strict-markers --cov=src/atlas --cov-report=term-missing --cov-fail-under=90"
+# The coverage is measured by folder, not by package: a plugin Atlas makes (`plugins/`) is imported
+# under a name of its own (`atlas_plugin_<name>`), as every plugin is, and is counted all the same.
+# The tests run on every core (`-n0` runs them in this process, for a debugger), and a test that
+# hangs fails after five minutes instead of holding the run.
+addopts = "--import-mode=importlib --strict-markers -n auto --cov=src/atlas --cov=plugins --cov-report=term-missing --cov-fail-under=90"
+timeout = 300
 markers = [
-    "offered_executors: the plugins Atlas ships that are off are looked at, as at a real start",
+    "offered_executors: the plugins Atlas makes that are not on are looked at, as at a real start",
 ]
 
 [tool.coverage.run]

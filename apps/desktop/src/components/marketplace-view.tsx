@@ -14,11 +14,11 @@ import {
   refreshMarketplace,
   setMarketKind,
   setMarketQuery,
+  showExtensions,
   storeMarketSecret,
   writePlugin
 } from '@/store/app'
 import { actionOf, counts, resolved, shown } from '@/store/marketplace'
-import { openSettings } from '@/store/settings'
 
 import { Badge, KindPicture, KindTabs } from './extension-card'
 import { PageHeader } from './page-header'
@@ -43,9 +43,9 @@ export function MarketplaceView() {
 
 function Listing() {
   const market = useStore($market)
-  const { community, official } = shown(market.list, market.kind, market.query)
+  const { community, official, outside } = shown(market.list, market.kind, market.query)
   const total = counts(market.list)
-  const nothing = official.length + community.length === 0
+  const nothing = official.length + community.length + outside.length === 0
 
   return (
     <>
@@ -108,6 +108,9 @@ function Listing() {
       )}
       <Shelf rows={official} title={t.marketplace.official} />
       <Shelf rows={community} title={t.marketplace.community} />
+      {outside.map(shelf => (
+        <Shelf key={shelf.source} rows={shelf.rows} title={t.marketplace.sources[shelf.source]} />
+      ))}
     </>
   )
 }
@@ -116,21 +119,27 @@ function Listing() {
 function Notice() {
   const { error, list } = useStore($market)
   const problem = error ?? list?.problem
+  const lines = [
+    ...(problem
+      ? [list?.read_at ? t.marketplace.stale(problem, when(list.read_at)) : t.marketplace.unread(problem)]
+      : []),
+    ...(list?.source_problems ?? [])
+  ]
 
-  if (!problem) {
+  if (lines.length === 0) {
     return null
   }
 
-  const text = list?.read_at ? t.marketplace.stale(problem, when(list.read_at)) : t.marketplace.unread(problem)
-
   return (
-    <p
-      className="rounded-md bg-waiting/10 px-3 py-2 text-sm text-waiting-text"
+    <div
+      className="space-y-1 rounded-md bg-waiting/10 px-3 py-2 text-sm text-waiting-text"
       data-testid="marketplace-notice"
       role="status"
     >
-      {text}
-    </p>
+      {lines.map(line => (
+        <p key={line}>{line}</p>
+      ))}
+    </div>
   )
 }
 
@@ -178,13 +187,24 @@ function Card({ row }: { row: MarketplaceRow }) {
       </div>
       <p className="line-clamp-2 min-h-10 text-sm text-soft">{row.summary}</p>
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs text-muted-foreground">
-          {row.shipped ? t.marketplace.shipped : row.version}
+        <span className="truncate text-xs text-muted-foreground" data-testid="marketplace-card-meta">
+          {row.shipped ? t.marketplace.shipped : meta(row)}
         </span>
         <Action row={row} />
       </div>
     </div>
   )
+}
+
+/** What a card says under its summary: its version, and what its source gives (step 24). */
+function meta(row: MarketplaceRow): string {
+  return [
+    row.version,
+    row.installs !== null ? t.marketplace.installs(row.installs) : '',
+    row.updated ? t.marketplace.updated(row.updated) : ''
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function ItemPage() {
@@ -456,7 +476,7 @@ function Action({ row }: { row: MarketplaceRow }) {
         data-action={action}
         data-testid="marketplace-action"
         onClick={act(() => {
-          openSettings('extensions', 'plugin')
+          showExtensions('plugin')
         })}
         type="button"
       >

@@ -1,0 +1,14 @@
+{
+  "name": "github",
+  "displayName": "GitHub",
+  "version": "0.3.0",
+  "description": "Work with GitHub through its own program, gh: issues, pull requests, checks and releases, on the login gh keeps on this computer.",
+  "author": { "name": "the Atlas contributors" },
+  "license": "MIT",
+  "keywords": ["github", "gh", "pull requests", "issues"],
+  "atlas": {
+    "api": 31,
+    "calls": ["status", "log_in", "pull_request", "open_pull_request", "issues"],
+    "network": ["github.com"]
+  }
+}

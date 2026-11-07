@@ -16,6 +16,7 @@ from atlas.home import (
     EDITABLE,
     SECRET_VARIABLES,
     Home,
+    MemorySettings,
     ModelSettings,
     SecretText,
     Settings,
@@ -106,6 +107,23 @@ def test_the_users_deny_rules_and_the_approval_wait_come_from_the_file_or_a_vari
     assert load_settings(_environ(tmp_path / "none")).settings.trust.approval_timeout == 300
     _write_config(tmp_path, '[trust]\ndeny = "git push"\n')
     with pytest.raises(SettingsError, match="must be a list of texts"):
+        load_settings(_environ(tmp_path))
+
+
+def test_the_memorys_limits_come_from_the_file_or_a_variable_within_their_range(
+    tmp_path: Path,
+) -> None:
+    _write_config(tmp_path, "[memory]\nuser_limit = 800\nmemory_limit = 5000\n")
+
+    from_file = load_settings(_environ(tmp_path)).settings.memory
+    from_variable = load_settings(_environ(tmp_path, ATLAS_MEMORY_USER_LIMIT="900")).settings
+
+    assert (from_file.user_limit, from_file.memory_limit) == (800, 5_000)
+    assert from_variable.memory.user_limit == 900
+    assert load_settings(_environ(tmp_path / "none")).settings.memory == MemorySettings()
+    assert MemorySettings() == MemorySettings(user_limit=1_375, memory_limit=2_200)
+    _write_config(tmp_path, "[memory]\nmemory_limit = 100\n")
+    with pytest.raises(SettingsError, match="between 500 and 20000"):
         load_settings(_environ(tmp_path))
 
 

@@ -26,7 +26,7 @@ It is the agent loop's tool gate (`AgentLoop(gate=...)`), one per conversation.
 
 **A command routine** the agent makes or changes (`cronjob_manage` with a `command`) passes as a
 command for run_command would: the routine runs it later with nobody to approve, so it is judged
-when it is scheduled.
+when it is scheduled. A routine's probe (step 23), a command too, passes the same way.
 
 **A file write** to a system path, the home's settings or its plugins' folders is refused; one to
 the SSH configuration asks the user (the SSH config can run commands through `ProxyCommand`).
@@ -35,6 +35,7 @@ call, unless answered for the conversation or always.
 """
 
 import asyncio
+import codecs
 import fnmatch
 import json
 import logging
@@ -106,6 +107,8 @@ WRITE_TOOLS = frozenset({"write_file", "edit_file"})
 TARGET_CHARS = 2_000
 
 _logger = logging.getLogger("atlas.trust")
+# Why a command whose script nests past what the reader can follow is refused.
+_TOO_DEEP = "a script nested too deeply to read"
 
 
 class ApprovalGate:
@@ -161,9 +164,24 @@ class ApprovalGate:
                 return None
             return await self._command(command, cwd if isinstance(cwd, str) else None)
         if tool.name == ROUTINE_TOOL:
-            command = arguments.get("command")
-            if isinstance(command, str) and command.strip():
-                return await self._command(command, tool=ROUTINE_TOOL)
+            for field in ("command", "probe"):
+                command = arguments.get(field)
+                if isinstance(command, str) and command.strip():
+                    judged = await self._command(command, tool=ROUTINE_TOOL)
+                    if judged is not None:
+                        return judged
+            executor = arguments.get("executor")
+            if isinstance(executor, str) and executor.strip():
+                # It will run with nobody watching, with the harness's permissions: the user
+                # sees once where, which and how, and says yes (step 25).
+                mode = "its automatic mode" if arguments.get("auto") is True else "its own mode"
+                folder = arguments.get("folder")
+                target = f"{executor.strip()} in {folder}, in {mode}"
+                if arguments.get("workspace") is True:
+                    target += ", a new workspace each run"
+                return await self.ask_first(
+                    ROUTINE_TOOL, target, "a routine an outside executor runs with nobody watching"
+                )
         if tool.name in WRITE_TOOLS:
             path = arguments.get("path")
             refused = self._write(path)
@@ -187,21 +205,14 @@ class ApprovalGate:
         self, command: str, cwd: str | None = None, *, tool: str = COMMAND_TOOL
     ) -> str | None:
         seen = fold_atlas_home(command, str(self._home)) if self._home is not None else command
-        floor = self._floor(seen)
+        floor, outward = await asyncio.to_thread(self._read_command, seen, command, cwd)
         if floor is not None:
             return floor
-        outward = self._outward(seen)
-        if outward is None and self._resolve is not None:
-            for text in script_texts(command, self._resolve, cwd):
-                outward = self._outward(text)
-                if outward is not None:
-                    outward += " (in a script the command runs)"
-                    break
         if outward is not None:
             return await self._ask_outward(command, outward, tool)
         if self.auto_mode:
             return None
-        flagged, _, reason = detect_dangerous_command(seen)
+        flagged, _, reason = await asyncio.to_thread(detect_dangerous_command, seen)
         if not flagged or reason is None or self._granted(reason):
             return None
         approver = self._approver
@@ -232,6 +243,30 @@ class ApprovalGate:
             return None
         # The breaker counts the guardian's denials, not the user's.
         return _refused(answer, command=True, more=breaker(self._denials))
+
+    def _read_command(
+        self, seen: str, command: str, cwd: str | None
+    ) -> tuple[str | None, str | None]:
+        """The floor's refusal, or else why the command or a script it runs is outward. Run off
+        the event loop: reading a long text as shell takes its time, and the whole server waited
+        on it."""
+        try:
+            floor = self._floor(seen)
+            if floor is not None:
+                return floor, None
+            outward = self._outward(seen)
+            if outward is None and self._resolve is not None:
+                for text in script_texts(command, self._resolve, cwd):
+                    outward = self._outward(text)
+                    if outward is not None:
+                        return None, f"{outward} (in a script the command runs)"
+            return None, outward
+        except RecursionError:
+            # Substitutions nested past the reader's stack, which no real script has. A command
+            # that long is refused by the parser's limit first; a script's text is not, and the
+            # error ended the turn. Refused the same way instead.
+            _logger.warning("Hardline block: %s", _TOO_DEEP)
+            return hardline_message(_TOO_DEEP, parser_limit=False), None
 
     def _floor(self, command: str) -> str | None:
         hardline, why = detect_hardline_command(command)
@@ -491,7 +526,21 @@ def script_texts(command: str, resolve: Callable[[str], Path], cwd: str | None =
             try:
                 if not path.is_file() or path.stat().st_size > SCRIPT_BYTES:
                     continue
-                texts.append(path.read_text(encoding="utf-8", errors="replace"))
+                text = _script_text(path.read_bytes())
             except OSError:
                 continue
+            if text is not None:
+                texts.append(text)
     return texts
+
+
+def _script_text(data: bytes) -> str | None:
+    """A file's bytes as a script's text, or None for a program: a NUL byte is never in a script
+    but is all over an executable, whose bytes read as shell kept the server's loop busy for
+    minutes (`& 'C:/.../python.exe' run.py`, 01/11/2026). Windows PowerShell 5.1's `Out-File`
+    writes UTF-16 with a byte order mark, and is read as such, not passed over."""
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return data.decode("utf-16", errors="replace")
+    if b"\0" in data:
+        return None
+    return data.decode("utf-8-sig", errors="replace")

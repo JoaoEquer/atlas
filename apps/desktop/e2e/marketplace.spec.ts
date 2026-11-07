@@ -63,7 +63,9 @@ class FakeGitHub {
       '[marketplace]',
       `repository = ${JSON.stringify(repository)}`,
       `archive_url = ${JSON.stringify(`${this.url}/archive/{repo}/{ref}`)}`,
-      `raw_url = ${JSON.stringify(`${this.url}/raw/{repo}/{ref}/{path}`)}`
+      `raw_url = ${JSON.stringify(`${this.url}/raw/{repo}/{ref}/{path}`)}`,
+      // The outside catalogs (step 24) are proved by the server's tests against this fake.
+      'outside = false'
     ].join('\n')
   }
 
@@ -200,7 +202,8 @@ test('the marketplace lists each kind, installs a skill with its server and a pl
   await expect(key).toHaveAttribute('data-stored', 'true')
   await expect(key.getByTestId('marketplace-secret-input')).toHaveCount(0)
 
-  // A plugin arrives off; turning it on is the Plugins screen's consent, and its card follows.
+  // A plugin arrives off; turning it on is the consent on Extensions' Plugins tab, and its card
+  // follows.
   await itemPage.getByText('All items').click()
   await view.getByTestId('marketplace-tab-plugin').click()
   await card('video').getByTestId('marketplace-action').click()
@@ -213,19 +216,20 @@ test('the marketplace lists each kind, installs a skill with its server and a pl
   await row.getByTestId('plugin-consent-yes').click()
   await expect(row.getByTestId('plugin-state')).toHaveText('running')
 
-  // The settings' Extensions show what came, a tab per kind: the skill installed, the plugin's
-  // skill once it is on, and the MCP server, left out while it waits for its second secret.
-  const settings = page.getByTestId('settings')
-  await settings.getByTestId('extensions-tab-skill').click()
-  const skill = (name: string) => settings.locator(`[data-testid="skill-card"][data-name="${name}"]`)
+  // Extensions shows what came, a tab per kind: the skill installed, the plugin's skill once it is
+  // on, and the MCP server, left out while it waits for its second secret.
+  const extensions = page.getByTestId('extensions-view')
+  await extensions.getByTestId('extensions-tab-skill').click()
+  const skill = (name: string) => extensions.locator(`[data-testid="skill-card"][data-name="${name}"]`)
   await expect(skill('pdf')).toHaveAttribute('data-source', 'home')
   await expect(skill('video:cut')).toHaveAttribute('data-source', 'plugin')
-  await settings.getByTestId('extensions-tab-mcp').click()
-  const docs = settings.locator('[data-testid="mcp-card"][data-name="docs"]')
+  await extensions.getByTestId('extensions-tab-mcp').click()
+  const docs = extensions.locator('[data-testid="mcp-card"][data-name="docs"]')
   await expect(docs).toHaveAttribute('data-state', 'left_out')
   await expect(docs.getByTestId('mcp-card-problem')).toContainText('DOCS_REGION')
   await expect(docs.getByTestId('mcp-sign-in')).toHaveCount(0)
-  await page.keyboard.press('Escape')
+  await page.getByTestId('marketplace-entry').click()
+  await view.getByTestId('marketplace-tab-plugin').click()
   await expect(card('video').getByTestId('marketplace-action')).toHaveAttribute('data-action', 'on')
 
   // At work: the model is offered the skill from the marketplace and the plugin's.

@@ -1,5 +1,6 @@
 const STATUSES: Record<string, string> = {
   error: 'failed',
+  needed: 'needed you',
   ok: 'answered',
   running: 'running',
   silent: 'silent',
@@ -210,6 +211,10 @@ export const en = {
     defaulted: (label: string) => `${label} · default`,
     effort: 'Effort: how hard the model thinks (for this conversation)',
     effortLevel: (level: string) => EFFORTS[level] ?? level,
+    effortTitle: 'Effort',
+    defaultBadge: 'Default',
+    noModelMatch: 'No model matches',
+    searchModels: 'Search models',
     model: 'Model (for this conversation, from its next turn)',
     noModel: 'No model: store a key with atlas secrets set',
     placeholder: 'Message Atlas',
@@ -267,10 +272,19 @@ export const en = {
     via: (source: string) => `via ${source}`
   },
   /** The tabs above the central area. */
+  /** The start screen a new tab opens on: what each of its cards is for. */
+  start: {
+    atlas: 'Talk to Atlas: a new conversation, or one you had.',
+    bots: 'Agents with their own mission, memory and conversation.',
+    executors: 'Coding agents working in your folders, one session at a time.'
+  },
   tabs: {
+    openFolder: 'Open the folder',
+    terminal: 'Terminal (Ctrl+`)',
     close: (title: string) => `Close ${title}`,
     label: 'Open conversations and sessions',
-    /** The button after the tabs: a new conversation, in a tab of its own once it is made. */
+    /** The button after the tabs: the start screen, where a new conversation, bot or session is
+     * chosen, in a tab of its own once it is made. */
     new: 'New tab',
     waiting: (count: number) => (count === 1 ? '1 waiting for you' : `${count} waiting for you`)
   },
@@ -319,6 +333,94 @@ export const en = {
     profileHint: 'Its picture and name show at the foot of the sidebar. A backup carries the picture.',
     switchTo: 'Switch to another home',
     zipFilter: 'Atlas backup'
+  },
+  firstSteps: {
+    count: (done: number, all: number) => `${String(done)} of ${String(all)}`,
+    hide: 'Hide',
+    routinePrompt: 'Every Monday at 9am, remind me to review what I have for the week.',
+    start: 'Start',
+    tasks: {
+      bot: 'Create a bot',
+      delegate: 'Hand a task to an executor',
+      routine: 'Schedule a routine',
+      store: 'Install something from the store',
+      telegram: 'Talk to Atlas on Telegram'
+    },
+    title: 'First steps'
+  },
+  connectionOffer: {
+    missing: 'This connection is not installed here: the marketplace has it.',
+    title: (label: string) => `Connect ${label}`
+  },
+  firstRun: {
+    accounts: 'More than one account?',
+    accountsIntro:
+      "The Accounts plugin runs your coding agents on your other accounts: when one reaches its plan's limit, the session goes on in the next by itself.",
+    accountsPlugin: 'Turn on the Accounts plugin',
+    bring: 'Bring my sessions from',
+    bringAll: 'Bring everything',
+    bringCount: (count: number) => (count === 1 ? 'Bring 1 session' : `Bring ${String(count)} sessions`),
+    bringNote: 'The rest goes to Archived, a click away. Nothing changes in the originals.',
+    away: (step: string) => `The first run waits on ${step}.`,
+    awayBack: 'Back to it',
+    botFather: 'In Telegram, talk to @BotFather, send /newbot, choose a name, and copy the token it gives you.',
+    botRunning: 'Your bot is on. Send it a message in Telegram: it answers with a code, and you show up here.',
+    botStarting: 'Starting your bot…',
+    connect: 'Connect',
+    continue: 'Continue',
+    github: 'GitHub',
+    google: 'Gmail and Calendar',
+    turnOn: 'Turn on',
+    letIn: 'Let in',
+    letInDone: (name: string) => `${name} is in: talk to Atlas from Telegram.`,
+    letInWaits: (name: string, code: string) => `${name} waits with ${code}`,
+    telegramMissing: 'This Atlas has no Telegram plugin.',
+    telegramOn: 'Connecting lets the Telegram plugin:',
+    tokenLabel: "The bot's token",
+    counting: 'Counting…',
+    hints: {
+      connections: 'GitHub, Gmail, Calendar',
+      executors: 'Claude Code, Codex',
+      model: 'An API key',
+      telegram: 'Atlas on your phone',
+      work: 'Last step'
+    },
+    inProgress: 'In progress',
+    intros: {
+      connections: 'Atlas works in your accounts through their own programs, each logged in on this machine.',
+      executors: 'Atlas works through the coding agents you already use, in your folders, each with your own login.',
+      model:
+        'Atlas talks to a model with your own API key. Paste one to start: it is checked with the provider, ' +
+        'at no cost, and kept encrypted on this machine.',
+      telegram: "Talk to Atlas from your phone through a bot of your own, and answer your agents' questions there.",
+      work: 'Your sessions stay where they are. Choose what shows in the list; the rest waits in Archived.'
+    },
+    leave: 'Go to Atlas',
+    logIn: 'Log in',
+    marks: { done: 'Done', skipped: 'Skipped' },
+    noExecutors: 'No executor is on, so there is nothing to bring: turn one on in the step before, or start here.',
+    reopen: 'Open this again any time from Settings → General → First run.',
+    setup: 'First run',
+    skip: 'Skip',
+    start: 'Start a conversation',
+    stepOf: (step: number, total: number) => `Step ${String(step)} of ${String(total)}`,
+    steps: {
+      connections: 'Connections',
+      executors: 'Executors',
+      model: 'Model',
+      telegram: 'Telegram',
+      work: 'Bring your work'
+    },
+    titles: {
+      connections: { lead: 'Connect your', word: 'accounts' },
+      executors: { lead: 'Connect your', word: 'agents' },
+      model: { lead: 'Choose the', word: 'model' },
+      telegram: { lead: 'Atlas in your', word: 'pocket' },
+      work: { lead: 'Bring your', word: 'work' }
+    },
+    windowAll: 'from any time',
+    windowDays: (days: number) => `from the last ${String(days)} days`,
+    windowLabel: 'Since when'
   },
   keys: {
     band: 'No model provider is connected, so Atlas cannot answer yet.',
@@ -416,6 +518,7 @@ export const en = {
     skillSource: (source: string, plugin: string): string =>
       source === 'atlas' ? 'Ships with Atlas' : source === 'plugin' ? `From the plugin ${plugin}` : "This home's own",
     skillsIntro: 'Procedures the model loads by name when it needs them; the ones you may call show their /command.',
+    title: 'Extensions',
     yours: "This home's own"
   },
   plugins: {
@@ -425,6 +528,7 @@ export const en = {
     screenNotLoaded: (why: string) => `Its screen did not load: ${why}`,
     approved: 'let in',
     cancel: 'Cancel',
+    consentAgain: 'An update changed what it may do, so it waits for your consent again: read it and turn it on.',
     consentIntro: 'Turning it on lets it:',
     defaultValue: (value: string) => `Default: ${value}`,
     empty: 'No plugins. Atlas ships some, and you can add one as a folder in the home, in plugins/.',
@@ -462,6 +566,118 @@ export const en = {
     waits: (code: string) => `waits with ${code}`,
     waiting: (count: number) => (count === 1 ? '1 waits' : `${count} wait`)
   },
+  routineForm: {
+    auto: 'Run it in its automatic mode, which asks nothing',
+    bot: 'Bot',
+    cancel: 'Cancel',
+    draft: 'Open a draft pull request of what it changed (GitHub plugin)',
+    editTitle: 'Change the routine',
+    effort: 'Effort',
+    effortOfHome: "The model's default",
+    efforts: { high: 'High', low: 'Low', medium: 'Medium' },
+    executor: 'Executor',
+    folder: 'Folder',
+    model: 'Model',
+    modelOfHome: "The home's model",
+    name: 'Name',
+    newTitle: 'New routine',
+    probe: 'Probe',
+    probeHint: 'optional: a command whose new output wakes it',
+    prompt: 'What to do',
+    runner: 'Who runs it',
+    runners: { atlas: 'Atlas', bot: 'A bot', executor: 'A coding agent, in a folder' },
+    save: 'Save',
+    saveAndRun: 'Save and run now',
+    schedule: 'When',
+    scheduleHint: 'every day at 9am, every 30m, weekdays at 8am',
+    unwatched: 'It runs with nobody watching: its first question stops the run, which then waits for you in Executors.',
+    workspace: 'Each run in a new workspace (for a routine that changes code)'
+  },
+  templates: {
+    add: 'Add',
+    agentRuns: 'Runs in your coding agent',
+    atlasRuns: "Runs on Atlas's model",
+    effort: (level: string) => `effort ${level}`,
+    groups: { personal: 'Personal', project: 'For a project' },
+    install: (plugin: string) => `Install ${plugin} first`,
+    intro: 'Routines written by Atlas, ready to adjust: Add opens one in the form.',
+    needs: (plugin: string) => `Needs the ${plugin} plugin`,
+    tab: 'Templates',
+    tiers: { essential: 'Essential', recommended: 'Recommended', useful: 'Useful' },
+    words: {
+      bills: {
+        name: 'bills',
+        prompt:
+          'Read my email of the last week for bills and payment reminders, and list what is due this week, each with the amount and the date. If nothing is due, answer [SILENT].',
+        title: 'Bills due this week'
+      },
+      dependencyUpdates: {
+        name: 'dependencies',
+        prompt:
+          "Update this project's dependencies that have a new minor or patch version, run the tests after each, and keep only what passes. List what you updated, and what you left and why.",
+        title: 'Dependency updates'
+      },
+      failingChecks: {
+        name: 'failing-checks',
+        prompt:
+          "With gh, list this project's pull requests and main branch runs whose checks failed in the last day: each with the failing check and the first line of its error. If none failed, answer [SILENT].",
+        title: 'Checks that failed'
+      },
+      newsDigest: {
+        name: 'news',
+        prompt:
+          "Search the web for today's news on the subjects my memory says I follow, and give me five headlines, each with one line and its link.",
+        title: 'Morning news'
+      },
+      releaseNotes: {
+        name: 'release-notes',
+        prompt:
+          "Read the commits merged this week and write release notes for this project's users: what is new, what changed and what was fixed, in plain words. Change no file.",
+        title: 'Release notes draft'
+      },
+      weeklyReview: {
+        name: 'week',
+        prompt:
+          "Look back at my week, my calendar and the routines' results, and write me a short review: what got done, what slipped, and what to start Monday with.",
+        title: 'Weekly review'
+      },
+      agenda: {
+        name: 'tomorrow',
+        prompt:
+          'Read my calendar for tomorrow and tell me, in a few lines, what I have and when, what to prepare tonight, and any clash. If tomorrow is empty, answer [SILENT].',
+        title: "Tomorrow's agenda"
+      },
+      backup: {
+        name: 'backup',
+        prompt: 'Run `atlas backup`. If it worked, answer [SILENT]; if it failed, say why and what to do.',
+        title: 'Daily backup'
+      },
+      mailSummary: {
+        name: 'mail',
+        prompt:
+          'Read my unread email since yesterday and give me the ones that need an answer from me, each in a line with who and what, then the rest in one line. Answer nothing else.',
+        title: 'Morning email summary'
+      },
+      missingTests: {
+        name: 'tests',
+        prompt:
+          'Find the code changed this week that no test covers. Write the tests it lacks, following how this project tests, and run them. Do not change the code under test; list what you could not cover and why.',
+        title: 'Missing tests'
+      },
+      securitySweep: {
+        name: 'security',
+        prompt:
+          "Look for security problems in this project: its dependencies' known vulnerabilities, secrets committed by mistake, and unsafe code (injection, unchecked input). Change nothing: list what you found, the worst first, each with where and how to fix it.",
+        title: 'Security sweep'
+      },
+      stalePullRequests: {
+        name: 'stale-prs',
+        prompt:
+          "With gh, list this project's open pull requests with no activity for 3 days or more: each with its title, its author, how long it waits and what it waits for. If there are none, answer [SILENT].",
+        title: 'Pull requests waiting for 3 days'
+      }
+    }
+  },
   routines: {
     confirmRemove: 'Remove it?',
     empty: 'No routines yet. Ask Atlas to schedule one, or use atlas routines create in the terminal.',
@@ -477,6 +693,14 @@ export const en = {
     open: 'Open',
     pause: 'Pause',
     paused: 'paused',
+    executor: (name: string, folder: string, workspace: boolean) =>
+      `Run by ${name} in ${folder}${workspace ? ', a new workspace each run' : ''}`,
+    edit: 'Change',
+    newRoutine: 'New routine',
+    scoreboard: (alone: number, needed: number, failed: number) =>
+      `This week: ${String(alone)} ran alone · ${String(needed)} needed you · ${String(failed)} failed`,
+    probe: (command: string) => `Woken by its probe: $ ${command}`,
+    probed: 'its probe heard something',
     remove: 'Remove',
     resume: 'Resume',
     runNow: 'Run now',
@@ -497,8 +721,9 @@ export const en = {
     install: 'Install',
     installed: 'Installed',
     installing: 'Installing…',
+    installs: (count: number) => `${count.toLocaleString('en')} installs`,
     intro:
-      'Skills, MCP servers, plugins and executors made for Atlas. Each was reviewed, and installs exactly as it was reviewed.',
+      "Skills, MCP servers, plugins and executors for Atlas: the marketplace's own, each reviewed and installed exactly as reviewed, then what the public catalogs list, read straight from them.",
     kinds: { executor: 'Executor', mcp: 'MCP server', plugin: 'Plugin', skill: 'Skill' },
     license: (license: string) => `License ${license}`,
     localChanges: (name: string) =>
@@ -537,6 +762,11 @@ export const en = {
     secrets: 'Secrets it reads',
     shipped: 'Comes with Atlas',
     source: 'Source code',
+    sources: {
+      'claude-plugins': "From Claude Code's plugin directory",
+      'mcp-registry': 'From the MCP Registry',
+      'skills.sh': 'From skills.sh'
+    },
     stale: (problem: string, when: string) =>
       `The marketplace could not be read now (${problem}). This is how it was on ${when}.`,
     tabs: { executor: 'Executors', mcp: 'MCPs', plugin: 'Plugins', skill: 'Skills' },
@@ -547,6 +777,7 @@ export const en = {
     unread: (problem: string) => `The marketplace could not be read: ${problem}`,
     update: 'Update',
     updateAnyway: 'Update anyway',
+    updated: (date: string) => `updated ${date}`,
     updating: 'Updating…',
     version: (version: string) => `Version ${version}`
   },
@@ -565,6 +796,9 @@ export const en = {
   },
   settings: {
     about: 'About',
+    firstRun: 'First run',
+    firstRunHint: 'The steps Atlas opened on: the model, the executors, and the sessions the list shows.',
+    firstRunOpen: 'Open the first run again',
     aboutYou: 'About you',
     aboutYouHint:
       'Who you are, what you prefer and how you work: USER.md. Atlas reads it in every conversation and adds to it as it learns.',
@@ -600,6 +834,9 @@ export const en = {
     languageHint: 'Of this computer. The window reloads to change it; no conversation stops.',
     languageSystem: "The system's",
     languages: { en: 'English', 'pt-BR': 'Português' } as Record<string, string>,
+    limit: 'Limit, in characters',
+    limitHint:
+      'Every model call carries it whole, so a larger limit costs more each time. From 500 to 20,000; lowering it below what is written cuts nothing: Atlas makes room before it adds.',
     locked: (variable: string) => `Set by ${variable}, which wins over config.toml.`,
     memory: 'Memory',
     memoryHint: 'What Atlas noted about your machine, your tools and their quirks: MEMORY.md.',
@@ -613,13 +850,13 @@ export const en = {
     saved: 'Saved',
     saving: 'Saving…',
     sections: {
-      extensions: 'Extensions',
       general: 'General',
       machines: 'Machines',
       model: 'Model',
       personalization: 'Personalization',
       safety: 'Safety',
-      workspace: 'Workspace'
+      voice: 'Voice',
+      workspace: 'Folder and time zone'
     },
     theme: 'Look',
     themeDark: 'Dark',
@@ -641,14 +878,64 @@ export const en = {
     answer: 'Answer',
     asks: (name: string) => `${name} asks`,
     deny: 'Deny',
+    noReset: "The plan's limit came, and it did not say when it resets: go on when you want.",
     other: 'Other',
     reason: 'Why not? (optional, it reads it)',
+    resumesAt: (time: string) => `The plan's limit came: it goes on by itself at ${time}.`,
     skip: 'Skip',
     wantsTo: (name: string, tool: string) => {
       const act = EXECUTOR_ACTS[tool]
 
       return act ? `${name} wants to ${act}` : `${name} wants to use ${tool}`
     }
+  },
+  dictation: {
+    again: 'Write it down again',
+    anywhere: 'anywhere',
+    cancel: 'Cancel',
+    change: 'Change the key',
+    choose: 'Choose a key',
+    copied: 'This program takes no paste: the text is copied, paste it with Ctrl+V',
+    copy: 'Copy',
+    copyDone: 'Copied',
+    dictate: 'Dictate: click to record, click again to write it in the box',
+    failed: (why: string) => `The dictation failed: ${why}`,
+    inBox: 'in the box',
+    listen: 'Listen',
+    none: 'No dictation yet.',
+    notWritten: (why: string) => `Not written down: ${why}`,
+    nothing: 'Nothing was heard',
+    page: 'Dictations',
+    pageIntro: (key: string) =>
+      key
+        ? `Press ${key} in any program to record, and again for the words to land where you are. The dictations are kept here, with their audio.`
+        : "Dictation anywhere is off: choose a key, and press it in any program to dictate there. The box's dictations are kept here too, with their audio.",
+    pasted: 'Done',
+    pressKey: 'Press the key…',
+    recording: (key: string) => `Recording: ${key} to stop`,
+    recordingBox: 'Recording: click to stop',
+    remove: 'Delete',
+    shortcut: 'Key',
+    shortcutFailed: (why: string) => `The key cannot be used: ${why}`,
+    transcribing: 'Writing down what you said…',
+    turnOff: 'Turn off',
+    writing: 'Writing down what you said…'
+  },
+  speech: {
+    ask: (size: string) =>
+      `A recording came. Atlas writes recordings down on this computer, with a model downloaded once (${size} MB).`,
+    download: 'Download',
+    downloadSize: (size: string) => `Download the model (${size} MB)`,
+    downloading: (done: string, total: string) => `Downloading the speech model: ${done} of ${total} MB…`,
+    local: 'This computer',
+    model: 'The model on this computer',
+    modelHint: (credit: string) => `Recordings stay on the computer that runs Atlas. ${credit}.`,
+    notNow: 'Not now',
+    off: 'Nobody',
+    present: 'Downloaded: recordings are written down here.',
+    transcription: 'Who writes recordings down',
+    transcriptionHint:
+      'The audio you send, on any channel, and what you dictate. OpenAI and Gemini use the key stored for them in Model.'
   },
   subagents: {
     button: (agents: number, tasks: number) =>
@@ -740,8 +1027,21 @@ export const en = {
     which: 'On which executor',
     newSessionIn: (folder: string) => `New session in ${folder}`,
     noneOn: 'No harness is turned on yet.',
+    consentAgain: (title: string) => `${title} waits for your consent again after an update`,
+    consentAgainBody: 'Its plugin was updated and declares something new, so it stays off until you agree.',
+    reviewConsent: 'Review and turn on',
+    notRunning: (title: string) => `${title} is not running`,
+    notRunningBody: 'Turn it on, or install it, in Extensions to go on with this session.',
+    toExtensions: 'Open Extensions',
+    tooOld: (title: string, version: string) => `${title} ${version} is too old for Atlas`,
+    update: 'Update',
+    updateAvailable: (from: string, to: string) => `Update available: ${from} → ${to}`,
+    updateFailed: 'The update did not finish.',
+    updateHint: (command: string) => `Runs: ${command}`,
+    updated: (version: string) => `Updated to ${version}`,
+    updating: (to: string) => `Updating to ${to}…`,
     reading: 'Reading the harnesses…',
-    openSettings: 'Turn one on in Settings',
+    openExtensions: 'Turn one on in Extensions',
     notFound: 'not found on this computer',
     notLoggedIn: 'not logged in',
     on: 'on',
@@ -768,71 +1068,112 @@ export const en = {
     untitled: 'New session'
   },
   accounts: {
-    add: 'Add an account',
-    adding: 'Add',
     cancel: 'Cancel',
-    folder: (folder: string) => `The account ${folder}'s new sessions start on`,
     logIn: 'Log in',
     login: 'Its email (optional)',
     loginNote: (title: string) => `${title} opens its login on your browser: sign in with this account.`,
-    main: 'main',
-    mainAccount: 'Main account',
-    nickname: 'Its nickname',
-    nicknameNote:
-      'It gets a folder of its own beside yours, with its own login, settings and sessions: letters, digits, - or _.',
-    nicknamePlaceholder: 'company-b, personal…',
-    of: 'The harness it is an account of',
-    remove: (name: string) => `Remove ${name}`,
-    removeNote: (name: string, folder: string) =>
-      `Remove ${name}? Its folder (${folder}) stays as it is, with its login and its sessions; its projects start on the main account.`,
-    session: 'Account: switching goes on in a copy of this conversation on the other account',
-    sessionBusy: 'The account can be switched once the session stops working.',
-    sessionTitle: "The session's account",
-    switchChecking: 'Looking at that account…',
-    switched: (name: string, tokens: null | number) =>
-      tokens === null
-        ? `Now on ${name}. The first message on this account loads the whole history; compacting first (/compact) loads less.`
-        : `Now on ${name}. The first message on this account loads the whole history, about ${tokens.toLocaleString('en')} tokens at once; compacting first (/compact) loads less.`,
-    switchCopy: 'The conversation goes on in a copy on that account; this account keeps it as it is.',
-    switchCost: (tokens: null | number) =>
-      tokens === null
-        ? "The first message reads the whole conversation again, on that account's plan."
-        : `The first message reads the whole conversation again, about ${tokens.toLocaleString('en')} tokens at once, on that account's plan. Compacting first (/compact) reads less.`,
-    switchGo: 'Switch',
-    switchMissing: (names: string) => `That account does not have: ${names}.`,
-    switchTitle: (name: string) => `Go on on ${name}?`,
-    switchUnknown: 'What that account has could not be compared.',
-    title: 'Accounts'
+    mainAccount: 'Main account'
   },
+
   route: {
-    add: (name: string) => `Add ${name} to the route`,
-    addStop: 'Add a stop…',
-    atLimit: 'at its limit',
-    close: 'Close',
-    compact: 'Compact before going on',
-    compactHint:
-      'In the copy on another account of the same harness, where it has /compact: the copy reads less and costs less.',
-    down: (name: string) => `${name} later`,
-    effort: (name: string) => `Effort on ${name}`,
-    here: 'here',
-    itsDefault: 'its default',
-    model: (name: string) => `Model on ${name}`,
-    notLoggedIn: 'not logged in',
-    ready: 'ready',
-    same: 'as now',
-    used: (percent: number) => `${String(percent)}% used`,
-    empty: "No destination yet: at a plan limit, the executor's own accounts take over.",
-    enabled: 'At a plan limit, follow this route',
-    main: 'main account',
-    note: 'At a plan limit the session goes on to the next destination logged in and not at its own limit, in this order. On another account of the same harness it goes on in a copy; on another harness a new session starts there with what this one did.',
-    notInstalled: 'not installed',
-    pill: (count: number) => (count ? `Route · ${String(count)}` : 'Route'),
-    pillOn: (account: string, count: number) => (count ? `${account} · route ${String(count)}` : account),
-    remove: (name: string) => `Take ${name} out of the route`,
-    title: "The session's route: where it goes on at a plan limit",
-    titleOn: "The session's account, and where it goes on at a plan limit",
-    up: (name: string) => `${name} sooner`,
     wentOn: (name: string) => `The plan limit was reached: it went on on ${name}.`
+  },
+
+  changes: {
+    add: 'Add',
+    ahead: (count: number, base: string) =>
+      `${count === 1 ? '1 commit' : `${String(count)} commits`} not in ${base} yet`,
+    commit: 'Commit',
+    commitMessage: 'What these changes do',
+    committed: 'Committed on the branch.',
+    merge: (base: string) => `Merge into ${base}`,
+    mergeNote: (branch: string, base: string) =>
+      `${branch} is merged into ${base}, in the project's own folder where ${base} is checked out.`,
+    mergeYes: 'Merge',
+    merged: (base: string) => `Merged into ${base}.`,
+    push: 'Send the branch',
+    pushNote: (branch: string) => `${branch} is sent to the project's remote, origin: others with access see it.`,
+    pushYes: 'Send',
+    pushed: (branch: string) => `${branch} was sent.`,
+    binary: 'A binary file.',
+    checkpoints: (count: number) => (count === 1 ? '1 checkpoint' : `${String(count)} checkpoints`),
+    goBack: 'Go back here',
+    goBackNote:
+      'The files go back to how they were before this message; how they are now is kept as a checkpoint, to come back to. The session goes on in a copy.',
+    goBackYes: 'Go back',
+    wentBack: (label: string) =>
+      `The files are as they were before “${label}”. Your next message goes on in a copy of the session.`,
+    comment: 'Comment on this line',
+    commentPlaceholder: 'What should change here? Ctrl+Enter adds it.',
+    more: 'More files changed than are shown here.',
+    none: 'Nothing changed yet.',
+    readAgain: 'Read the changes again',
+    reading: 'Reading the changes…',
+    removeComment: 'Remove the comment',
+    send: (count: number) =>
+      count === 1 ? 'Send 1 comment to the agent' : `Send ${String(count)} comments to the agent`,
+    statuses: { added: 'new', deleted: 'deleted', renamed: 'renamed' } as Record<string, string>,
+    summary: (count: number, base: string) =>
+      `${count === 1 ? '1 file' : `${String(count)} files`} changed since ${base}`,
+    title: 'Changes',
+    truncated: 'The rest of this file is not shown.'
+  },
+  workspaces: {
+    archive: (name: string) => `Archive ${name}: its work kept on its branch, its folder removed`,
+    cancel: 'Cancel',
+    create: 'Create',
+    delete: (name: string) => `Delete ${name}`,
+    deleteAnyway: 'Delete anyway',
+    deleteNote: (branch: string) => `Its folder and its branch ${branch} are deleted.`,
+    deleteYes: 'Delete',
+    name: 'Name of the workspace',
+    namePlaceholder: 'fix-login',
+    new: 'New workspace',
+    ports: (ports: string) => `Ports ${ports}`,
+    portsSize: 'Ports each',
+    portsStart: 'First port',
+    projectMenu: (name: string) => `Workspaces of ${name}`,
+    save: 'Save',
+    script: 'Setup script',
+    scriptHint:
+      "Runs in each new workspace once it is made, with its ports in ATLAS_WORKSPACE_PORT and ATLAS_WORKSPACE_PORTS. The files listed in the project's .worktreeinclude are copied in first.",
+    scriptPlaceholder: 'npm ci',
+    setup: 'Prepare new workspaces',
+    states: {
+      archived: 'archived',
+      preparing: 'preparing…',
+      setup_failed: 'setup failed'
+    } as Record<string, string>,
+    title: 'Workspaces',
+    unarchive: (name: string) => `Bring ${name} back, its work as it was`,
+    undelivered: 'It holds work not delivered, which is lost with it.'
+  },
+  environment: {
+    context: 'Context',
+    local: 'Local',
+    newWorktree: 'New worktree',
+    newWorktreeHint: (branch: string) => `A new session in a workspace of its own, on a branch from ${branch}`,
+    title: 'Environment',
+    tokens: (count: string) => `${count} tokens`,
+    worktree: 'Worktree'
+  },
+  modes: {
+    hints: {
+      acceptEdits: 'Takes file edits without asking',
+      auto: 'Its own classifier decides what it may do',
+      default: 'Always asks before it changes anything',
+      plan: 'Makes a plan before it changes anything'
+    } as Record<string, string>,
+    names: {
+      acceptEdits: 'Accept edits',
+      auto: 'Automatic',
+      default: 'Manual',
+      plan: 'Plan'
+    } as Record<string, string>,
+    title: 'Mode'
+  },
+  planRing: {
+    used: (percent: number, window: string) => `${String(percent)}% used · ${window}`
   },
   executorPanel: {
     active: (on: number, all: number) => (on === all ? String(all) : `${String(on)} of ${String(all)}`),
@@ -1058,6 +1399,7 @@ export const en = {
     thisMachine: (home: string) => `This machine · home ${home}`,
     title: 'Machines',
     transport: 'Reached by',
+    viaRelay: 'Relay, from anywhere',
     viaSsh: 'SSH tunnel',
     viaTailscale: 'Tailscale',
     working: 'Working…'

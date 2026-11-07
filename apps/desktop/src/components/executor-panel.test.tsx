@@ -11,14 +11,17 @@ import { ExecutorPanel } from './executor-panel'
 const EXECUTOR: ExecutorRow = {
   account: 'someone@example.com',
   account_folders: false,
+  modes: [],
   files: false,
   account_id: '',
   accounts: true,
   base: '',
   consent: '',
+  consent_again: false,
   declaration: [],
   enabled: true,
   installed: true,
+  latest: '',
   logged_in: true,
   minimum: '',
   name: 'claude-code',
@@ -28,6 +31,8 @@ const EXECUTOR: ExecutorRow = {
   problem: '',
   supported: true,
   title: 'Claude Code',
+  update: '',
+  updating: false,
   version: '2.1.296'
 }
 
@@ -206,15 +211,22 @@ describe('what the side panel says the executor has (22/10/2026)', () => {
 
     const skills = screen.getByTestId('executor-skills')
     expect(skills.querySelectorAll('[data-testid=skill-row]')).toHaveLength(1)
-    expect(skills.textContent).toContain('/review')
+    // A pill by its name, no `/`, what it does its tooltip.
+    expect(skills.querySelector('[data-testid=skill-row]')?.textContent).toBe('review')
+    expect(skills.querySelector('[data-testid=skill-row]')?.getAttribute('title')).toBe('The review')
     expect(skills.textContent).not.toContain('compact')
 
+    // Each plugin's counts say their words as tooltips; its skills, without the plugin's name.
     const plugins = screen
       .getAllByTestId('plugin-row')
-      .map(row => [row.getAttribute('data-plugin'), row.querySelector('summary')?.textContent])
+      .map(row => [
+        row.getAttribute('data-plugin'),
+        [...row.querySelectorAll('summary [title]')].map(count => count.getAttribute('title')),
+        [...row.querySelectorAll('[data-testid=skill-row]')].map(pill => pill.textContent)
+      ])
     expect(plugins).toEqual([
-      ['design', '›design1 skill'],
-      ['marketing', '›marketing1 skill · 1 of 2 MCP servers']
+      ['design', ['1 skill'], ['critique']],
+      ['marketing', ['1 skill', '1 of 2 MCP servers'], ['seo-audit']]
     ])
   })
 

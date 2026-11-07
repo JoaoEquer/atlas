@@ -90,13 +90,14 @@ from atlas.agent import (
     typed_text,
 )
 from atlas.assistant.describe import describe_image
-from atlas.assistant.executors import ExecutorDesk, split_account
+from atlas.assistant.executors import ExecutorDesk, other_accounts, split_account
 from atlas.assistant.messages import AgentMessages
 from atlas.assistant.model import (
     ATLAS_COMMANDS,
     IDENTITY,
     ConversationRole,
     FileSent,
+    InstanceState,
     PreviewAsked,
     Reviewed,
     Sent,
@@ -111,7 +112,7 @@ from atlas.assistant.model import (
     review_actions,
     skill_action,
 )
-from atlas.assistant.subagents import Subagents
+from atlas.assistant.subagents import Subagents, TaskWorkspaces
 from atlas.assistant.titles import TITLE_TURNS, TitleQuarantine, write_title
 from atlas.assistant.workbench import Workbench, answer_for_user
 from atlas.bots import MAIN_AGENT, Bot, BotError, Bots, roster_section
@@ -128,7 +129,6 @@ from atlas.home import Database, Home, Settings, TrustSettings, time_zone, utc_n
 from atlas.hooks import ConversationHooks, ConversationMonitors, Hooks, PluginMonitor
 from atlas.jobs import (
     MAX_CHILD_CALLS,
-    AccountStore,
     AgentDefinition,
     DelegationError,
     InstanceStore,
@@ -144,6 +144,8 @@ from atlas.memory import (
     Proposals,
     ProposalStore,
     SoulFile,
+    Target,
+    limits_of,
     review_due,
     skill_review_due,
 )
@@ -162,9 +164,18 @@ from atlas.models import (
     ToolResult,
     ToolStatus,
     UserMessage,
+    load_sdks,
     sees_images,
 )
-from atlas.plugins import Executor, LoadedCommand, LoadedReader, LoadedTool, Transcript
+from atlas.plugins import (
+    Accounts,
+    Executor,
+    LoadedCommand,
+    LoadedProbe,
+    LoadedReader,
+    LoadedTool,
+    Transcript,
+)
 from atlas.secrets import MCP_SIGN_IN_FILE, SecretsError, Vault
 from atlas.skills import (
     Curator,
@@ -182,6 +193,7 @@ from atlas.tools import (
     BackgroundCommand,
     BotMaker,
     Commands,
+    Connection,
     Delegator,
     DocumentTexts,
     Messenger,
@@ -207,6 +219,7 @@ from atlas.tools import (
     install_tool_search,
     make_secrets_tool,
     message_agent,
+    offer_connection,
     search_backend,
     web_search,
 )
@@ -280,13 +293,16 @@ class _Shared:
     #: The title providers skipped for now (no credit, a refused key).
     titles: TitleQuarantine
     instance_store: InstanceStore
-    #: The executors' extra accounts and each folder's (step 16h).
-    account_store: AccountStore
     #: The files the user attached to messages (step 16g).
     attachments: Attachments
     #: The MCP servers' tools and the plugins' (step 16j), which each conversation copies.
     mcp_tools: Toolset = field(default_factory=Toolset)
     mcp: Any = None
+    #: The harnesses' other accounts, from the plugin that brings them (step 22); `None`, each
+    #: harness on its own login alone.
+    accounts: Accounts | None = None
+    #: The workspaces a delegated task may ask for (step 21), from the server; `None`, none.
+    task_workspaces: TaskWorkspaces | None = None
     #: The plugins' tools, one line per plugin for tool search's list of sources.
     plugin_sources: dict[str, str] = field(default_factory=dict[str, str])
     #: The plugins' MCP servers, as an MCP file's document, for the MCP client.
@@ -301,8 +317,16 @@ class _Shared:
     monitors: tuple[PluginMonitor, ...] = ()
     #: The plugins' slash commands (step 16l), by what is typed after the slash (`video:status`).
     slash: dict[str, LoadedCommand] = field(default_factory=dict[str, LoadedCommand])
-    #: The plugins' attachment readers (step 17a), by the kind each reads (`audio`).
+    #: The attachment readers, by the kind each reads (`audio`): Atlas's own (step 26) and the
+    #: plugins' (step 17a), a plugin's first for the kind it reads.
     readers: dict[str, LoadedReader] = field(default_factory=dict[str, LoadedReader])
+    #: Atlas's own readers, which the plugins' join.
+    own_readers: dict[str, LoadedReader] = field(default_factory=dict[str, LoadedReader])
+    #: The connections Atlas offers in the user's conversations (GitHub, Gmail and Calendar),
+    #: as the server sees them now.
+    connections: Callable[[], Sequence[Connection]] = lambda: ()
+    #: The plugins' probes (step 23), by what a routine names (`plugin:github:issues`).
+    probes: dict[str, LoadedProbe] = field(default_factory=dict[str, LoadedProbe])
     last_active: datetime | None = None
     #: The process's subagents, made once the assistant is.
     subagents: "Subagents | None" = None
@@ -417,6 +441,20 @@ class _Shared:
                 is None
                 else [made]
             ),
+            # Offered only to the user, by the main agent, while one is not ready.
+            *(
+                []
+                if asker is None
+                or bot is not None
+                or role is not ConversationRole.CONVERSATION
+                or (
+                    offer := offer_connection(
+                        self.connections, len(self.conversations.recent(4, exclude=conversation_id))
+                    )
+                )
+                is None
+                else [offer]
+            ),
             atlas.tools.skill_manage(skills),
             conversation_search(
                 self.conversations, conversation_id, bot=None if bot is None else bot.name
@@ -473,7 +511,7 @@ class _Shared:
         agent; for a bot, the home's profile and the bot's own memory."""
         if bot is None:
             return self.memory, self.proposals
-        files = bot_memory(self.home, bot)
+        files = bot_memory(self.home, bot, self.memory.limits)
         return files, self.proposals.for_bot(bot.name, files)
 
 
@@ -484,9 +522,10 @@ def bot_library(shared: _Shared, bot: Bot) -> SkillLibrary:
     )
 
 
-def bot_memory(home: Home, bot: Bot) -> MemoryFiles:
-    """A bot's stores: the home's profile, one for all, and the memory in the bot's folder."""
-    return MemoryFiles(home.memory_folder, memory_folder=bot.folder)
+def bot_memory(home: Home, bot: Bot, limits: dict[Target, int]) -> MemoryFiles:
+    """A bot's stores: the home's profile, one for all, and the memory in the bot's folder, under
+    the home's limits (`limits`, shared with the main agent's stores)."""
+    return MemoryFiles(home.memory_folder, limits, memory_folder=bot.folder)
 
 
 class Assistant:
@@ -520,7 +559,7 @@ class Assistant:
         database = Database(home.database_file)
         usage = SkillUsage(database)
         library = SkillLibrary(home.skills_folder, usage, creator=MAIN_AGENT)
-        memory = MemoryFiles(home.memory_folder)
+        memory = MemoryFiles(home.memory_folder, limits_of(settings.memory))
         soul = SoulFile(home.soul_file)
         try:
             soul.seed(IDENTITY)
@@ -532,7 +571,7 @@ class Assistant:
 
         def bot_files(name: str) -> MemoryFiles | None:
             try:
-                return bot_memory(home, bots.get(name))
+                return bot_memory(home, bots.get(name), memory.limits)
             except BotError:
                 return None
 
@@ -563,7 +602,6 @@ class Assistant:
             subagent_store=SubagentStore(database),
             titles=TitleQuarantine(clock),
             instance_store=InstanceStore(database),
-            account_store=AccountStore(database),
             attachments=Attachments(home.attachments_folder),
             last_active=clock(),
         )
@@ -613,6 +651,7 @@ class Assistant:
             more=lambda: [bot_library(self._shared, bot) for bot in bots.list()],
         )
         self._mcp_start: asyncio.Task[None] | None = None
+        self._sdks: asyncio.Task[None] | None = None
         self._open: dict[str, OpenConversation] = {}
 
     @property
@@ -654,21 +693,38 @@ class Assistant:
     def settings(self) -> Settings:
         return self._shared.settings
 
+    def use_reader(self, reader: LoadedReader) -> None:
+        """A reader of Atlas's own for one kind of attachment (step 26: audio, written down by
+        `atlas.speech`); a plugin's reader of the same kind still reads it first."""
+        shared = self._shared
+        shared.own_readers[reader.kind] = reader
+        shared.readers = {reader.kind: reader, **shared.readers}
+
+    def plugin_probe(self, typed: str) -> LoadedProbe | None:
+        """The probe of a plugin that is on that a routine names (`plugin:github:issues`), or
+        `None`."""
+        return self._shared.probes.get(typed)
+
     def use_settings(self, settings: Settings) -> None:
         """The editable settings changed on the settings screen (step 15b), handed to whoever
         holds them: the default model from the next turn of a conversation that picked none,
         the trust rules from the next request of every open conversation, the folder in new
-        conversations, the zone the next time a routine is scheduled. A subagent already running
-        ends on the rules it started with."""
+        conversations, the zone the next time a routine is scheduled, the memory's limits from
+        the next write (the prompt shows them from the next conversation), who writes down
+        recordings from the next one. A subagent already running ends on the rules it started
+        with."""
         shared = self._shared
         shared.settings = replace(
             shared.settings,
             model=settings.model,
             trust=settings.trust,
+            memory=settings.memory,
             workspace=settings.workspace,
             time=settings.time,
+            voice=settings.voice,
         )
         shared.models.use(settings.model)
+        shared.memory.limits.update(limits_of(settings.memory))
         shared.workspace = settings.workspace.folder or Path.home()
         shared.routines.use_zone(time_zone(settings.time.zone))
         for conversation in self._open.values():
@@ -688,9 +744,28 @@ class Assistant:
         return self._shared.instance_store
 
     @property
-    def account_store(self) -> AccountStore:
-        """The executors' other accounts, and the account of each folder (step 16h)."""
-        return self._shared.account_store
+    def accounts(self) -> Accounts | None:
+        """The harnesses' other accounts, from the plugin that brings them (step 22); `None` when
+        no plugin does."""
+        return self._shared.accounts
+
+    @property
+    def task_workspaces(self) -> TaskWorkspaces | None:
+        """The workspaces a delegated task may ask for (step 21); `None` until the server gives
+        them."""
+        return self._shared.task_workspaces
+
+    def use_connections(self, connections: Callable[[], Sequence[Connection]]) -> None:
+        """Where the connections Atlas offers stand (05/11/2026): read each time a conversation of
+        the user's opens its tools."""
+        self._shared.connections = connections
+
+    def use_workspaces(self, workspaces: TaskWorkspaces) -> None:
+        self._shared.task_workspaces = workspaces
+
+    def set_accounts(self, accounts: Accounts | None) -> None:
+        self._shared.accounts = accounts
+        self._on_accounts.clear()
 
     @property
     def vault(self) -> Vault:
@@ -737,15 +812,17 @@ class Assistant:
         found = self._executors.get(executor)
         if found is None or not account:
             return found
-        if not found.capabilities().account_folders:
+        accounts = self._shared.accounts
+        if accounts is None or not found.capabilities().account_folders:
             return None
-        kept = self._shared.account_store.get(executor, account)
+        kept = next((a for a in other_accounts(accounts, executor) if a.id == account), None)
         if kept is None:
             self._on_accounts.pop(name, None)
             return None
+        folder = str(kept.folder)
         made = self._on_accounts.get(name)
-        if made is None or made[0] is not found or made[1] != kept.folder:
-            made = (found, kept.folder, found.for_account(Path(kept.folder)))
+        if made is None or made[0] is not found or made[1] != folder:
+            made = (found, folder, found.for_account(kept.folder))
             self._on_accounts[name] = made
         return made[2]
 
@@ -772,6 +849,7 @@ class Assistant:
         monitors: Sequence[PluginMonitor] = (),
         slash: Sequence[LoadedCommand] = (),
         readers: Sequence[LoadedReader] = (),
+        probes: Sequence[LoadedProbe] = (),
     ) -> None:
         """What the plugins that are on bring now (step 16j): their tools, which join the
         conversations behind the tool search as the MCP servers' do; their skills folders, listed
@@ -784,7 +862,8 @@ class Assistant:
         shared.programs = tuple(programs)
         shared.agents = _agents(agents or {})
         shared.slash = {command.typed: command for command in slash}
-        shared.readers = {reader.kind: reader for reader in readers}
+        shared.readers = {**shared.own_readers, **{reader.kind: reader for reader in readers}}
+        shared.probes = {probe.typed: probe for probe in probes}
         if tuple(monitors) != shared.monitors:
             shared.monitors = tuple(monitors)
             # Each conversation starts them again as they are now, when their time comes.
@@ -843,6 +922,7 @@ class Assistant:
         """Deliver what subagents of an earlier process left, and connect the user's MCP servers
         in the background; their tools join the conversations as they arrive. Needs a running
         event loop."""
+        self._sdks = asyncio.create_task(asyncio.to_thread(load_sdks))
         self.subagents.recover()
         self._forget_account_tokens()
         ended = self._shared.instance_store.abandon_running(self.clock())
@@ -887,6 +967,8 @@ class Assistant:
             await conversation.close()
         if self.browser is not None:
             await self.browser.close()
+        if self._sdks is not None:
+            await asyncio.gather(self._sdks, return_exceptions=True)
         if self._mcp_start is not None:
             self._mcp_start.cancel()
             await asyncio.gather(self._mcp_start, return_exceptions=True)
@@ -1007,6 +1089,13 @@ class Assistant:
     def forget(self, conversation_id: str) -> None:
         """Let go of an open conversation that is done, such as a routine's run."""
         self._open.pop(conversation_id, None)
+
+    def working(self) -> bool:
+        """Whether anything works now (step 20): a turn or a review of an open conversation, or an
+        executor's instance on the workbench."""
+        if any(conversation.busy for conversation in self._open.values()):
+            return True
+        return any(run.state is not InstanceState.ENDED for run in self.workbench.runs())
 
     def running(self, conversation_id: str) -> bool:
         found = self._open.get(conversation_id)
@@ -1833,7 +1922,7 @@ class _BotInstructions:
         me = bot_identity(bot.body, self.workspace, _system())
         if self.messaging:
             me = f"{me}\n\n{roster_section(bot, self.shared.bots.list())}"
-        return Instructions(bot_memory(self.shared.home, bot), me)()
+        return Instructions(bot_memory(self.shared.home, bot, self.shared.memory.limits), me)()
 
 
 @dataclass(frozen=True, slots=True)

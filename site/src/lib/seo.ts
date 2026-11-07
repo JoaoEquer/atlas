@@ -3,7 +3,9 @@
 // same words the pages show, so a rich result never says what the page does not.
 import { REPOSITORY } from '../../site.config.mjs'
 
-import { faq, hero, seo } from './home'
+import { seo } from './home'
+import { HOMES } from './homes'
+import { HTML_LANG, type Lang, localized } from './i18n'
 
 type Thing = Record<string, unknown>
 
@@ -32,32 +34,35 @@ export function website(site: URL): Thing {
   }
 }
 
-export function application(site: URL): Thing {
+/** The app, said in a page's language; one node either way, the English home's. */
+export function application(site: URL, lang: Lang = 'en'): Thing {
   return {
     '@type': 'SoftwareApplication',
     '@id': id(site, 'app'),
     name: 'Atlas',
-    description: hero.lede,
-    url: new URL('/', site).toString(),
+    description: HOMES[lang].hero.lede,
+    inLanguage: HTML_LANG[lang],
+    url: new URL(localized('/', lang), site).toString(),
     applicationCategory: 'DeveloperApplication',
     operatingSystem: 'Windows, macOS, Linux',
     license: 'https://opensource.org/license/mit',
     isAccessibleForFree: true,
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-    downloadUrl: new URL('/#install', site).toString(),
-    installUrl: new URL('/docs/install/', site).toString(),
-    softwareHelp: { '@type': 'CreativeWork', url: new URL('/docs/', site).toString() },
+    downloadUrl: new URL(`${localized('/', lang)}#install`, site).toString(),
+    installUrl: new URL(localized('/docs/install/', lang), site).toString(),
+    softwareHelp: { '@type': 'CreativeWork', url: new URL(localized('/docs/', lang), site).toString() },
     codeRepository: REPOSITORY,
     image: new URL('/og.jpg', site).toString(),
     publisher: { '@id': id(site, 'organization') }
   }
 }
 
-export function faqPage(site: URL): Thing {
+export function faqPage(site: URL, lang: Lang = 'en'): Thing {
   return {
     '@type': 'FAQPage',
-    '@id': id(site, 'faq'),
-    mainEntity: faq.items.map(item => ({
+    '@id': new URL(`${localized('/', lang)}#faq`, site).toString(),
+    inLanguage: HTML_LANG[lang],
+    mainEntity: HOMES[lang].faq.items.map(item => ({
       '@type': 'Question',
       name: item.question,
       acceptedAnswer: { '@type': 'Answer', text: item.answer }
@@ -68,14 +73,15 @@ export function faqPage(site: URL): Thing {
 /** A documentation page: an article in the documentation, and the trail that leads to it. */
 export function docPage(
   site: URL,
-  page: { path: string; title: string; description: string; modified?: Date | undefined }
+  page: { path: string; title: string; description: string; modified?: Date | undefined; lang?: string }
 ): Thing[] {
   const url = new URL(page.path, site).toString()
+  const docs = page.path.startsWith('/pt-br/') ? '/pt-br/docs/' : '/docs/'
   // Every step a page of its own: a step without one is refused by the rich result.
   const trail = [
     { name: 'Atlas', url: new URL('/', site).toString() },
-    { name: 'Docs', url: new URL('/docs/', site).toString() },
-    ...(page.path === '/docs/' ? [] : [{ name: page.title, url }])
+    { name: docs === '/docs/' ? 'Docs' : 'Documentação', url: new URL(docs, site).toString() },
+    ...(page.path === docs ? [] : [{ name: page.title, url }])
   ]
   return [
     {
@@ -84,7 +90,7 @@ export function docPage(
       headline: page.title,
       description: page.description,
       url,
-      inLanguage: 'en',
+      inLanguage: page.lang ?? 'en',
       ...(page.modified ? { dateModified: page.modified.toISOString() } : {}),
       isPartOf: { '@id': id(site, 'website') },
       about: { '@id': id(site, 'app') },

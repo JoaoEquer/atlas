@@ -4,14 +4,20 @@ parent's model is the fake model server. What Claude Code asks reaches a desk th
 user's screen, or Atlas answers it. The database and the tools are real, in a temporary home."""
 
 import asyncio
+import dataclasses
 import json
 import os
+import shutil
+import subprocess
+import weakref
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from accounts_support import AccountsPlugin
 from atlas.__main__ import SCHEMAS
 from atlas.assistant import (
     HANDOFF_MARK,
@@ -22,15 +28,29 @@ from atlas.assistant import (
     InstanceActivity,
     InstanceChanged,
     OpenConversation,
+    RoutineRunner,
     SubagentChanged,
     WorkbenchEvent,
 )
 from atlas.home import Database, Home, ModelSettings, Settings, WorkspaceSettings, migrate
-from atlas.jobs import SubagentStatus, SubagentStore
+from atlas.jobs import (
+    Creator,
+    DelegationError,
+    Lateness,
+    Routine,
+    RoutineExecutor,
+    Run,
+    RunStatus,
+    Schedule,
+    ScheduleKind,
+    SubagentStatus,
+    SubagentStore,
+)
 from atlas.models import AssistantMessage, CallLedger, ToolResult, UserMessage
 from atlas.plugins import Answers, Executor, Permission, Question, Verdict
 from atlas.secrets import Vault
 from atlas.trust import ApprovalAnswer, ApprovalRequest, Choice, Outcome
+from atlas.workspaces import WorkspaceError, Workspaces, WorkspaceState
 from claude_code_support import claude_code
 from codex_support import codex
 from fake_model import FakeCall, FakeModelServer, FakeReply
@@ -144,6 +164,19 @@ def make(home: Home, vault: Vault, fake: FakeModelServer, connect: Connect, tmp_
         return assistant, heard
 
     return make
+
+
+#: The accounts plugin on each test's assistant, made on its first use.
+_PLUGINS: "weakref.WeakKeyDictionary[Assistant, AccountsPlugin]" = weakref.WeakKeyDictionary()
+
+
+def _accounts(assistant: Assistant, tmp_path: Path) -> AccountsPlugin:
+    """The accounts plugin Atlas ships, on `assistant`, as a home that uses other accounts has
+    it (step 22)."""
+    found = _PLUGINS.get(assistant)
+    if found is None:
+        found = _PLUGINS[assistant] = AccountsPlugin(assistant, tmp_path / "accounts-plugin")
+    return found
 
 
 def _run[T](scenario: Callable[[], Awaitable[T]]) -> T:
@@ -683,9 +716,11 @@ def test_a_delegation_runs_on_its_folders_account_even_with_the_main_one_logged_
     project = tmp_path / "work" / "project"
 
     async def scenario() -> tuple[OpenConversation, str, str]:
-        work = await assistant.workbench.add_account(CLAUDE_CODE, "work")
+        work = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "work")
         await assistant.workbench.switch_executor_account(work.name, "w@example.com")
-        await assistant.workbench.set_folder_account(CLAUDE_CODE, str(project), work.account_id)
+        await _accounts(assistant, tmp_path).set_folder_account(
+            CLAUDE_CODE, str(project), work.account_id
+        )
         conversation = await _start(assistant, "Fix my failing test.")
         await _settle(assistant, conversation)
         await assistant.close()
@@ -771,11 +806,13 @@ def test_atlas_names_the_account_a_delegation_runs_on_over_the_folders(
 
     async def scenario() -> tuple[OpenConversation, Any]:
         workbench = assistant.workbench
-        first = await workbench.add_account(CLAUDE_CODE, "first")
-        second = await workbench.add_account(CLAUDE_CODE, "second")
+        first = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "first")
+        second = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "second")
         await workbench.switch_executor_account(first.name, "f@example.com")
         await workbench.switch_executor_account(second.name, "s@example.com")
-        await workbench.set_folder_account(CLAUDE_CODE, str(project), first.account_id)
+        await _accounts(assistant, tmp_path).set_folder_account(
+            CLAUDE_CODE, str(project), first.account_id
+        )
         conversation = await _start(assistant, "Fix my failing test on the second account.")
         await _settle(assistant, conversation)
         await assistant.close()
@@ -822,6 +859,7 @@ def test_a_delegations_route_goes_on_in_codex_from_the_handoff_packet(
         FakeReply(text="Done.", when=PARENT),
     )
     assistant, heard = make(Screen(), executors={CLAUDE_CODE: claude_code(), "codex": codex()})
+    _accounts(assistant, tmp_path)  # a route is the accounts plugin's
 
     async def scenario() -> OpenConversation:
         conversation = await _start(assistant, "Fix my failing test.")
@@ -881,9 +919,11 @@ def test_a_stopped_task_resumes_on_another_account_in_a_copy_then_on_another_exe
 
     async def scenario() -> tuple[OpenConversation, Any]:
         workbench = assistant.workbench
-        work = await workbench.add_account(CLAUDE_CODE, "work")
+        work = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "work")
         await workbench.switch_executor_account(work.name, "w@example.com")
-        await workbench.set_failover(CLAUDE_CODE, [], enabled=False, compact=False)
+        await _accounts(assistant, tmp_path).set_failover(
+            CLAUDE_CODE, [], enabled=False, compact=False
+        )
         conversation = await _start(assistant, "Fix my failing test.")
         await _settle(assistant, conversation)
         resumed: list[str] = []
@@ -921,7 +961,7 @@ def test_a_stopped_task_resumes_on_another_account_in_a_copy_then_on_another_exe
     assert "All of it, in Codex." in notices[-1]
 
 
-def test_executor_accounts_tells_each_accounts_login_usage_limit_and_folders(
+def test_executor_accounts_tells_each_accounts_login_usage_and_limit(
     make: Make, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _scripts(tmp_path, monkeypatch)
@@ -931,9 +971,11 @@ def test_executor_accounts_tells_each_accounts_login_usage_limit_and_folders(
 
     async def scenario() -> tuple[str, str, str]:
         workbench = assistant.workbench
-        work = await workbench.add_account(CLAUDE_CODE, "work")
+        work = await _accounts(assistant, tmp_path).add_account(CLAUDE_CODE, "work")
         await workbench.switch_executor_account(work.name, "w@example.com")
-        await workbench.set_folder_account(CLAUDE_CODE, str(project), work.account_id)
+        await _accounts(assistant, tmp_path).set_folder_account(
+            CLAUDE_CODE, str(project), work.account_id
+        )
         listed = await assistant.subagents.accounts()
         unknown = await assistant.subagents.accounts("pi")
         twice = await assistant.subagents.switch_account("w@example.com", CLAUDE_CODE)
@@ -959,9 +1001,249 @@ def test_executor_accounts_tells_each_accounts_login_usage_limit_and_folders(
         "w@example.com",
         False,
     )
-    assert work["folders"] == [str(project)]
     assert unknown.startswith("[Atlas: There is no executor 'pi'")
     assert twice == (
         "[Atlas: w@example.com is logged in already on claude-code@work: delegate with "
         "executor='claude-code@work' (or resume with it) instead of logging in again.]"
     )
+
+
+# -- a delegated task in a workspace of its own (step 21) ------------------------------------------
+
+
+class _Workspaces:
+    """The server's part, as `atlas.workspaces` does it, in the test's home."""
+
+    def __init__(self, home: Home) -> None:
+        database = Database(home.database_file)
+        migrate(database, SCHEMAS)
+        self.made = Workspaces(home.worktrees_folder, database)
+
+    async def make(self, folder: Path, name: str) -> tuple[Path, str]:
+        try:
+            made = self.made.create(folder, name)
+        except WorkspaceError as error:
+            raise DelegationError(str(error)) from error
+        return Path(made.folder), made.branch
+
+    async def changes(self, folder: Path) -> str:
+        found = self.made.found_at(folder)
+        return "" if found is None else self.made.changes(found.id)
+
+    async def finish(self, folder: Path, title: str, *, draft: bool) -> str:
+        found = self.made.found_at(folder)
+        if found is None:
+            return ""
+        if self.made.status(found.id) == (False, 0):
+            self.made.archive(found.id)
+            return f"Its workspace {found.branch} changed nothing, and was archived."
+        return f"Its changes are in the workspace {found.branch} (draft: {draft})."
+
+
+def _git_project(folder: Path) -> None:
+    identity = {
+        "GIT_AUTHOR_NAME": "Ana",
+        "GIT_AUTHOR_EMAIL": "ana@example.com",
+        "GIT_COMMITTER_NAME": "Ana",
+        "GIT_COMMITTER_EMAIL": "ana@example.com",
+    }
+    (folder / "app.py").write_text("print('shop')\n", encoding="utf-8")
+    for arguments in (
+        ("init", "--quiet", "--initial-branch", "main"),
+        ("add", "--all"),
+        ("commit", "--quiet", "--message", "The shop"),
+    ):
+        subprocess.run(  # noqa: S603 - the system's git, on a test's own repository
+            ["git", "-C", str(folder), *arguments],  # noqa: S607
+            check=True,
+            capture_output=True,
+            env={**os.environ, **identity},
+        )
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_a_task_asking_for_a_new_workspace_works_there_and_says_its_branch_and_changes(
+    make: Make, fake: FakeModelServer, claude: Callable[..., None], home: Home, tmp_path: Path
+) -> None:
+    claude({"sleep": 1.0}, {"result": "Added the page."})
+    asked = {"goal": "Add the about page.", "folder": "project", "workspace": "new"}
+    fake.reply(
+        FakeReply(
+            calls=[FakeCall("delegate", json.dumps({"executor": CLAUDE_CODE, "tasks": [asked]}))],
+            when=PARENT,
+        ),
+        FakeReply(text="Claude Code is on it.", when=PARENT),
+        FakeReply(text="Done.", when=PARENT),
+        FakeReply(
+            calls=[FakeCall("delegate", json.dumps({"tasks": [{**asked, "folder": ""}]}))],
+            when=PARENT,
+        ),
+        FakeReply(text="Only for an executor.", when=PARENT),
+    )
+    assistant, _ = make(None)
+    project = tmp_path / "work" / "project"
+    _git_project(project)
+    assistant.use_workspaces(_Workspaces(home))
+
+    async def scenario() -> tuple[OpenConversation, Path, str]:
+        conversation = await _start(assistant, "Add an about page.")
+        while not assistant.workbench.runs():
+            await asyncio.sleep(0.02)
+        folder = assistant.workbench.runs()[0].spec.folder
+        (folder / "about.md").write_text("About us.\n", encoding="utf-8")
+        await _settle(assistant, conversation)
+        conversation.send("And a contact page, by a subagent.")
+        await _settle(assistant, conversation)
+        refused = [m.text for m in conversation.history if isinstance(m, ToolResult)][-1]
+        await assistant.close()
+        return conversation, folder, refused
+
+    conversation, folder, refused = _run(scenario)
+
+    assert folder.is_relative_to(home.worktrees_folder), "a copy in the home, not the project"
+    notice = _notice(conversation)
+    assert "Added the page." in notice
+    assert "It worked in the workspace atlas/add-the-about-page-" in notice
+    assert "changed: 1 new file not yet committed" in notice
+    assert not (project / "about.md").exists(), "the project itself untouched"
+    assert "A new workspace is for an outside executor's tasks" in refused
+
+
+def test_a_task_in_a_folder_another_agent_works_in_is_warned_of(
+    make: Make, fake: FakeModelServer, claude: Callable[..., None], tmp_path: Path
+) -> None:
+    # The user's session works long enough to still be working when the task is delegated, on a
+    # slow machine too (CI's Windows took over a second, 05/11/2026).
+    claude({"sleep": 5.0}, {"result": "Done."})
+    fake.reply(
+        _delegate(),
+        FakeReply(text="Claude Code is on it.", when=PARENT),
+        FakeReply(text="Done.", when=PARENT),
+    )
+    assistant, _ = make(None)
+
+    async def scenario() -> str:
+        workbench = assistant.workbench
+        mine = await workbench.start(CLAUDE_CODE, tmp_path / "work" / "project")
+        await workbench.prompt(mine.id, "Refactor the views.")
+        conversation = await _start(assistant, "Fix my failing test.")
+        await _settle(assistant, conversation)
+        said = next(m.text for m in conversation.history if isinstance(m, ToolResult))
+        await assistant.close()
+        return said
+
+    said = _run(scenario)
+
+    assert "Another agent works in" in json.loads(said)["warning"]
+
+
+# -- a routine an executor runs (step 25) ---------------------------------------------------------
+
+
+def _executor_routine(folder: Path, **chosen: Any) -> Routine:
+    return Routine(
+        id="r1",
+        name="security sweep",
+        schedule=Schedule(ScheduleKind.INTERVAL, "every 1d", minutes=1440),
+        prompt="Look for new vulnerabilities in the dependencies.",
+        command=None,
+        enabled=True,
+        created_at=datetime(2026, 11, 4, 13, 0, tzinfo=UTC),
+        created_by=Creator.USER,
+        executor=RoutineExecutor(CLAUDE_CODE, str(folder), **chosen),
+    )
+
+
+def _routine_run(assistant: Assistant, routine: Routine) -> Run:
+    async def scenario() -> Run:
+        try:
+            when = datetime(2026, 11, 4, 13, 0, tzinfo=UTC)
+            return await RoutineRunner(assistant).run(
+                routine, Run(1, routine.id, when, Lateness.ON_TIME)
+            )
+        finally:
+            await assistant.close()
+
+    return _run(scenario)
+
+
+def test_an_executor_routine_runs_its_prompt_as_a_session_in_its_folder(
+    make: Make, claude: Callable[..., None], tmp_path: Path
+) -> None:
+    claude({"say": "Read the lock file."}, {"result": "No new vulnerabilities."})
+    assistant, _ = make(None)
+    project = tmp_path / "work" / "project"
+
+    run = _routine_run(assistant, _executor_routine(project))
+
+    assert (run.status, run.output) == (RunStatus.OK, "No new vulnerabilities.")
+    log = tmp_path / "claude-log.jsonl"
+    assert _prompts(log) == ["Look for new vulnerabilities in the dependencies."]
+    assert len(_started(log, project)) == 1
+    assert run.conversation_id is not None
+    info = assistant.conversations.info(run.conversation_id)
+    assert (info.title, info.source) == ("security sweep", "routine")
+    assert assistant.workbench.runs() == []
+
+
+def test_what_an_executor_routine_asks_stops_the_run_for_the_user(
+    make: Make, claude: Callable[..., None], tmp_path: Path
+) -> None:
+    claude({"tool": "Bash", "input": {"command": "npm audit fix"}}, {"result": "Fixed."})
+    assistant, _ = make(None)
+
+    run = _routine_run(assistant, _executor_routine(tmp_path / "work" / "project"))
+
+    assert run.status is RunStatus.NEEDED
+    assert run.output.startswith("It stopped to ask: Bash: npm audit fix")
+    assert "Its session is kept" in run.output
+    assert assistant.workbench.runs() == []
+
+
+def test_an_executor_routine_that_cannot_run_says_why(make: Make, tmp_path: Path) -> None:
+    assistant, _ = make(None)
+    project = tmp_path / "work" / "project"
+    gone = dataclasses.replace(
+        _executor_routine(project), executor=RoutineExecutor("other-harness", str(project))
+    )
+    nowhere = _executor_routine(tmp_path / "nowhere")
+
+    async def scenario() -> list[Run]:
+        try:
+            when = datetime(2026, 11, 4, 13, 0, tzinfo=UTC)
+            runner = RoutineRunner(assistant)
+            return [
+                await runner.run(routine, Run(1, routine.id, when, Lateness.ON_TIME))
+                for routine in (gone, nowhere)
+            ]
+        finally:
+            await assistant.close()
+
+    not_installed, no_folder = _run(scenario)
+
+    assert (not_installed.status, not_installed.error) == (
+        RunStatus.ERROR,
+        "other-harness is not installed on this computer, or is turned off.",
+    )
+    assert no_folder.status is RunStatus.ERROR
+    assert "is not there" in (no_folder.error or "")
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_each_run_in_a_new_workspace_archived_when_it_changed_nothing(
+    make: Make, claude: Callable[..., None], home: Home, tmp_path: Path
+) -> None:
+    claude({"result": "Nothing to change."})
+    assistant, _ = make(None)
+    project = tmp_path / "work" / "project"
+    _git_project(project)
+    workspaces = _Workspaces(home)
+    assistant.use_workspaces(workspaces)
+
+    run = _routine_run(assistant, _executor_routine(project, workspace=True, draft=True))
+
+    assert run.status is RunStatus.OK
+    [made] = workspaces.made.listed(project)
+    assert made.state is WorkspaceState.ARCHIVED
+    assert run.output.endswith(f"Its workspace {made.branch} changed nothing, and was archived.")
+    assert len(_started(tmp_path / "claude-log.jsonl", Path(made.folder))) == 1

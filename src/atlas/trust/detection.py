@@ -171,6 +171,12 @@ _HARDLINE_TABLE = (
     ("init 0/6 (shutdown/reboot)", _AT_COMMAND + r"init\s+[06]\b"),
     ("systemctl poweroff/reboot", _AT_COMMAND + r"systemctl\s+(?:poweroff|reboot|halt|kexec)\b"),
     ("telinit 0/6 (shutdown/reboot)", _AT_COMMAND + r"telinit\s+[06]\b"),
+    # A cloud computer's credentials (step 20): its metadata address, by name or number.
+    (
+        "cloud metadata endpoint",
+        r"(?<![\w.])(?:169\.254\.169\.25[34]|169\.254\.170\.2|100\.100\.100\.200|"
+        r"metadata\.google\.internal|metadata\.goog)(?![\w-])",
+    ),
 )
 _HARDLINE_ON_BLANKED_QUOTES = frozenset({"redirect to raw block device", "fork bomb"})
 
@@ -1012,18 +1018,32 @@ def _lex(
 
 
 def _paren_close(text: str, opener: int) -> int | None:
-    """The offset just past the `)` that closes the `$(` at *opener*, or None."""
-    depth = 1
-    for kind, at, _, quote in _lex(text, opener + 2):
-        if kind != _PLAIN or quote:
-            continue
-        if text.startswith("$(", at):
-            depth += 1
-        elif text[at] == ")":
-            depth -= 1
-            if depth == 0:
-                return at + 1
-    return None
+    """The offset just past the `)` that closes the `$(` at *opener*, or None.
+
+    One walk answers for every `$(` it passes outside quotes too: a walk from there would read
+    the same steps. Asked again for each command of a text, a `$(` that never closes was read to
+    the end each time, and a few hundred of them held the server for seconds.
+    """
+    closes = _paren_closes(text)
+    if opener not in closes:
+        openers = [opener]
+        for kind, at, _, quote in _lex(text, opener + 2):
+            if kind != _PLAIN or quote:
+                continue
+            if text.startswith("$(", at):
+                openers.append(at)
+            elif text[at] == ")":
+                closes[openers.pop()] = at + 1
+                if not openers:
+                    break
+        closes.update(dict.fromkeys(openers))
+    return closes[opener]
+
+
+@functools.lru_cache(maxsize=64)
+def _paren_closes(text: str) -> dict[int, int | None]:
+    """The closes `_paren_close` has found in *text*, by opener."""
+    return {}
 
 
 def _backtick_close(text: str, opener: int) -> int | None:
@@ -1088,8 +1108,19 @@ def _splice(text: str, edits: Iterable[tuple[int, int, str]]) -> str:
     return "".join(pieces)
 
 
-def _gather_starts(text: str, begin: int, end: int, found: list[int]) -> None:
-    """Add to *found* every offset in ``text[begin:end]`` where the shell starts a command."""
+def _gather_starts(
+    text: str, begin: int, end: int, found: list[int], read: set[tuple[int, int]] | None = None
+) -> None:
+    """Add to *found* every offset in ``text[begin:end]`` where the shell starts a command.
+
+    *read* holds the stretches already gathered: a `$(` inside a backtick can close past the
+    backtick's end, so stretches overlap, and read again each time they made a program's bytes
+    take minutes. A stretch read once has added its starts already.
+    """
+    read = set() if read is None else read
+    if (begin, end) in read:
+        return
+    read.add((begin, end))
     paired = -1  # the second character of a `&&` or `||` just seen
     for kind, at, after, quote in _lex(
         text,
@@ -1104,7 +1135,7 @@ def _gather_starts(text: str, begin: int, end: int, found: list[int]) -> None:
             # A substitution is a command of its own; an unclosed one runs to the end.
             body = at + (1 if text[at] == "`" else 2)
             found.append(body)
-            _gather_starts(text, body, end if after < 0 else after - 1, found)
+            _gather_starts(text, body, end if after < 0 else after - 1, found, read)
             continue
         if kind != _PLAIN or quote is not None or at == paired:
             continue
@@ -1148,7 +1179,12 @@ def _program_words_from(text: str, at: int) -> Iterator[tuple[int, int, str]]:
     reading_options = True
     skip_next = False
     while at < len(text):
-        redirect = _REDIRECTION.match(text, _skip_blanks(text, at))
+        blanks_end = _skip_blanks(text, at)
+        if "\n" in text[at:blanks_end]:
+            # An unquoted newline ends the command, and the next line is a start of its own.
+            # Read on past it, a script of `x=...` lines was read to its end from every line.
+            return
+        redirect = _REDIRECTION.match(text, blanks_end)
         if redirect:
             at = _read_word(text, redirect.end())[1]
             continue
@@ -1205,6 +1241,16 @@ def _with_start_marks(text: str, mark: str = "\n") -> str:
     if not cuts:
         return text
     return _splice(text, [(at, at, mark) for at in cuts])
+
+
+def _with_program_marks(text: str) -> str:
+    """Put a blank and a newline before every program word that is not at a command start: one
+    after assignments or a wrapper. The blank keeps a trailing backslash from joining the line."""
+    starts = set(_command_starts(text))
+    cuts = sorted({start for start, _, _ in _program_words(text)} - starts)
+    if not cuts:
+        return text
+    return _splice(text, [(at, at, " \n") for at in cuts])
 
 
 def _unwrap_quoted_newlines(text: str) -> str:
@@ -1790,6 +1836,12 @@ def _variants(command: str) -> Iterator[str]:
     faithful = _plain_spelling(_with_start_marks(_unwrap_quoted_newlines(command), " \n"))
     if unseen(faithful):
         yield faithful
+    # A program behind assignments or a wrapper runs all the same (`X=1 reboot`, `timeout 5 rm
+    # -rf /`), yet the rules anchor on a command start: each program word is marked as one.
+    # Marked as written, like the starts above, so a quoted assignment stays one word.
+    programs = _plain_spelling(_with_program_marks(_unwrap_quoted_newlines(command)))
+    if unseen(programs):
+        yield programs
     yield from _with_program_words_spelled_out(plain, unseen)
 
 

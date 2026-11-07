@@ -41,7 +41,7 @@ from atlas.mcp import (
     read_sign_in,
     sign_in,
 )
-from atlas.mcp.oauth import begin_sign_in
+from atlas.mcp.oauth import CALLBACK_PATH, CLIENT_DOCUMENT, begin_sign_in
 from atlas.secrets import MCP_SIGN_IN_FILE, Vault
 
 SERVER = Path(__file__).parent.parent / "mcp_server.py"
@@ -69,9 +69,13 @@ class Store:
 class FakeErp:
     """An MCP server behind its own OAuth 2.1 authorization server."""
 
-    def __init__(self, *, expires_in: int = 3600, s256: bool = True) -> None:
+    def __init__(
+        self, *, expires_in: int = 3600, s256: bool = True, documents: bool = False
+    ) -> None:
         self.expires_in = expires_in
         self.s256 = s256
+        #: It takes a client metadata document's address as a client id (step 24).
+        self.documents = documents
         self.refuse_renewal = False
         self.base = ""
         self.clients: dict[str, list[str]] = {}
@@ -131,6 +135,7 @@ class FakeErp:
                 "registration_endpoint": f"{self.base}/oauth/register",
                 "code_challenge_methods_supported": ["S256"] if self.s256 else ["plain"],
                 "token_endpoint_auth_methods_supported": ["none"],
+                **({"client_id_metadata_document_supported": True} if self.documents else {}),
             }
         )
 
@@ -144,7 +149,12 @@ class FakeErp:
     async def _authorize(self, request: Request) -> Response:
         query = dict(request.query_params)
         self.authorizations.append(query)
-        assert query["redirect_uri"] in self.clients[query["client_id"]]
+        if query["client_id"].startswith("https://"):
+            # A document's client comes back to a loopback address on any port (RFC 8252).
+            redirect = urlsplit(query["redirect_uri"])
+            assert (redirect.hostname, redirect.path) == ("127.0.0.1", "/callback")
+        else:
+            assert query["redirect_uri"] in self.clients[query["client_id"]]
         assert query["code_challenge_method"] == "S256"
         code = secrets.token_hex(8)
         self.codes[code] = query
@@ -261,6 +271,28 @@ def test_sign_in_registers_atlas_and_keeps_tokens_got_with_pkce() -> None:
     assert kept.refresh_token is not None
     assert kept.token_endpoint == f"{base}/oauth/token"
     assert read_sign_in(store, "erp", f"{base}/other") is None  # made for another address
+
+
+def test_a_server_that_takes_atlas_s_document_signs_in_with_no_registration() -> None:
+    erp = FakeErp(documents=True)
+    store = Store()
+    with serving(erp) as base:
+        signed = asyncio.run(sign_in("erp", f"{base}/mcp", store, browse))
+
+    assert erp.registrations == []
+    assert erp.authorizations[0]["client_id"] == CLIENT_DOCUMENT
+    assert signed.client_id == CLIENT_DOCUMENT
+    assert signed.access_token in erp.access
+
+
+def test_the_document_the_site_publishes_is_the_one_atlas_names() -> None:
+    published = Path(__file__).parents[2] / "site" / "public" / "oauth" / "client.json"
+    document = json.loads(published.read_text(encoding="utf-8"))
+
+    assert document["client_id"] == CLIENT_DOCUMENT
+    assert f"http://127.0.0.1{CALLBACK_PATH}" in document["redirect_uris"]
+    assert document["token_endpoint_auth_method"] == "none"
+    assert document["grant_types"] == ["authorization_code", "refresh_token"]
 
 
 def test_the_address_the_browser_landed_on_may_be_pasted() -> None:

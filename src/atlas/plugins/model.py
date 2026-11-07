@@ -96,6 +96,14 @@ DESKTOP_POWERS = ("paste", "shortcut")
 #: The SDK version of themes (`atlas.themes`, version 24): the colors a plugin gives the app, one
 #: `themes/<name>.json` each. A theme is data: no Python, no screen, nothing runs.
 THEMES_API = 24
+#: The version that brings the harnesses' other accounts in a plugin (`atlas.accounts`).
+ACCOUNTS_API = 29
+#: The version of probes (`atlas.probes`, step 23): a routine's source of events.
+PROBES_API = 30
+#: The version that lets a plugin's Python put a folder of its data on the model's `PATH`.
+PROGRAMS_API = 31
+#: How a routine names a plugin's probe: `plugin:<plugin>:<name>`, never a command's start.
+PLUGIN_PROBE = "plugin:"
 THEMES_FOLDER = "themes"
 #: The SDK version of a setting's choices (version 25): the app offers them in a list rather than a
 #: box to type in. Fixed in the manifest, or asked when shown: `models`, the models Atlas's picker
@@ -277,6 +285,11 @@ class Manifest:
     themes: tuple[str, ...] = ()
     #: The other plugins it needs on (Claude Code's `dependencies`, step 16n).
     dependencies: tuple[Dependency, ...] = ()
+    #: It runs the harnesses on the user's other accounts and says where a session goes at a
+    #: plan's limit (`atlas.accounts`, version 29).
+    accounts: bool = False
+    #: The probes its Python brings for routines (`atlas.probes`, version 30).
+    probes: tuple[str, ...] = ()
 
     def declaration(self) -> tuple[str, ...]:
         """What the user consents to, one line each."""
@@ -381,6 +394,17 @@ class Manifest:
                 "Its screen pastes text into the program you are in: it puts the text on the "
                 "clipboard, presses Ctrl+V for you, and puts back what the clipboard held."
             )
+        if self.accounts:
+            lines.append(
+                "Runs your coding agents on your other accounts, each in the agent's own folder "
+                "for it, and moves a session to another account or agent when its plan runs out."
+            )
+        lines += [
+            f"Adds the probe {probe}: a routine you make with it as its probe (plugin:{self.name}:"
+            f"{probe}) has its Python look, with no model, each time it comes due, and wakes when "
+            "it finds something new."
+            for probe in self.probes
+        ]
         if self.themes:
             lines.append(
                 f"Adds the themes {', '.join(self.themes)}: colors for the app, and nothing "
@@ -449,6 +473,10 @@ class Manifest:
             declared["desktop"] = sorted(self.desktop)
         if self.themes:
             declared["themes"] = sorted(self.themes)
+        if self.accounts:
+            declared["accounts"] = True
+        if self.probes:
+            declared["probes"] = sorted(self.probes)
         text = json.dumps(declared, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -625,6 +653,16 @@ def parse_manifest(
             f"{name} declares the desktop powers {', '.join(unknown)}; a screen may declare "
             f"{', '.join(DESKTOP_POWERS)}."
         )
+    accounts = _flag(own, "accounts")
+    if accounts and not python:
+        raise ManifestError(f"{name} declares accounts but brings no {PYTHON}.")
+    if accounts and api < ACCOUNTS_API:
+        raise ManifestError(f"{name} declares accounts, which need atlas.api {ACCOUNTS_API}.")
+    probes = _names(own, "probes", _NAME)
+    if probes and not python:
+        raise ManifestError(f"{name} declares probes but brings no {PYTHON}.")
+    if probes and api < PROBES_API:
+        raise ManifestError(f"{name} declares probes, which need atlas.api {PROBES_API}.")
     theme_names = _names(own, "themes", _NAME)
     if theme_names and api < THEMES_API:
         raise ManifestError(f"{name} declares themes, which need atlas.api {THEMES_API}.")
@@ -702,6 +740,8 @@ def parse_manifest(
         desktop=desktop,
         themes=theme_names,
         dependencies=_dependencies(name, data.get("dependencies")),
+        accounts=accounts,
+        probes=probes,
     )
 
 

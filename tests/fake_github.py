@@ -6,12 +6,20 @@ repositories made in the test, served as GitHub serves them:
 - `/archive/{owner}/{repo}/{ref}`: the repository at a branch or a commit, as a `.tar.gz` with one
   top folder, `{repo}-{commit}/`, as GitHub's archives have (made by `git archive`);
 - `/raw/{owner}/{repo}/{ref}/{path}`: one file at a branch or a commit; a 404 when it is not there;
+- `/registry/v0/servers`: the MCP Registry's list (step 24), of the servers in `registry`, as its
+  entries are written (`{"server": ..., "_meta": ...}`); `?search=` keeps those whose name or
+  description holds it, and `/registry/v0/servers/{name}/versions/latest` is one of them;
+- `/skills/api/search?q=`: skills.sh's search (step 24), of the skills in `skills` whose id holds
+  the words asked for, `skill` (what opening the tab asks) listing them all;
+- `/api/repos/{owner}/{repo}/commits/HEAD` and `/api/repos/{owner}/{repo}/git/trees/{sha}`:
+  GitHub's API, the newest commit of a served repository's `main` and its files;
 - `fail()` answers every request with a 503 until `recover()`, as an outage would; every path asked
   for is recorded (`asked`).
 
 **Driven from outside**, for the app's end-to-end tests: `python tests/fake_github.py` serves until
 stopped and writes `FAKE_GITHUB_READY port=<n>`; `POST /_fake/repo` with
-`{"name": "owner/repo", "folder": "<a git repository>"}` serves that repository.
+`{"name": "owner/repo", "folder": "<a git repository>"}` serves that repository, and
+`POST /_fake/registry` with a list of entries makes them the registry's.
 """
 
 import argparse
@@ -22,6 +30,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from starlette.applications import Starlette
@@ -49,6 +58,10 @@ class FakeGitHub:
 
     def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
         self.repositories: dict[str, Path] = {}
+        #: The MCP Registry's entries, as it writes them.
+        self.registry: list[dict[str, Any]] = []
+        #: skills.sh's skills, as its search writes them.
+        self.skills: list[dict[str, Any]] = []
         self.asked: list[str] = []
         self.failing = False
         self._server: uvicorn.Server | None = None
@@ -73,6 +86,18 @@ class FakeGitHub:
     @property
     def raw_url(self) -> str:
         return f"http://127.0.0.1:{self.port}/raw/{{repo}}/{{ref}}/{{path}}"
+
+    @property
+    def registry_url(self) -> str:
+        return f"http://127.0.0.1:{self.port}/registry/v0/servers"
+
+    @property
+    def skills_url(self) -> str:
+        return f"http://127.0.0.1:{self.port}/skills/api/search"
+
+    @property
+    def github_api_url(self) -> str:
+        return f"http://127.0.0.1:{self.port}/api"
 
     # -- answering --------------------------------------------------------------------------------
 
@@ -115,6 +140,56 @@ class FakeGitHub:
             return Response("404: Not Found", 404)
         return Response(data, media_type="text/plain; charset=utf-8")
 
+    async def _servers(self, request: Request) -> Response:
+        self.asked.append(f"{request.url.path}?{request.url.query}")
+        if self.failing:
+            return Response("unavailable", 503)
+        search = request.query_params.get("search", "").lower()
+        found = [
+            entry
+            for entry in self.registry
+            if search
+            in f"{entry['server']['name']} {entry['server'].get('description', '')}".lower()
+        ]
+        return JSONResponse({"servers": found, "metadata": {"count": len(found)}})
+
+    async def _registry_server(self, request: Request) -> Response:
+        self.asked.append(request.url.path)
+        name = request.path_params["name"]
+        found = next((e for e in self.registry if e["server"]["name"] == name), None)
+        return Response("Not Found", 404) if found is None else JSONResponse(found)
+
+    async def _skills_search(self, request: Request) -> Response:
+        self.asked.append(f"{request.url.path}?{request.url.query}")
+        if self.failing:
+            return Response("unavailable", 503)
+        query = request.query_params.get("q", "").lower()
+        found = [s for s in self.skills if query == "skill" or query in s["id"].lower()]
+        return JSONResponse({"query": query, "skills": found, "count": len(found)})
+
+    async def _head(self, request: Request) -> Response:
+        self.asked.append(request.url.path)
+        if self.failing:
+            return Response("unavailable", 503)
+        found = self._commit(
+            f"{request.path_params['owner']}/{request.path_params['repo']}", "main"
+        )
+        return Response("Not Found", 404) if found is None else JSONResponse({"sha": found[1]})
+
+    async def _tree(self, request: Request) -> Response:
+        self.asked.append(request.url.path)
+        name = f"{request.path_params['owner']}/{request.path_params['repo']}"
+        found = self._commit(name, request.path_params["sha"])
+        if found is None:
+            return Response("Not Found", 404)
+        folder, commit = found
+        paths = git(folder, "ls-tree", "-r", "--name-only", commit).decode().splitlines()
+        return JSONResponse({"sha": commit, "tree": [{"path": path} for path in paths]})
+
+    async def _set_registry(self, request: Request) -> Response:
+        self.registry = list(await request.json())
+        return JSONResponse({"ok": True})
+
     async def _add(self, request: Request) -> Response:
         body = await request.json()
         self.serve(str(body["name"]), Path(str(body["folder"])))
@@ -127,7 +202,13 @@ class FakeGitHub:
             routes=[
                 Route("/archive/{owner}/{repo}/{ref}", self._archive),
                 Route("/raw/{owner}/{repo}/{ref}/{path:path}", self._raw),
+                Route("/registry/v0/servers", self._servers),
+                Route("/registry/v0/servers/{name:path}/versions/latest", self._registry_server),
+                Route("/skills/api/search", self._skills_search),
+                Route("/api/repos/{owner}/{repo}/commits/HEAD", self._head),
+                Route("/api/repos/{owner}/{repo}/git/trees/{sha}", self._tree),
                 Route("/_fake/repo", self._add, methods=["POST"]),
+                Route("/_fake/registry", self._set_registry, methods=["POST"]),
             ]
         )
         config = uvicorn.Config(

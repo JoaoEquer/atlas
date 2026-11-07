@@ -2,7 +2,14 @@
 conversation, the instructions, the tools, the approval gate), its turns, the background review
 that follows them, the curator, and the workbench of executor instances."""
 
-from atlas.assistant.executors import ExecutorDesk, ExecutorRun, account_name, split_account
+from atlas.assistant.executors import (
+    ExecutorDesk,
+    ExecutorRun,
+    account_name,
+    other_accounts,
+    split_account,
+)
+from atlas.assistant.git import GitState
 from atlas.assistant.handoff import HANDOFF_MARK, Handoff, entries_of, handoff_packet
 from atlas.assistant.model import (
     ATLAS_COMMANDS,
@@ -44,7 +51,7 @@ from atlas.assistant.service import (
     OpenConversation,
     stop,
 )
-from atlas.assistant.subagents import Subagents
+from atlas.assistant.subagents import Subagents, TaskWorkspaces
 from atlas.assistant.workbench import Workbench
 
 __all__ = [
@@ -63,6 +70,7 @@ __all__ = [
     "ExecutorRun",
     "ExecutorUsage",
     "FileSent",
+    "GitState",
     "Handoff",
     "InstanceActivity",
     "InstanceChanged",
@@ -81,6 +89,7 @@ __all__ = [
     "SlashCommandView",
     "SubagentChanged",
     "Subagents",
+    "TaskWorkspaces",
     "Titled",
     "TurnStarted",
     "TurnStopped",
@@ -91,6 +100,7 @@ __all__ = [
     "entries_of",
     "handoff_packet",
     "identity",
+    "other_accounts",
     "review_actions",
     "routine_notice",
     "split_account",

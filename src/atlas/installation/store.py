@@ -31,7 +31,8 @@ _logger = logging.getLogger("atlas.installation")
 
 
 class Toolchain:
-    """The installation's own programs (uv, Node, `gh`, Git on Windows), which the installer pins
+    """The installation's own programs (uv, Node, Git on Windows; `gh` in an install from before
+    05/11/2026), which the installer pins
     and names in `tools/toolchain.json` beside the checkout. They never go on the user's PATH
     (with its environment there, every terminal's `python` would be Atlas's);
     Atlas's own processes get them first on theirs. A development checkout has no toolchain, and

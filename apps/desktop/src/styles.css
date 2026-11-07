@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'streamdown/styles.css';
 @source "../node_modules/streamdown/dist/*.js";
+/* The screens of the plugins Atlas ships are styled with the app's own classes: read them too. */
+@source "../../../plugins/*/desktop/plugin.js";
 
 /* Dark by the root's class, which the user's switch sets (store/theme.ts), not by the system's
    alone. */
@@ -43,6 +45,8 @@
   --ring: oklch(55.6% 0 0);
   /* Behind a dialog. */
   --scrim: oklch(0% 0 0 / 0.4);
+  /* Atlas's own orange, the website's: the light that sweeps the wordmark, never a state. */
+  --brand: oklch(67.5% 0.215 38);
 
   /* The states, one meaning each: at work (blue, pulsing), waiting for the user (amber), done
      (green), failed (red). The `-text` ones are the same color dark enough, or light enough, to be
@@ -80,6 +84,7 @@
   --primary-foreground: oklch(20.5% 0 0);
   --ring: oklch(70.8% 0 0);
   --scrim: oklch(0% 0 0 / 0.4);
+  --brand: oklch(70.5% 0.2 40);
   --working: oklch(70.7% 0.165 254.624);
   --waiting: oklch(76.9% 0.188 70.08);
   --waiting-text: oklch(82.8% 0.189 84.429);
@@ -111,6 +116,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-ring: var(--ring);
   --color-scrim: var(--scrim);
+  --color-brand: var(--brand);
   --color-working: var(--working);
   --color-waiting: var(--waiting);
   --color-waiting-text: var(--waiting-text);
@@ -263,6 +269,22 @@ details[open]::details-content {
     width: min(var(--panel-width), calc(100vw - 3rem));
     box-shadow: -12px 0 24px rgb(0 0 0 / 0.16);
   }
+}
+
+/* The window's top row where it has no title bar (Windows, electron/main.ts): the sidebar's head,
+   the tab strip and the side panel's head move the window, what is clicked in them does not; and
+   the row on the right edge keeps clear of the window's buttons, which the system draws over it
+   (`titlebar-area-*` is zero where it does not). */
+.title-bar {
+  app-region: drag;
+}
+
+.title-bar :is(button, a, input, [role='tab'], [draggable='true']) {
+  app-region: no-drag;
+}
+
+.title-bar-end {
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
 }
 
 /* While an edge is dragged, a frame or the terminal under the pointer does not take it away. */

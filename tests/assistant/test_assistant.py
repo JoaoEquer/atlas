@@ -40,6 +40,7 @@ from atlas.models import (
 )
 from atlas.secrets import Vault
 from atlas.skills import CuratorClaim, Origin, SkillLibrary, SkillOperation, SkillUsage
+from atlas.tools import Connection
 from fake_model import FakeCall, FakeModelServer, FakeReply
 from model_support import Connect
 
@@ -647,3 +648,59 @@ def test_a_background_command_that_ends_starts_a_turn_with_its_notice(
     stored = assistant.conversations.messages(conversation_id)
     assert [m.kind for m in stored if m.role.value == "user"] == [Kind.MESSAGE, Kind.NOTICE]
     assert assistant.conversations.info(conversation_id).title == "Run it in the background"
+
+
+# -- a connection offered in the conversation (05/11/2026) -----------------------------------------
+
+
+def test_a_connection_not_ready_is_offered_in_the_users_conversation_and_drawn_as_a_card(
+    make: Make, fake: FakeModelServer
+) -> None:
+    fake.reply(
+        FakeReply(calls=[FakeCall("offer_connection", '{"connection": "google"}')]),
+        FakeReply(text="Connect it on the card, and I will read your inbox."),
+    )
+    assistant, _ = make()
+    ready = {"google": False, "github": True}
+    assistant.use_connections(
+        lambda: [
+            Connection("google", "Gmail and Calendar", "their email", ready["google"]),
+            Connection("github", "GitHub", "their repositories", ready["github"]),
+        ]
+    )
+
+    async def scenario() -> None:
+        stored = assistant.conversations.create()
+        conversation = assistant.conversation(stored.id)
+        conversation.send("What came in my email today?")
+        await conversation.wait()
+        await assistant.close()
+
+    _run(scenario)
+
+    first = fake.bodies(CHAT)[0]
+    [offer] = [t for t in first["tools"] if t["function"]["name"] == "offer_connection"]
+    assert offer["function"]["parameters"]["properties"]["connection"]["enum"] == ["google"]
+    assert "just starting" in offer["function"]["description"]
+    said = fake.bodies(CHAT)[1]["messages"][-1]["content"]
+    assert said.startswith("[Atlas: The user sees a card to connect Gmail and Calendar here")
+
+
+def test_no_connection_is_offered_when_every_one_is_ready(
+    make: Make, fake: FakeModelServer
+) -> None:
+    fake.reply(FakeReply(text="Hi!"))
+    assistant, _ = make()
+    assistant.use_connections(lambda: [Connection("github", "GitHub", "repositories", True)])
+
+    async def scenario() -> None:
+        stored = assistant.conversations.create()
+        conversation = assistant.conversation(stored.id)
+        conversation.send("Hello")
+        await conversation.wait()
+        await assistant.close()
+
+    _run(scenario)
+
+    tools = {tool["function"]["name"] for tool in fake.bodies(CHAT)[0]["tools"]}
+    assert "offer_connection" not in tools

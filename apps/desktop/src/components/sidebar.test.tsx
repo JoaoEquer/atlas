@@ -12,6 +12,7 @@ afterEach(() => {
   app.$conversations.set([])
   app.$listMore.set({ cursor: '', error: null, reading: false })
   app.$read.setKey('conversations', false)
+  app.$pairings.set([])
 })
 
 const rows = (count: number): ConversationRow[] =>
@@ -67,5 +68,26 @@ describe('the list of conversations, a page at a time (step 9e)', () => {
     more.mockClear()
     fireEvent.click(screen.getByTestId('read-again'))
     expect(more).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('Extensions, an entry of its own below the marketplace', () => {
+  it('opens Extensions, and on its Plugins tab with someone waiting with a code, said on the entry', () => {
+    const show = vi.spyOn(app, 'showExtensions').mockReturnValue()
+
+    const { rerender } = render(<Sidebar />)
+    const entry = () => screen.getByTestId('extensions-entry')
+    expect(entry().textContent).toBe('Extensions')
+    fireEvent.click(entry())
+    expect(show).toHaveBeenLastCalledWith(undefined)
+
+    app.$pairings.set([
+      { approved: false, asked_at: '', channel: 'telegram', code: 'ABC', name: 'Someone', user: '1' },
+      { approved: true, asked_at: '', channel: 'telegram', code: '', name: 'Another', user: '2' }
+    ])
+    rerender(<Sidebar />)
+    expect(screen.getByTestId('plugins-waiting').textContent).toBe('1 waits')
+    fireEvent.click(entry())
+    expect(show).toHaveBeenLastCalledWith('plugin')
   })
 })

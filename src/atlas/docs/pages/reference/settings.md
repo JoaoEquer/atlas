@@ -50,6 +50,13 @@ An unknown key in `config.toml` stops Atlas with an error, so a typo never passe
 | `ask_skip` | list of text | `[]` | `ATLAS_TRUST_ASK_SKIP` | Globs of commands Atlas's own outward rules leave alone (`gh issue comment*`): the user's way to take an action off the default list. The user's `ask` rules still apply. *On the settings screen.* |
 | `approval_timeout` | whole number | `300` | `ATLAS_TRUST_APPROVAL_TIMEOUT` | Seconds an approval waits for the user before it counts as refused (60 was too tight for a phone notification). *On the settings screen.* |
 
+## [memory]
+
+| Key | Value | Default | Variable | What it does |
+|---|---|---|---|---|
+| `user_limit` | whole number | `1375` | `ATLAS_MEMORY_USER_LIMIT` | The characters `memory/USER.md` may hold, from 500 to 20,000: who the user is. Every model call carries it, and lowered under what is written it cuts nothing. *On the settings screen.* |
+| `memory_limit` | whole number | `2200` | `ATLAS_MEMORY_MEMORY_LIMIT` | The characters `memory/MEMORY.md` may hold, from 500 to 20,000: the agent's notes. Every model call carries it, and lowered under what is written it cuts nothing. *On the settings screen.* |
+
 ## [workspace]
 
 | Key | Value | Default | Variable | What it does |
@@ -76,3 +83,28 @@ An unknown key in `config.toml` stops Atlas with an error, so a typo never passe
 | `branch` | text | `"main"` | `ATLAS_MARKETPLACE_BRANCH` | The branch Atlas reads it from. |
 | `archive_url` | text | `"https://codeload.github.com/{repo}/tar.gz/{ref}"` | `ATLAS_MARKETPLACE_ARCHIVE_URL` | Where a repository's archive is fetched, with `{repo}` and `{ref}`: a mirror's address, or a test's. |
 | `raw_url` | text | `"https://raw.githubusercontent.com/{repo}/{ref}/{path}"` | `ATLAS_MARKETPLACE_RAW_URL` | Where one file of a repository is read, with `{repo}`, `{ref}` and `{path}`. |
+| `outside` | `true` or `false` | `true` | `ATLAS_MARKETPLACE_OUTSIDE` | List what the outside catalogs offer beside the marketplace (step 24): the MCP Registry, Claude Code's plugin directory and skills.sh. |
+| `registry_url` | text | `"https://registry.modelcontextprotocol.io/v0/servers"` | `ATLAS_MARKETPLACE_REGISTRY_URL` | Where the MCP Registry's list of servers is read. |
+| `skills_url` | text | `"https://skills.sh/api/search"` | `ATLAS_MARKETPLACE_SKILLS_URL` | Where skills.sh is searched. |
+| `github_api_url` | text | `"https://api.github.com"` | `ATLAS_MARKETPLACE_GITHUB_API_URL` | Where GitHub's API is reached, to pin an outside item to its repository's commit. |
+| `claude_plugins` | text | `"anthropics/claude-plugins-official"` | `ATLAS_MARKETPLACE_CLAUDE_PLUGINS` | Claude Code's plugin directory on GitHub, `owner/name`, whose catalog is read at its branch. |
+
+## [relay]
+
+| Key | Value | Default | Variable | What it does |
+|---|---|---|---|---|
+| `url` | text | unset | `ATLAS_RELAY_URL` | The relay the home waits at, so the app reaches it from anywhere with no open port (step 20): a `wss://` address. Unset, none: the tailnet and SSH reach it. |
+
+## [backup]
+
+| Key | Value | Default | Variable | What it does |
+|---|---|---|---|---|
+| `folder` | path | unset | `ATLAS_BACKUP_FOLDER` | Where the server writes the home's backup on its own (step 20): a home in a machine that may be lost (a cloud computer, a VPS) keeps its last few there. Unset, none is written but by hand (`atlas backup`, the app). |
+| `every_hours` | whole number | `24` | `ATLAS_BACKUP_EVERY_HOURS` | Hours between two backups. |
+| `keep` | whole number | `3` | `ATLAS_BACKUP_KEEP` | The backups of this home kept in the folder, the newest; 0 keeps all. |
+
+## [voice]
+
+| Key | Value | Default | Variable | What it does |
+|---|---|---|---|---|
+| `transcription` | text | `"local"` | `ATLAS_VOICE_TRANSCRIPTION` | Who writes down a recording sent or dictated: `local` (this computer, with its model downloaded once), `openai`, `gemini` (each with its key), or `off`. *On the settings screen.* |

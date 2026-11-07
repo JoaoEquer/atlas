@@ -5,30 +5,34 @@ import { t } from '@/i18n'
 import type { McpServerRow, SkillRow } from '@/protocol/protocol.generated'
 import {
   $extensionsError,
+  $extensionsTab,
   $mcpServers,
   $plugins,
   $skills,
   $workbench,
   refreshExtensions,
-  refreshPlugins
+  refreshPlugins,
+  showExtensionsTab
 } from '@/store/app'
 import { matches, mcpShelves, skillShelves } from '@/store/extensions'
-import { $extensionsTab, showExtensionsTab } from '@/store/settings'
 
 import { ExecutorOffers } from './executor-offers'
 import { Badge, ExtensionCard, KindTabs, Shelf } from './extension-card'
 import { McpSignIn } from './mcp-sign-in'
+import { PageHeader } from './page-header'
 import { PluginsTab } from './plugins-view'
 
 /**
- * The settings screen's Extensions (decided with the user on 28/10/2026, in place of its Plugins
- * and its Executors): what the home has of each kind the marketplace offers, in the marketplace's
+ * Extensions (decided with the user on 28/10/2026, in place of the settings' Plugins and
+ * Executors; a screen of its own beside the marketplace since 01/11/2026, asked for by the user:
+ * what is installed is managed where what is found is): what the home has of each kind the
+ * marketplace offers, in the marketplace's
  * look, a tab per kind with its count, a search, and a card each with its action. Plugins turn on
  * with their consent, as before; skills say where they came from; MCP servers say how they stand,
  * and the one that signs in with OAuth has a Sign in button, and the command that signs in from a
  * terminal (`McpSignIn`); executors turn on with their consent.
  */
-export function ExtensionsSection() {
+export function ExtensionsView() {
   const tab = useStore($extensionsTab)
   const plugins = useStore($plugins)
   const skills = useStore($skills)
@@ -44,48 +48,55 @@ export function ExtensionsSection() {
   }
 
   return (
-    <div className="space-y-4" data-testid="extensions-view">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="min-w-0 flex-1 basis-64 text-sm text-muted-foreground">{t.extensions.intro}</p>
-        <input
-          aria-label={t.extensions.search}
-          className="w-48 rounded-md border border-border-strong bg-transparent px-2 py-1 text-sm"
-          data-testid="extensions-search"
-          onChange={event => {
-            setQuery(event.target.value)
-          }}
-          placeholder={t.extensions.search}
-          type="search"
-          value={query}
+    <div className="flex-1 overflow-y-auto" data-testid="extensions-view">
+      <div className="mx-auto max-w-5xl space-y-4 px-6 py-6">
+        <PageHeader
+          actions={
+            <>
+              <input
+                aria-label={t.extensions.search}
+                className="w-56 rounded-md border border-border-strong bg-transparent px-2 py-1 text-sm"
+                data-testid="extensions-search"
+                onChange={event => {
+                  setQuery(event.target.value)
+                }}
+                placeholder={t.extensions.search}
+                type="search"
+                value={query}
+              />
+              <button
+                className={BUTTON}
+                data-testid="extensions-refresh"
+                onClick={() => {
+                  refreshPlugins()
+                  refreshExtensions()
+                }}
+                type="button"
+              >
+                {t.extensions.refresh}
+              </button>
+            </>
+          }
+          intro={t.extensions.intro}
+          title={t.extensions.title}
         />
-        <button
-          className={BUTTON}
-          data-testid="extensions-refresh"
-          onClick={() => {
-            refreshPlugins()
-            refreshExtensions()
-          }}
-          type="button"
-        >
-          {t.extensions.refresh}
-        </button>
-      </div>
-      <KindTabs counts={counts} current={tab} onPick={showExtensionsTab} testId="extensions-tab" />
-      {error && (tab === 'skill' || tab === 'mcp') && (
-        <p className="rounded-md bg-failed/10 px-3 py-2 text-sm text-failed-text" role="alert">
-          {error}
-        </p>
-      )}
-      <div data-tab={tab} data-testid="extensions-panel" role="tabpanel">
-        {tab === 'plugin' && <PluginsTab query={query} />}
-        {tab === 'skill' && <SkillsTab query={query} skills={skills} />}
-        {tab === 'mcp' && <McpTab query={query} />}
-        {tab === 'executor' && (
-          <>
-            <ExecutorOffers grid query={query} />
-            {executors.length === 0 && <p className="text-sm text-muted-foreground">{t.extensions.noExecutors}</p>}
-          </>
+        <KindTabs counts={counts} current={tab} onPick={showExtensionsTab} testId="extensions-tab" />
+        {error && (tab === 'skill' || tab === 'mcp') && (
+          <p className="rounded-md bg-failed/10 px-3 py-2 text-sm text-failed-text" role="alert">
+            {error}
+          </p>
         )}
+        <div data-tab={tab} data-testid="extensions-panel" role="tabpanel">
+          {tab === 'plugin' && <PluginsTab query={query} />}
+          {tab === 'skill' && <SkillsTab query={query} skills={skills} />}
+          {tab === 'mcp' && <McpTab query={query} />}
+          {tab === 'executor' && (
+            <>
+              <ExecutorOffers grid query={query} />
+              {executors.length === 0 && <p className="text-sm text-muted-foreground">{t.extensions.noExecutors}</p>}
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

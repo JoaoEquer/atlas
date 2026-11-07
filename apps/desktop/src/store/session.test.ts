@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import { t } from '@/i18n'
 import type { AttachmentRow, InstanceActivityPayload, TranscriptRow } from '@/protocol/protocol.generated'
 
-import { applyActivity, caughtUp, fromTranscript, turnEnded, withNotes } from './session'
+import { applyActivity, caughtUp, fromTranscript, resumeTime, turnEnded, withNotes } from './session'
 import { EMPTY_THREAD, type Item, parseTerminal, terminalText } from './thread'
 
 function entry(kind: string, text: string, extra: Partial<TranscriptRow> = {}): TranscriptRow {
@@ -160,6 +161,20 @@ describe("an executor's session on screen (step 16f)", () => {
     expect(live.items).toEqual([{ key: 'a1', kind: 'status', text: said }])
     expect(reopened.items[0]).toEqual({ key: 's0', kind: 'status', text: said })
     expect(shape(reopened.items)).toEqual(['status', 'final: Went on.'])
+  })
+
+  it("says when a session stopped at its plan's limit goes on by itself, or that it waits", () => {
+    const at = '2026-11-03T18:05:00Z'
+    const going = applyActivity(EMPTY_THREAD, activity('resume', at), 1)
+    const waiting = applyActivity(EMPTY_THREAD, activity('resume', '', { failed: true }), 1)
+
+    expect(going.items).toEqual([{ key: 'a1', kind: 'status', text: t.executor.resumesAt(resumeTime(at)) }])
+    expect(waiting.items).toEqual([{ key: 'a1', kind: 'status', text: t.executor.noReset }])
+    // Today, the hour alone; another day, the day too.
+    const hour = new Date(at).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' })
+    expect(resumeTime(at, new Date(at))).toBe(hour)
+    expect(resumeTime(at, new Date('2026-11-01T12:00:00Z'))).not.toBe(hour)
+    expect(resumeTime(at, new Date('2026-11-01T12:00:00Z'))).toContain(hour)
   })
 
   it("puts the screen's own lines back where they were said when the session is read again", () => {

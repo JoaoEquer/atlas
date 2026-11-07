@@ -293,8 +293,15 @@ class Commands:
         timeout = _seconds(arguments.get("timeout"))
         return await self._foreground(command, cwd, timeout)
 
-    async def _spawn(self, command: str, cwd: Path, stdout: Any) -> asyncio.subprocess.Process:
-        environment = {**os.environ, **_ENVIRONMENT, **({} if _WINDOWS else _POSIX_LOCALE)}
+    async def _spawn(
+        self, command: str, cwd: Path, stdout: Any, extra: dict[str, str] | None = None
+    ) -> asyncio.subprocess.Process:
+        environment = {
+            **os.environ,
+            **_ENVIRONMENT,
+            **({} if _WINDOWS else _POSIX_LOCALE),
+            **(extra or {}),
+        }
         if first := [str(folder) for folder in self.path()]:
             environment["PATH"] = os.pathsep.join([*first, environment.get("PATH", "")])
         return await asyncio.create_subprocess_exec(
@@ -309,10 +316,13 @@ class Commands:
             creationflags=_creation_flags(),
         )
 
-    async def execute(self, command: str, timeout: int) -> tuple[str, int | None]:
-        """Run a command in the working folder, nobody watching (a routine's command): its output,
-        and its exit code, `None` when it ran past `timeout` and was stopped with its tree."""
-        return await self._output(command, self.workspace.root, timeout)
+    async def execute(
+        self, command: str, timeout: int, environment: dict[str, str] | None = None
+    ) -> tuple[str, int | None]:
+        """Run a command in the working folder, nobody watching (a routine's command or probe): its
+        output, and its exit code, `None` when it ran past `timeout` and was stopped with its tree.
+        `environment` adds variables to the command's."""
+        return await self._output(command, self.workspace.root, timeout, environment)
 
     async def _foreground(self, command: str, cwd: Path, timeout: int) -> str:
         text, code = await self._output(command, cwd, timeout)
@@ -329,8 +339,10 @@ class Commands:
             )
         return f"{text}\n[exit code {code}]"
 
-    async def _output(self, command: str, cwd: Path, timeout: int) -> tuple[str, int | None]:
-        process = await self._spawn(command, cwd, subprocess.PIPE)
+    async def _output(
+        self, command: str, cwd: Path, timeout: int, extra: dict[str, str] | None = None
+    ) -> tuple[str, int | None]:
+        process = await self._spawn(command, cwd, subprocess.PIPE, extra)
         output = _Output()
         timed_out = False
         try:

@@ -381,6 +381,43 @@ def test_an_outward_action_in_a_script_the_command_runs_asks_too(
     assert "(in a script the command runs)" in request.reason
 
 
+def test_a_script_powershell_wrote_in_utf16_is_read_and_asks(tmp_path: Path) -> None:
+    (tmp_path / "merge.ps1").write_bytes("gh pr merge 3 --squash\r\n".encode("utf-16"))
+    user = _User(ApprovalAnswer(Outcome.ANSWERED, Choice.DENY))
+    gate = ApprovalGate(approver=user, resolve=lambda raw: tmp_path / raw)
+
+    assert _run(gate, "& ./merge.ps1") is not None
+    (request,) = user.asked
+    assert "(in a script the command runs)" in request.reason
+
+
+def test_a_program_the_command_names_is_not_read_as_a_script(tmp_path: Path) -> None:
+    """An executable's bytes are full of `$(` and quotes; read as shell they kept the server busy
+    for minutes. A NUL byte says it is a program, and the command alone is checked: the words in
+    its bytes ask nothing."""
+    program = tmp_path / "tool.exe"
+    program.write_bytes(b"MZ\x90\x00" + b'"$( a ' * 20 + b"\ngh pr merge 3 --squash\n")
+    user = _User()
+    gate = ApprovalGate(approver=user, resolve=lambda raw: tmp_path / raw)
+
+    assert _run(gate, "& ./tool.exe run.py") is None
+    assert user.asked == []
+
+
+def test_a_script_nested_past_the_readers_stack_is_refused(tmp_path: Path) -> None:
+    """A command that deep is refused by the parser's limit; a script's text is not, and reading
+    it ran out of stack and ended the turn. It is refused instead, with nobody asked."""
+    (tmp_path / "deep.sh").write_text('"$( a ' * 1600 + "\ngh pr merge 3\n", encoding="utf-8")
+    user = _User()
+    gate = ApprovalGate(approver=user, resolve=lambda raw: tmp_path / raw)
+
+    refusal = _run(gate, "bash ./deep.sh")
+
+    assert refusal is not None
+    assert "nested too deeply to read" in refusal
+    assert user.asked == []
+
+
 def test_a_script_that_only_reads_does_not_ask(tmp_path: Path) -> None:
     (tmp_path / "list.cmd").write_text("gws gmail +triage\n", encoding="utf-8")
     user = _User()

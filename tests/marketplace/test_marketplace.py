@@ -285,7 +285,8 @@ def test_with_nothing_read_and_github_down_the_listing_says_why(
     assert shipped["claude-code"].kind is Kind.EXECUTOR
     assert shipped["claude-code"].title == "Claude Code"
     assert shipped["telegram"].kind is Kind.PLUGIN
-    assert shipped["github"].kind is Kind.SKILL
+    assert shipped["write-plugin"].kind is Kind.SKILL
+    assert shipped["github"].kind is Kind.PLUGIN, "a plugin of Atlas's since step 26"
     assert {row.tier for row in shipped.values()} == {Tier.OFFICIAL}
 
 
@@ -422,10 +423,10 @@ def test_a_skill_atlas_ships_deleted_by_the_user_is_put_back_by_installing_it(
 ) -> None:
     marketplace(tmp_path, github)
     market = _marketplace(home, github, plugins, clock)
-    assert _row(market, "github").state is State.AVAILABLE
-    market.install("github")
-    assert (home.skills_folder / "github" / "SKILL.md").is_file()
-    assert _row(market, "github").state is State.INSTALLED
+    assert _row(market, "write-plugin").state is State.AVAILABLE
+    market.install("write-plugin")
+    assert (home.skills_folder / "write-plugin" / "SKILL.md").is_file()
+    assert _row(market, "write-plugin").state is State.INSTALLED
 
 
 # -- MCP servers ----------------------------------------------------------------------------------
@@ -697,13 +698,14 @@ def test_the_terminal_lists_shows_installs_updates_and_removes(
         "ATLAS_MARKETPLACE_REPOSITORY": MARKETPLACE,
         "ATLAS_MARKETPLACE_ARCHIVE_URL": github.archive_url,
         "ATLAS_MARKETPLACE_RAW_URL": github.raw_url,
+        "ATLAS_MARKETPLACE_OUTSIDE": "false",
     }
     assert main(["marketplace", "list", "--kind", "skill"], dict(environ)) == 0
     said = capsys.readouterr().out
     assert "Skills" in said
     assert "pdf 1.0.0" not in said
     assert "  pdf  Pdf by someone  (available)" in said
-    assert "Gmail: send email, read it and keep the mailbox in order." in said
+    assert "Write an Atlas plugin with the user" in said
     assert main(["marketplace", "show", "pdf"], dict(environ)) == 0
     assert "needs the program nowhere-tool: missing" in capsys.readouterr().out
     assert main(["marketplace", "install", "pdf"], dict(environ)) == 0
@@ -735,3 +737,30 @@ def test_the_terminal_check_says_each_problem_and_fails(
     said = capsys.readouterr().out
     assert "items/bad.yaml: name must be lowercase" in said
     assert "2 items checked: 7 problems." in said
+
+
+def test_a_pull_request_of_someone_else_may_not_change_what_only_the_owner_does(
+    home: Home, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base, root = tmp_path / "main", tmp_path / "pull"
+    for folder in (base, root):
+        (folder / "items").mkdir(parents=True)
+        (folder / "marketplace.yaml").write_text("format: 1\nname: M\n", "utf-8")
+        _write_item(folder, {**entry("docs", "mcp"), "server": DOCS_SERVER, "secrets": DOCS_SECRET})
+    environ = {"ATLAS_HOME": str(home.root)}
+    check = ["marketplace", "check", "--root", str(root), "--base", str(base)]
+    assert main(check, dict(environ)) == 0, "a pull request that changes none of it passes"
+    capsys.readouterr()
+
+    _write_item(
+        root,
+        {**entry("docs", "mcp"), "server": DOCS_SERVER, "secrets": DOCS_SECRET, "tier": "official"},
+    )
+    (root / "removed.yaml").write_text("- name: other\n  reason: Taken down.\n", "utf-8")
+    (root / "outside.yaml").write_text("[]\n", "utf-8")
+    assert main(check, dict(environ)) == 1
+
+    said = capsys.readouterr().out
+    assert "items/docs.yaml: only the marketplace's owner marks an item official." in said
+    assert "removed.yaml: only the marketplace's owner changes it." in said
+    assert "outside.yaml: only the marketplace's owner changes it." in said

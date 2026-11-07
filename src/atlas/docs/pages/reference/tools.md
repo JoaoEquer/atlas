@@ -177,9 +177,10 @@ agent stops and asks the user to do it in the browser window.
 ### `memory` — always on
 
 Adds, replaces and removes entries in two files the agent reads at the start of every
-conversation: `user` (`memory/USER.md`, 1,375 characters: who the user is) and `memory`
-(`memory/MEMORY.md`, 2,200: the agent's notes). Several changes go in one atomic call, checked
-against the limit at the end. ARCHITECTURE, Memory.
+conversation: `user` (`memory/USER.md`, 1,375 characters by default: who the user is) and
+`memory` (`memory/MEMORY.md`, 2,200: the agent's notes); `[memory]` in the settings changes the
+limits. Several changes go in one atomic call, checked against the limit at the end.
+ARCHITECTURE, Memory.
 
 - `target` (required): `user` or `memory`.
 - `operations`: a list of `{action, content, old_text}`, the preferred shape.
@@ -249,7 +250,7 @@ Shows the outside executors' accounts before Atlas picks one, read from the harn
 model call (ARCHITECTURE, Several accounts at once): each by the target name `delegate` takes, who
 it is logged in as, its plan usage per limit window and when each resets, whether it is at its
 limit now (reached here, or by its usage) and whether it bills past its limits (`extra_usage`),
-the folders that start on it, and whether and in what order the accounts take over (`hand_over`).
+and whether and in what order the accounts take over (`hand_over`, with the accounts plugin).
 Given wherever `delegate` has an executor.
 
 - `executor`: only this executor's accounts.
@@ -378,7 +379,7 @@ does not load: copy its address from the address bar and paste it into the termi
 among your secrets, renews it on its own and connects the server within a few seconds, without a
 restart. A server whose sign-in has ended says so and names the command again.
 
-The app lists every server under **Settings**, **Extensions**, on the **MCPs** tab: connecting,
+The app lists every server under **Extensions**, on the **MCPs** tab: connecting,
 connected with its number of tools, or left out with why. One that signs in with OAuth has a
 **Sign in** button: its page opens in your browser, you authorize Atlas there, and the server
 connects. A plugin's server that waits for a sign-in shows the same button on the plugin's card,

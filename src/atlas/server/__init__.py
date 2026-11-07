@@ -23,7 +23,7 @@ from atlas.server.protocol import (
 )
 from atlas.server.replay import Replay
 from atlas.server.service import ASK_SECONDS, Gateway
-from atlas.server.tokens import KEPT_TOKEN, kept_token
+from atlas.server.tokens import KEPT_TOKEN, RELAY_KEY, RELAY_ROOM, kept_token, relay_room
 from atlas.server.watchdog import EXIT_CEILING_SECONDS, POLL_SECONDS, Parent
 
 __all__ = [
@@ -40,6 +40,8 @@ __all__ = [
     "POLL_SECONDS",
     "PROTOCOL",
     "READY_LINE",
+    "RELAY_KEY",
+    "RELAY_ROOM",
     "SERVER_REQUESTS",
     "TOKEN_PREFIX",
     "Connection",
@@ -55,4 +57,5 @@ __all__ = [
     "kept_token",
     "read",
     "refusal",
+    "relay_room",
 ]

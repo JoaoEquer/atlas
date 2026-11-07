@@ -29,6 +29,8 @@ delete. [Backups, updates and homes](/docs/guides/backups/#where-the-home-is) li
 | You use Telegram or Voice | Your messages, or your audio | Telegram, or OpenAI |
 | You use an MCP server | What the agent passes to its tools | Wherever that server sends it |
 | Atlas looks for an update, or reads the marketplace | A request for the latest version or list | GitHub |
+| Atlas looks for a coding agent's update, at most once a day | A request for its latest version | npm's registry, Claude Code's releases (`downloads.claude.ai`), or WinGet's catalog on GitHub |
+| You open the site's home | That a visit happened, whether you copied the install line or opened GitHub, and the country, never your address; a cookie keeps only which version of the home you saw | The Atlas site, on Cloudflare |
 | You run the install line | The request for the installer, which the site counts by system and country, never by your address | The Atlas site, on Cloudflare |
 
 Each provider's own terms say what it does with what it receives.

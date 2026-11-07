@@ -56,7 +56,20 @@ from the app and from every channel alike. Version 22 lets a tool send the user 
 (`ToolHost.send_file`): Atlas keeps it in the home, shows it in the app, and hands it to a channel
 that sends files (`FileChannel.send_file`); the voice plugin's spoken answers go so. Version 24
 lets a plugin bring themes (`atlas.themes`): `themes/<name>.json`, colors for the app,
-with no Python and no screen; the app offers them beside light and dark.
+with no Python and no screen; the app offers them beside light and dark. Version 28 lets an
+executor list its permission modes and switch them while it runs (`Capabilities.modes`,
+`ExecutorInstance.set_mode`), for the menu under the session's box: Claude Code's plan mode, and
+edits taken without asking. Version 29 moves the harnesses' other accounts out of Atlas into one
+plugin (`Accounts`, `PluginContext.register_accounts`, step 22): the accounts, the order they take
+over in at a plan's limit, a folder's account and a session's route are the plugin's; running each
+account as an executor of its own and carrying a session to the stop the plugin names are
+Atlas's (`WorkbenchHost`). Version 30 lets a plugin bring a source of events for routines
+(`PluginContext.register_probe`, step 23): what is new on GitHub, in a calendar, in a mailbox,
+read with no model; a routine whose probe is `plugin:<plugin>:<name>` wakes its prompt only when
+it hears something new. Version 31 lets it put a folder of its own data on the `PATH` of the
+commands the model runs (`PluginContext.add_programs`): a program it fetched when the computer
+had none (the GitHub plugin's `gh`), which it may already run itself, its Python having the
+user's permissions.
 
 **What costs credit is declared and shown:** `llm` and `notify` call the user's model on the
 plugin's own initiative, so the manifest says `"llm": true` or `"notify": true` and the consent
@@ -101,8 +114,23 @@ from typing import Any, Literal, Protocol
 #: pays on past its limits; 20, a session's tokens of context; 21, attachment readers; 22, files
 #: a tool sends the user, and a channel that sends them; 23, a screen's desktop powers (a global
 #: shortcut, pasting into the program in focus); 24, themes; 25, a setting's choices, listed by
-#: the app (fixed, Atlas's models, or the plugin's call `setting_choices`).
-API_VERSION = 25
+#: the app (fixed, Atlas's models, or the plugin's call `setting_choices`); 26, the memory's
+#: limits, read only; 27, where a harness's newest version is published and how its install
+#: updates; 28, a harness's permission modes; 29, the harnesses' other accounts, in one plugin;
+#: 30, probes, a routine's source of events; 31, a folder of its data on the model's `PATH`.
+API_VERSION = 31
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryLimits:
+    """The characters the home's two memory stores may hold (version 26), as the user set them
+    under `[memory]`: the plugin reads them and never sets them, since every model call pays for
+    them."""
+
+    #: `memory/USER.md`, who the user is.
+    user: int
+    #: `memory/MEMORY.md`, the agent's notes.
+    memory: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +264,27 @@ class Detection:
 
 
 @dataclass(frozen=True, slots=True)
+class UpdateSource:
+    """Where a harness's newest version is published, and the command that updates this install
+    (`Executor.update_source`, version 27). Atlas reads the version itself, once a day, so the
+    plugin reaches no host for it; the command runs only when the user asks, from the app."""
+
+    #: The command that updates this install, the program first (`claude update`); empty with
+    #: `npm`, the user's npm installs the package's newest version globally.
+    command: tuple[str, ...] = ()
+    #: The npm package whose dist-tag holds the newest version (`@google/gemini-cli`).
+    npm: str = ""
+    #: The dist-tag read (`latest`).
+    tag: str = "latest"
+    #: Or a WinGet package (`Anthropic.ClaudeCode`): its newest version in WinGet's catalog,
+    #: which may lag behind its makers'.
+    winget: str = ""
+    #: Or an https address whose answer is the version alone, as text (Claude Code's own
+    #: releases).
+    url: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class Capabilities:
     """What a harness does over its channel; the screen offers only what is true here."""
 
@@ -279,6 +328,13 @@ class Capabilities:
     #: It takes the files the user attaches to a prompt (`ExecutorInstance.prompt(files=)`),
     #: and reads them from `ExecutorSpec.directories` with no permission asked, version 13.
     files: bool = False
+    #: It says where its newest version is published and how its install updates
+    #: (`Executor.update_source`), version 27.
+    updates: bool = False
+    #: Its permission modes, by the harness's own names, its default first, switched while it
+    #: runs (`ExecutorInstance.set_mode`), version 28. The one named `auto` is its mode that asks
+    #: no permission, the one `set_auto` switches; empty, it has only that switch.
+    modes: tuple[str, ...] = ()
 
 
 #: A connector's state, in Claude Code's words: up with its tools; waiting for the user's own
@@ -670,6 +726,11 @@ class ExecutorInstance(Protocol):
         where `Capabilities.auto`."""
         ...
 
+    async def set_mode(self, mode: str) -> None:
+        """One of its permission modes for the rest of the session; only where
+        `Capabilities.modes` lists it (version 28)."""
+        ...
+
     async def set_model(self, model: str | None, effort: str | None) -> None:
         """The model and the effort from its next request on, as `ExecutorSpec.model` and
         `effort` name them; only where `Capabilities.models` (version 4). Raises
@@ -767,6 +828,124 @@ class Executor(Protocol):
         12). Raises `ExecutorError`."""
         ...
 
+    def update_source(self) -> UpdateSource | None:
+        """Where its newest version is published, and the command that updates the install
+        found, read with no effect on it; `None` when that install updates some other way (a
+        store, a system package that needs an administrator). Only where `Capabilities.updates`
+        (version 27)."""
+        ...
+
+
+# -- accounts (version 29) ------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class OtherAccount:
+    """An account of an executor beside the harness's own login (version 29): its executor runs
+    as `<executor>@<id>`, made on `folder` by the executor's `for_account`."""
+
+    #: Short and lasting: it names the account's executor, and what Atlas keeps of its sessions.
+    id: str
+    #: The user's name for it ("company-b").
+    nickname: str
+    #: The harness's folder for it, as `new_account_folder` gave it.
+    folder: Path
+
+
+@dataclass(frozen=True, slots=True)
+class HandOver:
+    """Whether an executor's accounts take over from one another at a plan's limit, whether a
+    session compacts in its copy before it goes on, and in what order they take over (version
+    29): the accounts' ids, the harness's own login as `""`; one left out comes after."""
+
+    enabled: bool = False
+    compact: bool = True
+    order: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class NextStop:
+    """Where a session at its plan's limit goes on (version 29): `executor` is an executor's name,
+    or its executor on an account (`claude-code@1a2b3c4d`). On the same harness the session goes
+    on in a copy, compacted first when `compact` says; on another, in a new session whose first
+    prompt is a handoff packet Atlas writes. `model` and `effort` are the ones it goes on with
+    there; `None`, the ones it ran on, fitted to what that executor offers. `route`: the session's
+    own route chose it, which the card says apart from an account's hand-over."""
+
+    executor: str
+    model: str | None = None
+    effort: str | None = None
+    compact: bool = True
+    route: bool = False
+
+
+class Accounts(Protocol):
+    """What a plugin that runs the harnesses on several accounts answers Atlas (version 29,
+    `PluginContext.register_accounts`): the accounts are its, and so is the choice of where a
+    session goes at a plan's limit; carrying the session there is Atlas's. One plugin a home
+    brings it. Atlas calls the plain methods often, from any thread: they read what the plugin
+    keeps, with no harness started."""
+
+    def accounts(self, executor: str) -> Sequence[OtherAccount]:
+        """`executor`'s accounts beside its own login, in the order the user keeps them."""
+        ...
+
+    def folder_account(self, executor: str, folder: Path) -> str:
+        """The id of the account `folder`'s new sessions of `executor` start on; empty, the
+        harness's own login."""
+        ...
+
+    def hand_over(self, executor: str) -> HandOver:
+        """Whether `executor`'s accounts take over at a plan's limit, as the user set it."""
+        ...
+
+    async def next_stop(self, name: str, conversation: str) -> NextStop | str | None:
+        """Where the session of `conversation`, which ran on `name` (an executor, or its executor
+        on an account), goes on now that its plan's limit stopped it: a `NextStop`; why none can
+        (told on its card); or `None`, when nothing hands it over. `WorkbenchHost.available` says
+        which can take it. With no stop, Atlas goes on where it was when the limit resets."""
+        ...
+
+    def keep_route(self, conversation: str, executors: Sequence[str]) -> None:
+        """Give the session of `conversation` a route of its own: the executors, on their
+        accounts (`claude-code@1a2b3c4d`), it goes on to at a plan's limit, in order, as the model
+        named them for a delegated task."""
+        ...
+
+    def carry_route(self, source: str, conversation: str) -> None:
+        """The session of `source` opened again as `conversation`: it keeps its card's route."""
+        ...
+
+
+class WorkbenchHost(Protocol):
+    """What Atlas lends the plugin that brings `Accounts` (version 29, `PluginContext.workbench`):
+    its executors, and what it knows of their accounts now."""
+
+    def executor(self, name: str) -> "Executor | None":
+        """An executor installed here, by its name, or its executor on an account; `None` when
+        it is not."""
+        ...
+
+    def executors(self) -> Sequence[str]:
+        """The executors installed here, by name, without their accounts."""
+        ...
+
+    async def available(self, name: str) -> bool:
+        """`name` may take a session over: installed, logged in, and not at its plan's limit."""
+        ...
+
+    def limited(self, name: str) -> bool:
+        """`name` is at its plan's limit now: it reached it here, or its usage says so."""
+        ...
+
+    def running(self, name: str) -> bool:
+        """A session runs on `name` here now."""
+        ...
+
+    def accounts_changed(self, executor: str) -> None:
+        """`executor`'s accounts changed: Atlas lists them again on every screen."""
+        ...
+
 
 # -- tools (version 14) ---------------------------------------------------------------------------
 
@@ -822,6 +1001,13 @@ type CallRun = Callable[[Any], Awaitable[Any]]
 #: audio file says). Atlas keeps it with the attachment, so a file is read once. Raising, or empty
 #: text, leaves the attachment's note as it was; it gets 2 minutes.
 type ReadRun = Callable[[Path, str], Awaitable[str]]
+
+#: A probe (version 30): it looks, with no model, at whatever the plugin watches, and returns what
+#: is there now, as text; empty, nothing. It is given a folder of the routine's own, where it may
+#: keep where it stopped. Atlas wakes the routine's prompt only when the text differs from the one
+#: that last woke it, and hands the prompt the text as written outside. Raising is a failure,
+#: counted as a probe command's; it gets 2 minutes.
+type ProbeRun = Callable[[Path], Awaitable[str]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -901,6 +1087,11 @@ class PluginContext(Protocol):
         """A setting the manifest declares: the user's value, or its default."""
         ...
 
+    def memory_limits(self) -> MemoryLimits | None:
+        """The memory's limits now (version 26), read again at each call, so a change on the
+        settings screen shows at once; `None` when Atlas is not serving (a terminal command)."""
+        ...
+
     def register_channel(self, name: str, make: Callable[[], Channel]) -> None:
         """A channel the manifest declares: `make` builds it each time the channel starts, so it
         reads its secrets then."""
@@ -976,4 +1167,28 @@ class PluginContext(Protocol):
         `audio`. Before a turn, Atlas hands it each such file the user sent, from the app or a
         channel, and gives the model what it returns in the file's note. One reader a kind: a
         second plugin's is left out and logged."""
+        ...
+
+    def register_probe(self, name: str, run: ProbeRun) -> None:
+        """A probe the manifest names under `probes` (version 30): a routine whose probe is
+        `plugin:<plugin>:<name>` runs `run` each time it comes due, and its prompt only when `run`
+        returned something new."""
+        ...
+
+    def add_programs(self, folder: Path) -> None:
+        """Put `folder`, inside `data_folder`, first on the `PATH` of the commands the model runs
+        while the plugin is on (version 31): the programs the plugin fetched there. It may not
+        exist yet; what lands in it later is found. A folder outside `data_folder` raises."""
+        ...
+
+    def register_accounts(self, accounts: "Accounts") -> None:
+        """The harnesses' other accounts, when the manifest says `"accounts": true` (version 29):
+        Atlas runs each as an executor of its own and asks `accounts` where a session goes at a
+        plan's limit. One plugin a home: a second one's is left out and logged."""
+        ...
+
+    @property
+    def workbench(self) -> "WorkbenchHost":
+        """The executors Atlas runs and what it knows of their accounts (version 29), when the
+        manifest says `"accounts": true`; otherwise reading it raises."""
         ...

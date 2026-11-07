@@ -53,6 +53,7 @@ from atlas.models import (
     default_effort,
 )
 from atlas.plugins import (
+    Accounts,
     Answers,
     Called,
     CommandsChanged,
@@ -65,6 +66,7 @@ from atlas.plugins import (
     ExecutorSpec,
     Finished,
     LimitReached,
+    OtherAccount,
     Permission,
     PlanUsage,
     Question,
@@ -101,6 +103,27 @@ def split_account(name: str) -> tuple[str, str]:
     return executor, account
 
 
+def other_accounts(accounts: Accounts | None, executor: str) -> list[OtherAccount]:
+    """`executor`'s accounts beside its own login, as the plugin that brings them keeps them
+    (step 22): none when no plugin does, or when its code fails, which is logged."""
+    if accounts is None:
+        return []
+    try:
+        return list(accounts.accounts(executor))
+    except Exception:  # a plugin's own code: its accounts are left out, logged
+        _logger.exception("The accounts plugin could not list an executor's accounts.")
+        return []
+
+
+def account_nickname(accounts: Accounts | None, name: str) -> str:
+    """The user's nickname for the account `name` runs on; empty for the harness's own login,
+    or an account no longer kept."""
+    executor, account = split_account(name)
+    if not account:
+        return ""
+    return next((a.nickname for a in other_accounts(accounts, executor) if a.id == account), "")
+
+
 async def default_executor_effort(executor: Executor, model: str | None) -> str | None:
     """The effort an instance Atlas starts runs on when nobody chose one: Atlas's default
     (`DEFAULT_EFFORT`, decided by the user on 17/10/2026) onto the levels of `model`, or of the
@@ -122,6 +145,18 @@ async def default_executor_effort(executor: Executor, model: str | None) -> str 
         offered[0] if offered and model is None else None,
     )
     return None if chosen is None else default_effort(None, chosen.efforts)
+
+
+#: The name a harness's permission modes give its mode that asks no permission (SDK version 28).
+AUTO_MODE = "auto"
+
+
+def _mode_of(modes: tuple[str, ...], auto: bool) -> str:
+    """The mode an instance runs in when only its automatic mode was switched: that one, else its
+    default; empty for a harness with no modes."""
+    if not modes:
+        return ""
+    return AUTO_MODE if auto and AUTO_MODE in modes else modes[0]
 
 
 class ExecutorDesk(Protocol):
@@ -173,14 +208,10 @@ class ExecutorRun:
         record: InstanceStore | None = None,
         clock: Callable[[], datetime] = utc_now,
         on_limit: "Callable[[ExecutorRun], None] | None" = None,
-        on_copied: "Callable[[ExecutorRun], None] | None" = None,
     ) -> None:
-        """`on_limit` hears a turn from its card stopped at the account's plan limit;
-        `on_copied`, a turn that ended with its session a copy of another account's, the one it
-        `replaces`."""
+        """`on_limit` hears a turn from its card stopped at the account's plan limit."""
         self.id = instance_id
         self._on_limit = on_limit
-        self._on_copied = on_copied
         self.name = name
         self.executor = executor
         self.spec = spec
@@ -201,6 +232,8 @@ class ExecutorRun:
         self.atlas_answers = False
         #: Requests waiting for an answer: the watchdog leaves a waiting executor alone.
         self.waiting = 0
+        #: Told what it asked when nobody answered (a routine's run, step 25), which stops there.
+        self.on_nobody: Callable[[str], None] | None = None
         self.last_tool: str | None = None
         self.tools = 0
         self.problem = ""
@@ -208,11 +241,6 @@ class ExecutorRun:
         # session goes on in a copy too.
         copy = spec.fork or spec.resume_from is not None
         self.session_id: str | None = None if copy else spec.resume
-        #: The other account's session its copy replaces, until it is deleted there (asked for
-        #: by the user on 22/10/2026); a fork the user asked for replaces none.
-        self.replaces: str | None = (
-            spec.resume if spec.resume_from is not None and not spec.fork else None
-        )
         self.model = ""
         #: The slash commands its channel takes, once its harness said (step 16f): their
         #: names, on its card, and described, for the box (version 10 of the SDK).
@@ -229,6 +257,10 @@ class ExecutorRun:
         self.can_switch = capabilities.accounts
         self.can_model = capabilities.models
         self.can_files = capabilities.files
+        #: Its harness's permission modes (SDK version 28), and the one it runs in: `auto` when
+        #: its automatic mode is on, else its default until another is chosen.
+        self.modes = capabilities.modes
+        self.mode = _mode_of(self.modes, spec.auto)
         #: The model and the effort chosen for it; `None`, its harness's default.
         self.chosen_model = spec.model
         self.effort = spec.effort
@@ -288,6 +320,8 @@ class ExecutorRun:
             chosen_model=self.chosen_model or "",
             effort=self.effort or "",
             account_id=self.account_id,
+            mode=self.mode,
+            modes=self.modes,
         )
 
     def changed(self) -> None:
@@ -403,18 +437,11 @@ class ExecutorRun:
             self.problem = f"{type(error).__name__}: {error}"
             raise ExecutorError(self.problem) from error
         finally:
-            self._copied()
             if self.state is InstanceState.WORKING:
                 self.state = InstanceState.IDLE
             self._end_turn()
             self.changed()
         return self.finished
-
-    def _copied(self) -> None:
-        """After a turn: its copy has an id of its own now, and may be kept by its harness."""
-        session, replaced = self.session_id, self.replaces
-        if self._on_copied is not None and replaced and session and session != replaced:
-            self._on_copied(self)
 
     async def run(self, task: str, on_event: Callable[[ExecutorEvent], None]) -> Finished | None:
         """A delegated task: start the instance, run the task as one turn, and how it ended."""
@@ -469,6 +496,17 @@ class ExecutorRun:
         if self.instance is not None and self.live:
             await self.instance.set_auto(on)
         self.auto = on
+        self.mode = _mode_of(self.modes, on)
+        self.changed()
+
+    async def set_mode(self, mode: str) -> None:
+        """One of its harness's permission modes; `auto` is its automatic mode, as `set_auto`."""
+        if mode not in self.modes:
+            raise ExecutorError(f"{self.title} has no mode {mode} Atlas switches.")
+        if self.instance is not None and self.live:
+            await self.instance.set_mode(mode)
+        self.mode = mode
+        self.auto = mode == AUTO_MODE
         self.changed()
 
     async def set_model(self, model: str | None, effort: str | None) -> None:
@@ -562,6 +600,8 @@ class ExecutorRun:
             if answers is None and self._desk is not None:
                 answers = await self._desk.ask(self.view(), questions)
                 by = Answerer.USER if answers is not None else by
+            if answers is None and self.on_nobody is not None:
+                self.on_nobody(asked)
             return answers
         finally:
             self._waiting(-1)
@@ -583,6 +623,8 @@ class ExecutorRun:
                 verdict = await self._desk.approve(self.view(), permission)
                 by = Answerer.USER
             if verdict is None:
+                if self.on_nobody is not None:
+                    self.on_nobody(asked)
                 verdict = ExecutorVerdict(
                     False, "Nobody is there to answer this request, so it is refused."
                 )

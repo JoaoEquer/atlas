@@ -9,14 +9,17 @@ from pathlib import Path
 
 import pytest
 
+from atlas.home import MemorySettings
 from atlas.memory import (
     ENTRY_DELIMITER,
+    LIMITS,
     Action,
     MemoryFiles,
     Operation,
     Target,
     apply,
     drifted,
+    limits_of,
     parse_entries,
     render_entries,
 )
@@ -236,6 +239,26 @@ def test_a_hand_edited_file_is_copied_aside_and_left_alone(files: MemoryFiles) -
     assert files.path(Target.MEMORY).read_text("utf-8") == edited
     (copy,) = files.folder.glob("MEMORY.md.bak.*")
     assert copy.read_text("utf-8") == edited
+
+
+def test_the_home_sets_the_limits_and_stores_sharing_them_see_a_change_at_once(
+    tmp_path: Path,
+) -> None:
+    assert limits_of(MemorySettings()) == LIMITS, "the settings' defaults are the stores' own"
+    limits = limits_of(MemorySettings(user_limit=600, memory_limit=800))
+    home = MemoryFiles(tmp_path / "memory", limits)
+    bot = MemoryFiles(tmp_path / "memory", limits, memory_folder=tmp_path / "bots" / "finance")
+    assert home.change(Target.MEMORY, [Operation(ADD, "x" * 700)]).entries
+
+    limits.update(limits_of(MemorySettings(user_limit=600, memory_limit=500)))
+    lowered = home.change(Target.MEMORY, [Operation(ADD, "one more")])
+    bot_over = bot.change(Target.MEMORY, [Operation(ADD, "y" * 600)])
+
+    assert lowered.entries is None, "lowered under what is written, the next add is refused"
+    assert home.entries(Target.MEMORY) == ["x" * 700], "and nothing written is cut"
+    assert bot_over.entries is None
+    assert "700/500 chars" in home.snapshot()
+    assert MemoryFiles(tmp_path / "other").limits is not LIMITS
 
 
 def test_two_writers_at_once_lose_nothing(tmp_path: Path) -> None:

@@ -1,0 +1,199 @@
+:root {
+  color-scheme: dark light;
+  --background: #101114;
+  --text: #ececf1;
+  --muted: #9a9ca8;
+  --line: #2a2c33;
+  --accent: #7c8cff;
+  --warning: #e5b350;
+  --error: #ef6b6b;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #fafafb;
+    --text: #18191d;
+    --muted: #5f616b;
+    --line: #dcdde2;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* `hidden` wins over a `display` set below. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100vh;
+  padding: 32px 36px 24px;
+}
+
+.icon {
+  width: 48px;
+  height: 48px;
+}
+
+h1 {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.path {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.bar > div {
+  position: absolute;
+  width: 30%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    left: -30%;
+  }
+
+  to {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar > div {
+    left: 0;
+    width: 100%;
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+#step {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+#warnings ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.failed #title {
+  color: var(--error);
+}
+
+details {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+details[open] {
+  flex: 1;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+pre {
+  max-height: 100%;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+pre .warning {
+  color: var(--warning);
+}
+
+pre .error {
+  color: var(--error);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: auto;
+}
+
+button {
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#text {
+  white-space: pre-line;
+}

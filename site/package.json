@@ -19,6 +19,7 @@
     "test": "vitest run",
     "news:draft": "node scripts/news-draft.mjs",
     "installs": "node scripts/installs.mjs",
+    "home": "node scripts/home.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
   },
   "dependencies": {
@@ -40,6 +41,6 @@
     "prettier-plugin-astro": "1.1.2",
     "typescript": "6.0.3",
     "typescript-eslint": "8.64.0",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   }
 }

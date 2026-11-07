@@ -25,6 +25,10 @@ marked **Official** and listed first. An item's page shows its README at the rev
 it needs on your computer, and the secrets it reads, which you store from that page and never see
 again. Then **Install**.
 
+Atlas's own plugins, the coding agents, Voice, Telegram and Accounts, are among the Official items:
+installing one takes it from your Atlas, at the same version, with no download, and it updates
+when Atlas does.
+
 - A **skill** is ready at once. A skill that needs an MCP server installs it along with it.
 - An **MCP server** connects as soon as it is installed: no restart.
 - A **plugin** or an **executor** arrives turned off. **Turn on** shows what it declares, its
@@ -43,6 +47,32 @@ From a terminal, `atlas marketplace list`, `show NAME` and `install NAME` do the
   marketplace is read, and stays listed as retired, with the reason.
 
 When GitHub cannot be reached, the marketplace shows the last list it read, and says so.
+
+## The public catalogs
+
+After the marketplace's own items, each tab lists what a public catalog offers, read straight from
+it: nothing there was reviewed for Atlas, and each card says where it comes from.
+
+- **MCP servers, from the MCP Registry**, the official catalog of MCP servers. With no search, it
+  lists the servers updated in the last month: the ones the vendor itself published first (a name
+  verified by the vendor's domain, such as `com.stripe/mcp`), then the newest. Type in the search to
+  ask the registry for more.
+- Atlas runs a server from the registry only as it runs the marketplace's own: at an address over
+  `https`, or a package at one exact version. One it cannot run that way says why, and does not
+  install.
+- What a server asks for (a token, a key) is a secret: its page asks for it, and your vault keeps
+  it. A server that signs you in with your account shows **Sign in** once installed.
+- It takes a short name in your `mcp.json` (`stripe`, `notes-mcp`); when you have a server by that
+  name already, it does not install.
+- **Plugins, from Claude Code's plugin directory**, many of them by the service's own maker. A
+  plugin arrives turned off, as every plugin does; one the marketplace found does not work in
+  Atlas says so, and does not install.
+- **Skills, from skills.sh**, with how many times each was installed, the most installed first. A
+  skill installs from its GitHub repository as it is at that moment, and shows **Update** once its
+  repository changed. Before it lands, Atlas reads its text for instructions meant to take over the
+  agent, and refuses it when it finds any.
+
+`[marketplace] outside = false` in your `config.toml` lists only the marketplace's own items.
 
 ## Updates and removal
 
@@ -74,7 +104,7 @@ you. [Writing a plugin](/docs/extending/plugins/) explains every part of one, an
 
 | Command | What it does |
 |---|---|
-| `atlas marketplace list` | The items, by kind |
+| `atlas marketplace list` | The items, by kind (`--search TEXT` asks the public catalogs too) |
 | `atlas marketplace show NAME` | One item's page |
 | `atlas marketplace install NAME` | Install it |
 | `atlas marketplace update NAME` | Take its newly reviewed version |

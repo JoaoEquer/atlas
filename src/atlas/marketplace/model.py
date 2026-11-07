@@ -38,6 +38,9 @@ FORMAT = 1
 META_FILE = "marketplace.yaml"
 ITEMS_FOLDER = "items"
 REMOVED_FILE = "removed.yaml"
+#: What the marketplace's nightly check found of the outside items that do not work in Atlas
+#: (step 24): a list of tables with a name and a reason.
+OUTSIDE_FILE = "outside.yaml"
 
 #: An item's name: what the user types and the name it takes in the home, unique in the
 #: marketplace: lowercase letters, digits and inner dashes, up to 64.
@@ -89,6 +92,16 @@ class Tier(StrEnum):
     COMMUNITY = "community"
 
 
+class Source(StrEnum):
+    """Where an item comes from (step 24): Atlas's own repository, or a public catalog Atlas reads
+    directly, with no review and no copy."""
+
+    ATLAS = "atlas"
+    MCP_REGISTRY = "mcp-registry"
+    CLAUDE_PLUGINS = "claude-plugins"
+    SKILLS_SH = "skills.sh"
+
+
 class State(StrEnum):
     """Where an item stands in this home."""
 
@@ -134,6 +147,23 @@ class Item:
     #: An MCP server's `mcp.json` entry.
     server: Mapping[str, Any] = field(default_factory=dict[str, Any])
     secrets: tuple[Secret, ...] = ()
+    #: Where it comes from (step 24); an outside item's name is `<source>:<its id>`.
+    source: Source = Source.ATLAS
+    #: The name it takes in the home, when not its own (an outside item's short name).
+    target: str = ""
+    #: When its source last published it, `YYYY-MM-DD`; empty when the source does not say.
+    updated: str = ""
+    #: The source counts its installs (skills.sh); `None` when it does not.
+    installs: int | None = None
+    #: An MCP Registry server whose name a domain verifies: the vendor's own.
+    vendor: bool = False
+    #: Why its source's entry cannot install here, said on its card.
+    problem: str | None = None
+
+    @property
+    def home_name(self) -> str:
+        """The name it takes in the home: a skill's folder, a server's `mcp.json` entry."""
+        return self.target or self.name
 
     @property
     def source_url(self) -> str:
@@ -174,6 +204,8 @@ class Index:
     retired: Mapping[str, Retired]
     #: Items that could not be read, a line each; the others are listed anyway.
     problems: tuple[str, ...] = ()
+    #: The outside items that do not work in Atlas, by name, with why (`outside.yaml`).
+    incompatible: Mapping[str, str] = field(default_factory=dict[str, str])
 
     def retired_for(self, item: Item) -> Retired | None:
         """Whether `item` is retired, by its name or its repository."""
@@ -416,6 +448,25 @@ def parse_removed(text: str) -> dict[str, Retired]:
             raise MarketplaceError(f"{REMOVED_FILE}: each entry needs a name and a reason.")
         retired[name] = Retired(name, reason, _text(fields.get("repo")), _text(fields.get("date")))
     return retired
+
+
+def parse_outside(text: str) -> dict[str, str]:
+    """The outside items that do not work in Atlas, by name, with why, from `outside.yaml`.
+    Raises `MarketplaceError`."""
+    data = load_yaml(text, OUTSIDE_FILE)
+    if data is None:
+        return {}
+    if not isinstance(data, list):
+        raise MarketplaceError(f"{OUTSIDE_FILE} is not a list.")
+    found: dict[str, str] = {}
+    for entry in cast("list[object]", data):
+        empty: Mapping[str, object] = {}
+        fields = cast("Mapping[str, object]", entry) if isinstance(entry, Mapping) else empty
+        name, reason = _text(fields.get("name")), _text(fields.get("reason"))
+        if not name or not reason:
+            raise MarketplaceError(f"{OUTSIDE_FILE}: each entry needs a name and a reason.")
+        found[name] = reason
+    return found
 
 
 def _secrets(value: object, problems: list[str]) -> tuple[Secret, ...]:

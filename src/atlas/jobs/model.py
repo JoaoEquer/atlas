@@ -11,6 +11,8 @@ subagents: their tasks, their summaries and the notice that brings them back. Pu
   the zone's naive wall time, and a repeated autumn hour takes the first instant after the last run.
 """
 
+import dataclasses
+import hashlib
 import json
 import re
 from collections.abc import Sequence
@@ -56,6 +58,13 @@ LATE_TOLERANCE_SECONDS = 300
 SILENT_MARKS = ("[SILENT]", "SILENT", "NO_REPLY")
 
 
+#: How long a probe may run, its failures in a row before the user is told, and the most of
+#: its output an event carries.
+PROBE_SECONDS = 120
+PROBE_FAILURES = 3
+MAX_EVENT_CHARS = 20_000
+
+
 class ScheduleKind(StrEnum):
     ONCE = "once"
     INTERVAL = "interval"
@@ -93,6 +102,9 @@ class RunStatus(StrEnum):
     ERROR = "error"
     #: Atlas stopped while it ran; whether it finished is unknown, never assumed.
     UNKNOWN = "unknown"
+    #: It stopped at a question or an approval nobody was there to give (step 25): what it asked
+    #: waits for the user, its session kept to go on by hand.
+    NEEDED = "needed"
 
 
 def parse_duration(text: str) -> int:
@@ -221,6 +233,27 @@ class Creator(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class RoutineExecutor:
+    """Where a prompt routine runs when an outside executor runs it (step 25): a session of the
+    executor in a folder, each run a new one."""
+
+    #: The executor's name, as the workbench lists it (`claude-code`).
+    name: str
+    #: The folder it works in, absolute.
+    folder: str
+    #: It runs in the executor's automatic mode, chosen at creation; otherwise in its default,
+    #: where what it asks stops the run.
+    auto: bool = False
+    #: Each run works in a new workspace of the folder (step 21), archived when it changed nothing:
+    #: for a routine that changes code. Without, it works in the folder itself: one that only
+    #: reads.
+    workspace: bool = False
+    #: A run that changed something opens a draft pull request of its workspace (the GitHub
+    #: plugin's); off unless the user turned it on.
+    draft: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Routine:
     """A scheduled prompt, or a scheduled command when `command` is set.
     Times are aware, in UTC."""
@@ -245,6 +278,67 @@ class Routine:
     #: The bot it runs as, whose fixed conversation reads its result (step 13b); `None`, the
     #: main agent.
     bot: str | None = None
+    #: Its probe (step 23): a command run with no model on its schedule, whose output wakes its
+    #: prompt only when it is something new; `None`, the schedule fires the prompt itself.
+    probe: str | None = None
+    #: The executor its prompt runs in, in a folder (step 25); `None`, Atlas's model runs it.
+    executor: RoutineExecutor | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Scoreboard:
+    """This week's runs of every routine, at the top of the Routines screen (step 25)."""
+
+    #: Since when: this week's Monday at midnight, the user's time.
+    since: datetime
+    #: Ended with nothing asked: answered, or silent.
+    alone: int
+    #: Stopped at a question or an approval nobody gave.
+    needed: int
+    failed: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeState:
+    """What a routine's probe heard last (step 23)."""
+
+    routine_id: str
+    #: The digest of its last output that woke the routine, so the same output twice wakes once.
+    digest: str = ""
+    #: Its failures in a row, and whether the user was told of them.
+    failures: int = 0
+    warned: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Heard:
+    """What a probe's one run means."""
+
+    state: ProbeState
+    #: The text that wakes the routine; empty, it sleeps on.
+    event: str = ""
+    #: Tell the user it failed too many times in a row: once per run of failures.
+    warn: bool = False
+
+
+def heard(state: ProbeState, ok: bool, output: str) -> Heard:
+    """A probe's run read: a failure counts and warns once at `PROBE_FAILURES` in a row; a success
+    that printed nothing, or what woke the routine last time, wakes nothing; anything new wakes it
+    with that text, cut to its last `MAX_EVENT_CHARS`."""
+    if not ok:
+        failures = state.failures + 1
+        warn = failures >= PROBE_FAILURES and not state.warned
+        return Heard(
+            dataclasses.replace(state, failures=failures, warned=state.warned or warn), warn=warn
+        )
+    calm = dataclasses.replace(state, failures=0, warned=False)
+    text = output.strip()
+    if not text or text == "(no output)":
+        return Heard(calm)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if digest == state.digest:
+        return Heard(calm)
+    return Heard(dataclasses.replace(calm, digest=digest), event=text[-MAX_EVENT_CHARS:])
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +356,8 @@ class Run:
     #: The reply, or the command's output.
     output: str = ""
     error: str | None = None
+    #: What its probe heard, which woke it (step 23); empty for a run its schedule fired.
+    event: str = ""
 
 
 # -- subagents ------------------------------------------------------------------------------------
@@ -379,6 +475,9 @@ class Task:
     #: The predefined subagent it runs as (a plugin's agent, `video:editor`, step 16k); empty,
     #: the plain subagent.
     agent: str = ""
+    #: For an outside executor: it works in a new workspace of `folder`'s project (step 21), a
+    #: worktree on a branch of its own, and not in `folder` itself.
+    workspace: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -448,6 +547,10 @@ def parse_agent(text: str, plugin: str, stem: str) -> AgentDefinition:
 _AGENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
+#: A task's `workspace` that asks for a new one (step 21).
+NEW_WORKSPACE = "new"
+
+
 def read_tasks(tasks: object) -> tuple[Task, ...]:
     """The tasks of a spawn, checked. Raises `DelegationError` with a message for the model."""
     if isinstance(tasks, str):
@@ -479,12 +582,19 @@ def read_tasks(tasks: object) -> tuple[Task, ...]:
         if not isinstance(goal, str) or not goal.strip():
             raise DelegationError(f"Task {i} is missing a 'goal'.")
         folder, agent = fields.get("folder"), fields.get("agent")
+        workspace = fields.get("workspace")
+        if workspace not in (None, "", NEW_WORKSPACE):
+            raise DelegationError(
+                f"Task {i}: 'workspace' is '{NEW_WORKSPACE}' (a new workspace) or left out (the "
+                "folder itself)."
+            )
         read.append(
             Task(
                 goal.strip(),
                 context.strip() if isinstance(context, str) else "",
                 folder.strip() if isinstance(folder, str) else "",
                 agent.strip() if isinstance(agent, str) else "",
+                workspace == NEW_WORKSPACE,
             )
         )
     for i, task in enumerate(read if len(read) >= 2 else ()):

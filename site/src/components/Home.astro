@@ -1,0 +1,1629 @@
+---
+// The home, in English at / and in Portuguese at /pt-br/: the same page, its words from
+// src/lib/home.ts and home.pt-br.ts and its frame's from src/lib/i18n.ts.
+import { getCollection } from 'astro:content'
+
+import { REPOSITORY } from '../../site.config.mjs'
+import Site from '../layouts/Site.astro'
+import { changes, formatDay } from '../lib/changelog'
+import { HOMES } from '../lib/homes'
+import { HTML_LANG, type Lang, localized, WORDS } from '../lib/i18n'
+import { installWaysOf } from '../lib/install'
+import { application, faqPage } from '../lib/seo'
+import InstallTabs from './InstallTabs.astro'
+import SphereDrawing from './SphereDrawing.astro'
+
+interface Props {
+  lang: Lang
+}
+
+const { lang } = Astro.props
+const { catalogue, chapters, compare, faq, gate, hero, install, memory, proof, route, seo, tagline } = HOMES[lang]
+const ui = WORDS[lang].homePage
+const nav = WORDS[lang].nav
+const footer = WORDS[lang].footer
+const at = (path: string) => localized(path, lang)
+const chapter = (id: string) => {
+  const found = chapters.find(c => c.id === id)
+  if (!found) {
+    throw new Error(`The home has no chapter "${id}".`)
+  }
+  return found
+}
+const accounts = chapter('accounts')
+const routeChapter = chapter('route')
+const machines = chapter('machines')
+const memoryChapter = chapter('memory')
+const close = chapter('close')
+const agents = ['Claude Code', 'Codex', 'Gemini CLI', 'DeepSeek']
+const latest = changes(4)
+const news = (await getCollection('news')).sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf()).slice(0, 3)
+const site = Astro.site ?? new URL(Astro.url.origin)
+const schema = [application(site, lang), faqPage(site, lang)]
+---
+
+<Site
+  title={seo.title}
+  description={seo.description}
+  markdown={lang === 'en' ? '/index.md' : '/pt-br/index.md'}
+  current="home"
+  schema={schema}
+  lang={lang}
+  alternates={{ en: '/', 'pt-br': '/pt-br/' }}
+>
+  <div class="orrery" id="story" data-orrery data-repository={REPOSITORY}>
+    <div class="track" aria-hidden="true">
+      <div class="stage" data-orrery-stage>
+        <div class="glow"></div>
+        <div class="scene" data-orrery-scene>
+          <div class="drawing">
+            <SphereDrawing />
+          </div>
+          <canvas data-orrery-canvas></canvas>
+          <div class="labels" data-orrery-labels></div>
+        </div>
+        <div class="scrim"></div>
+      </div>
+    </div>
+
+    <section class="chapter chapter--hero" data-chapter="hero" aria-labelledby="hero-title">
+      <div class="chapter-body" data-text-column>
+        <p class="eyebrow rise" style="--rise: 0">
+          <span class="pulse" aria-hidden="true"></span>
+          {hero.eyebrow}
+        </p>
+        <h1 id="hero-title">{hero.title}</h1>
+        <p class="lede rise" style="--rise: 1">
+          {hero.lede}
+        </p>
+        <div class="rise" style="--rise: 2">
+          <InstallTabs ways={installWaysOf(lang, true)} id="quick" compact lang={lang} />
+        </div>
+        <p class="note rise" style="--rise: 3">
+          {hero.note} <a href={at('/docs/')}>{ui.readDocs}</a>
+        </p>
+        <ul class="proof rise" style="--rise: 4" aria-label={ui.inShort}>
+          {proof.map(item => (
+            <li>
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M3.5 8.5l3 3 6-7" />
+              </svg>
+              <span>
+                <strong>{item.label}</strong>
+                <span class="proof-detail">{item.detail}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+
+    <section class="chapter" data-chapter="accounts" aria-labelledby="accounts-title">
+      <div class="chapter-body">
+        <h2 id="accounts-title">{accounts.title}</h2>
+        {accounts.body.map(text => (
+          <p>{text}</p>
+        ))}
+      </div>
+    </section>
+
+    <section class="chapter" data-chapter="route" aria-labelledby="route-title">
+      <div class="chapter-body">
+        <h2 id="route-title">{routeChapter.title}</h2>
+        {routeChapter.body.map(text => (
+          <p>{text}</p>
+        ))}
+        <figure class="meters">
+          <figcaption>{route.caption}</figcaption>
+          <ol>
+            {route.stops.map((stop, k) => (
+              <li class="meter" data-meter={k} data-state="idle">
+                <span class="meter-name">
+                  {stop.name} <span class="meter-account">{stop.account}</span>
+                </span>
+                <span class="meter-bar" aria-hidden="true">
+                  <span />
+                </span>
+                <span class="meter-state" aria-hidden="true">
+                  <span data-when="running">{ui.running}</span>
+                  <span data-when="limit">{ui.limit}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p class="handoff">{route.handoff}</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="chapter" data-chapter="machines" aria-labelledby="machines-title">
+      <div class="chapter-body">
+        <h2 id="machines-title">{machines.title}</h2>
+        {machines.body.map(text => (
+          <p>{text}</p>
+        ))}
+      </div>
+    </section>
+
+    <section class="chapter" data-chapter="memory" aria-labelledby="memory-title">
+      <div class="chapter-body">
+        <h2 id="memory-title">{memoryChapter.title}</h2>
+        {memoryChapter.body.map(text => (
+          <p>{text}</p>
+        ))}
+        <figure class="memory">
+          <ul>
+            {memory.entries.map(entry => (
+              <li data-kind={entry.kind}>
+                <span class="memory-kind">{memory.kinds[entry.kind]}</span>
+                <span class="memory-text">
+                  <span class="memory-mark" aria-hidden="true">
+                    {entry.mark}
+                  </span>
+                  {entry.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <figcaption>{memory.caption}</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="chapter chapter--close" data-chapter="close" aria-labelledby="close-title">
+      <div class="chapter-body">
+        <h2 id="close-title">{close.title}</h2>
+        {close.body.map(text => (
+          <p>{text}</p>
+        ))}
+        <div class="actions">
+          <a class="button button--solid" href="#install">
+            {ui.installAtlas}
+          </a>
+          <a class="button" href={at('/docs/')}>
+            {ui.readDocs}
+          </a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track">
+      {[0, 1].map(() => (
+        <ul>
+          {agents.map(name => (
+            <li>{name}</li>
+          ))}
+        </ul>
+      ))}
+    </div>
+  </div>
+
+  <section class="tagline" aria-label={ui.promise}>
+    <div class="page">
+      <p data-words>
+        {tagline.split(' ').map(word => (
+          <span class="word">{word} </span>
+        ))}
+      </p>
+    </div>
+  </section>
+
+  <section class="section compare" aria-labelledby="compare-title">
+    <div class="page">
+      <div class="section-head reveal">
+        <h2 id="compare-title">{compare.title}</h2>
+        <p>{compare.body}</p>
+      </div>
+      <div class="compare-table reveal" role="table" aria-label={compare.title}>
+        <div class="compare-row compare-row--head" role="row">
+          <span role="columnheader">
+            <span class="visually-hidden">{ui.when}</span>
+          </span>
+          <span role="columnheader">{compare.alone}</span>
+          <span role="columnheader" class="compare-atlas">
+            {compare.atlas}
+          </span>
+        </div>
+        {compare.rows.map((row, k) => (
+          <div class="compare-row reveal" role="row" style={`--k: ${String(k)}`}>
+            <span class="compare-moment" role="rowheader">
+              {row.moment}
+            </span>
+            <span class="compare-alone" role="cell">
+              <span class="compare-label" aria-hidden="true">
+                {compare.alone}
+              </span>
+              {row.alone}
+            </span>
+            <span class="compare-atlas" role="cell">
+              <span class="compare-label" aria-hidden="true">
+                {compare.atlas}
+              </span>
+              {row.atlas}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section gate" aria-labelledby="gate-title">
+    <div class="page section-grid">
+      <div class="section-intro reveal">
+        <h2 id="gate-title">{gate.title}</h2>
+        <p>{gate.body}</p>
+        <p class="more">
+          <a href={gate.link.href}>{gate.link.label}</a>
+        </p>
+      </div>
+      <ol class="verdicts">
+        {gate.commands.map((item, k) => (
+          <li class="reveal" data-verdict={item.tone} style={`--k: ${String(k)}`}>
+            <code>
+              <span class="prompt" aria-hidden="true">
+                $
+              </span>
+              {item.command}
+            </code>
+            <span class="verdict">{item.verdict}</span>
+            <span class="verdict-detail">{item.detail}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <section class="section catalogue" aria-labelledby="catalogue-title">
+    <div class="page">
+      <div class="section-head reveal">
+        <h2 id="catalogue-title">{catalogue.title}</h2>
+        <p>{catalogue.body}</p>
+      </div>
+      <ul class="cards" data-spotlight>
+        {catalogue.items.map((item, k) => (
+          <li class="card reveal" style={`--k: ${String(k % 3)}`}>
+            <a href={item.href}>
+              <h3>{item.name}</h3>
+              <p>{item.text}</p>
+              <span class="card-more" aria-hidden="true">
+                {ui.readMore}
+                <svg viewBox="0 0 16 16">
+                  <path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5" />
+                </svg>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section install" id="install" aria-labelledby="install-title">
+    <div class="page section-grid">
+      <div class="section-intro reveal">
+        <h2 id="install-title">{install.title}</h2>
+        <ol class="steps">
+          {install.steps.map(step => (
+            <li>{step}</li>
+          ))}
+        </ol>
+        <p class="aside">{install.update}</p>
+      </div>
+      <div class="install-box reveal">
+        <InstallTabs ways={installWaysOf(lang)} id="full" lang={lang} />
+        <p class="aside needs">{install.needs}</p>
+        <p class="aside">
+          <a href={at('/docs/install/')}>{ui.installGuide}</a>
+          {ui.installGuideRest}
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section faq" aria-labelledby="faq-title">
+    <div class="page section-grid">
+      <div class="section-intro reveal">
+        <h2 id="faq-title">{faq.title}</h2>
+        <p>
+          {ui.notAnswered} <a href={at('/docs/')}>{ui.documentation}</a> {ui.coversAll}{' '}
+          <a href={`${REPOSITORY}/issues`}>{ui.issues}</a> {ui.issuesRest}
+        </p>
+      </div>
+      <div class="questions reveal">
+        {faq.items.map(item => (
+          <details name="faq">
+            <summary>
+              <h3>{item.question}</h3>
+              <span class="toggle" aria-hidden="true" />
+            </summary>
+            <div class="answer">
+              <p>{item.answer}</p>
+              {item.href && (
+                <p class="more">
+                  <a href={item.href}>{ui.readMoreDocs}</a>
+                </p>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section read-on" aria-label={ui.keepReading}>
+    <div class="page read-on-grid">
+      <div class="reveal">
+        <h2>
+          <a href={at('/docs/')}>{footer.documentation}</a>
+        </h2>
+        <ul>
+          <li>
+            <a href={at('/docs/install/')}>{ui.installAtlas}</a>
+          </li>
+          <li>
+            <a href={at('/docs/guides/coding-agents/')}>{footer.codingAgents}</a>
+          </li>
+          <li>
+            <a href={at('/docs/guides/machines/')}>{footer.machines}</a>
+          </li>
+          <li>
+            <a href={at('/docs/guides/models/')}>{footer.models}</a>
+          </li>
+          <li>
+            <a href={at('/docs/troubleshooting/')}>{footer.troubleshooting}</a>
+          </li>
+          <li>
+            <a href={at('/docs/reference/commands/')}>{ui.everyCommand}</a>
+          </li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <h2>
+          <a href="/news/">{nav.news}</a>
+        </h2>
+        {news.length > 0 ? (
+          <ul>
+            {news.map(item => (
+              <li>
+                <a href={`/news/${item.id}/`}>{item.data.title}</a>
+                <span class="meta">{item.data.source}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="quiet">
+            {ui.newsEmpty} <a href="/news/rss.xml">{ui.newsFeed}</a>.
+          </p>
+        )}
+      </div>
+      <div class="reveal">
+        <h2>
+          <a href="/changelog/">{nav.changelog}</a>
+        </h2>
+        <ul>
+          {latest.map(change => (
+            <li>
+              <span class="change">{lang === 'en' ? change.subject : change.subjectPt || change.subject}</span>
+              <span class="meta">{formatDay(change.date, HTML_LANG[lang])}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  </section>
+</Site>
+
+<script>
+  import '../scripts/home-count'
+  import { startOrrery } from '../scripts/orrery'
+
+  // The statement lights word by word as each crosses a line a third up from the bottom, once.
+  const statement = document.querySelector<HTMLElement>('[data-words]')
+  if (statement) {
+    const words = Array.from(statement.querySelectorAll<HTMLElement>('.word'))
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      words.forEach(word => word.classList.add('lit'))
+    } else {
+      statement.classList.add('armed')
+      const watch = new IntersectionObserver(
+        entries => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('lit')
+              watch.unobserve(entry.target)
+            }
+          }
+        },
+        { rootMargin: '0px 0px -33% 0px' }
+      )
+      words.forEach(word => watch.observe(word))
+    }
+  }
+
+  const root = document.querySelector<HTMLElement>('[data-orrery]')
+  if (root) {
+    startOrrery(root)
+  }
+
+  // The cards light where the pointer is: one listener for the grid, a custom property per card.
+  const grid = document.querySelector<HTMLElement>('[data-spotlight]')
+  if (grid && window.matchMedia('(hover: hover)').matches) {
+    grid.addEventListener(
+      'pointermove',
+      event => {
+        const card = (event.target as Element).closest<HTMLElement>('.card')
+        if (!card) {
+          return
+        }
+        const box = card.getBoundingClientRect()
+        card.style.setProperty('--x', `${String(event.clientX - box.left)}px`)
+        card.style.setProperty('--y', `${String(event.clientY - box.top)}px`)
+      },
+      { passive: true }
+    )
+  }
+</script>
+
+<style>
+  /* The story: a stage that stays while the chapters scroll over it. */
+  .orrery {
+    position: relative;
+  }
+
+  /* The track spans the story; the stage sticks inside it and leaves with the last chapter. */
+  .track {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .stage {
+    position: sticky;
+    top: 0;
+    height: 100lvh;
+    overflow: hidden;
+    pointer-events: none;
+    --text-column: min(var(--measure), 42vw);
+  }
+
+  .scene {
+    position: absolute;
+    inset: 0;
+  }
+
+  .glow {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(42% 52% at 66% 50%, rgb(60 60 60 / 0.42), transparent 70%),
+      radial-gradient(28% 34% at 66% 50%, rgb(255 90 31 / 0.05), transparent 70%);
+  }
+
+  .drawing {
+    position: absolute;
+    inset: 0 0 0 calc(var(--gutter) + var(--text-column));
+    display: grid;
+    place-items: center;
+    transition: opacity 0.6s;
+  }
+
+  .drawing :global(svg) {
+    width: min(64lvh, 92%);
+    height: auto;
+  }
+
+  .scene canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.6s;
+  }
+
+  .orrery[data-orrery-live] canvas {
+    opacity: 1;
+  }
+
+  .orrery[data-orrery-live] .drawing {
+    opacity: 0;
+  }
+
+  .labels {
+    position: absolute;
+    inset: 0;
+  }
+
+  .labels :global(.orrery-label) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: grid;
+    justify-items: center;
+    padding: 0.15rem 0.35rem;
+    visibility: hidden;
+    color: var(--starlight);
+    font-size: 0.8125rem;
+    font-weight: 560;
+    font-stretch: var(--narrow);
+    letter-spacing: 0.01em;
+    line-height: 1.25;
+    white-space: nowrap;
+    pointer-events: auto;
+    translate: -50% calc(-100% - 0.9rem);
+    text-shadow:
+      0 0 6px var(--night),
+      0 0 14px var(--night);
+    will-change: transform, opacity;
+  }
+
+  .labels :global(.orrery-label--moon) {
+    color: var(--haze);
+    font-size: 0.6875rem;
+    translate: -50% -50%;
+  }
+
+  .labels :global(.orrery-label--core) {
+    color: #fff0d8;
+    font-weight: 620;
+    translate: -50% calc(-100% - 1.6rem);
+  }
+
+  .labels :global(.orrery-label--system) {
+    color: var(--signal);
+    translate: -50% calc(-100% - 1.4rem);
+  }
+
+  .labels :global(.orrery-label-status:empty) {
+    display: none;
+  }
+
+  .labels :global(.orrery-label-status) {
+    color: var(--haze);
+    font-size: 0.6875rem;
+  }
+
+  .labels :global(.orrery-label[data-state='running'] .orrery-label-status) {
+    color: var(--brass);
+  }
+
+  .scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, var(--night) 0%, rgb(var(--bg-rgb) / 0.82) 24%, rgb(var(--bg-rgb) / 0) 46%);
+  }
+
+  .chapter {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    min-height: 100svh;
+    padding: 6.5rem var(--gutter) 5rem;
+    pointer-events: none;
+  }
+
+  .chapter-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.15rem;
+    width: min(100%, var(--measure), 42vw);
+    pointer-events: auto;
+  }
+
+  .chapter-body > p {
+    color: rgb(var(--fg-rgb) / 0.82);
+    font-size: var(--step-1);
+    line-height: 1.5;
+  }
+
+  .chapter h2 {
+    font-size: var(--step-4);
+    margin-bottom: 0.35rem;
+  }
+
+  /* The hero: the headline unfolds once, with the sphere. */
+  .chapter--hero {
+    padding-top: 5.5rem;
+    padding-bottom: 3.5rem;
+  }
+
+  .chapter--hero h1 {
+    font-size: clamp(2.6rem, 1.3rem + 3.4vw, 4.25rem);
+    font-weight: 600;
+    letter-spacing: -0.032em;
+    line-height: 0.98;
+    margin-bottom: 0.4rem;
+    text-wrap: balance;
+    animation: unfold 1.6s var(--ease-out) both;
+  }
+
+  /* Wider than the text column so each sentence of the headline sits on its own line. */
+  @media (min-width: 861px) {
+    .chapter--hero h1 {
+      width: min(50vw, 44rem);
+    }
+  }
+
+  @media (max-width: 860px) {
+    .chapter--hero h1 {
+      font-size: clamp(2rem, 9vw, 2.6rem);
+    }
+  }
+
+  @keyframes unfold {
+    from {
+      font-stretch: 82%;
+      opacity: 0;
+    }
+    to {
+      font-stretch: var(--wide);
+      opacity: 1;
+    }
+  }
+
+  .chapter-body > .lede {
+    max-width: 32rem;
+    font-size: 1.1875rem;
+    line-height: 1.55;
+    margin-bottom: 0.9rem;
+  }
+
+  .chapter-body > .note {
+    color: var(--haze);
+    font-size: var(--step--1);
+  }
+
+  .note a {
+    margin-left: 0.4em;
+    color: var(--starlight);
+  }
+
+  .chapter-body > .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    justify-self: start;
+    padding: 0.3rem 0.8rem 0.3rem 0.65rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 0;
+    background: var(--ink-raised);
+    color: var(--haze);
+    font-size: var(--step--2);
+    font-weight: 540;
+    font-stretch: var(--narrow);
+    letter-spacing: 0.02em;
+  }
+
+  .pulse {
+    position: relative;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--brass);
+  }
+
+  .pulse::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--brass);
+    animation: pulse 2.4s var(--ease-out) infinite;
+  }
+
+  @keyframes pulse {
+    from {
+      opacity: 0.7;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(3.2);
+    }
+  }
+
+  /* The hero's parts arrive one after another, under the headline as it unfolds. */
+  .rise {
+    animation: rise 1s var(--ease-out) both;
+    animation-delay: calc(0.35s + var(--rise, 0) * 0.09s);
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      translate: 0 0.9rem;
+    }
+  }
+
+  .proof {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem 1.5rem;
+    margin: 0.6rem 0 0;
+    padding: 1.1rem 0 0;
+    border-top: 1px solid var(--rule);
+    list-style: none;
+  }
+
+  .proof li {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr);
+    gap: 0.6rem;
+    align-items: start;
+    font-size: var(--step--1);
+    line-height: 1.4;
+  }
+
+  .proof svg {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.1rem;
+    fill: none;
+    stroke: var(--brass);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .proof strong {
+    display: block;
+    font-weight: 600;
+  }
+
+  .proof-detail {
+    color: var(--haze);
+    font-size: var(--step--2);
+  }
+
+  /* The route's meters, filled by the orrery's clock. */
+  .meters {
+    display: grid;
+    gap: 0.9rem;
+    margin: 0.9rem 0 0;
+    padding: 1.15rem 1.25rem 1.25rem;
+    border: 1px solid var(--rule);
+    border-radius: 0;
+    background: var(--ink-raised);
+    backdrop-filter: blur(10px);
+  }
+
+  .meters figcaption {
+    color: var(--haze);
+    font-size: var(--step--2);
+    font-stretch: var(--narrow);
+    font-weight: 540;
+  }
+
+  .meters ol {
+    display: grid;
+    gap: 0.7rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .meter {
+    display: grid;
+    grid-template-columns: 11.5rem 1fr 6.5rem;
+    align-items: center;
+    gap: 0.9rem;
+    font-size: var(--step--1);
+    --fill: 0;
+  }
+
+  .meter-account {
+    color: var(--haze);
+  }
+
+  .meter-bar {
+    position: relative;
+    height: 4px;
+    border-radius: 0;
+    background: rgb(var(--fg-rgb) / 0.1);
+    overflow: hidden;
+  }
+
+  .meter-bar span {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--starlight);
+    transform: scaleX(var(--fill));
+    transform-origin: left;
+  }
+
+  .meter[data-state='limit'] .meter-bar span {
+    background: var(--haze);
+  }
+
+  .meter[data-state='running'] .meter-bar span {
+    background: var(--brass);
+  }
+
+  .meter-state {
+    color: var(--haze);
+    font-size: var(--step--2);
+    text-align: right;
+  }
+
+  .meter-state span {
+    display: none;
+  }
+
+  .meter[data-state='running'] [data-when='running'] {
+    display: inline;
+    color: var(--brass);
+  }
+
+  .meter[data-state='limit'] [data-when='limit'] {
+    display: inline;
+  }
+
+  .handoff {
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--rule);
+    color: var(--haze);
+    font-size: var(--step--1);
+  }
+
+  /* What the review kept. */
+  .memory {
+    display: grid;
+    gap: 0.9rem;
+    margin: 0.9rem 0 0;
+  }
+
+  .memory ul {
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+    list-style: none;
+  }
+
+  .memory li {
+    display: grid;
+    grid-template-columns: 5.5rem 1fr;
+    gap: 1rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: var(--step--1);
+  }
+
+  .memory-kind {
+    color: var(--haze);
+    font-stretch: var(--narrow);
+    font-weight: 540;
+  }
+
+  .memory-mark {
+    display: inline-block;
+    width: 1.1em;
+    color: var(--haze);
+    font-family: var(--font-mono);
+  }
+
+  .memory li[data-kind='proposal'] .memory-text,
+  .memory li[data-kind='proposal'] .memory-mark {
+    color: var(--brass);
+  }
+
+  .memory figcaption {
+    color: var(--haze);
+    font-size: var(--step--1);
+  }
+
+  /* The close: the orrery folds back into the sphere above, and the text settles under it. */
+  .chapter--close {
+    justify-content: center;
+    align-items: flex-end;
+    padding-bottom: 12svh;
+    text-align: center;
+  }
+
+  .chapter--close .chapter-body {
+    width: min(100%, 38rem);
+    justify-items: center;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+  }
+
+  /* After the story. */
+  .section {
+    position: relative;
+    padding: clamp(5rem, 12vw, 9rem) 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .section h2 {
+    font-size: var(--step-4);
+  }
+
+  .section-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: clamp(2.5rem, 7vw, 7rem);
+    align-items: start;
+  }
+
+  .section-intro {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .section-intro > p {
+    color: rgb(var(--fg-rgb) / 0.82);
+    font-size: var(--step-1);
+    line-height: 1.5;
+  }
+
+  .verdicts {
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+    list-style: none;
+  }
+
+  .verdicts li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem 1.5rem;
+    padding: 1.35rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .verdicts code {
+    color: var(--starlight);
+    font-size: 0.95rem;
+  }
+
+  .prompt {
+    margin-right: 0.6em;
+    color: var(--haze);
+    user-select: none;
+  }
+
+  .verdict {
+    justify-self: end;
+    padding: 0.1rem 0.65rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 0;
+    font-size: var(--step--2);
+    font-weight: 600;
+    font-stretch: var(--wide);
+    white-space: nowrap;
+  }
+
+  [data-verdict='reviewed'] .verdict {
+    border-color: rgb(134 182 255 / 0.45);
+    color: var(--signal);
+  }
+
+  [data-verdict='asks-you'] .verdict {
+    border-color: rgb(255 90 31 / 0.55);
+    background: var(--brass-soft);
+  }
+
+  .verdict-detail {
+    grid-column: 1 / -1;
+    color: var(--haze);
+    font-size: var(--step--1);
+  }
+
+  [data-verdict='asks-you'] .verdict {
+    color: var(--brass);
+  }
+
+  [data-verdict='never-runs'] .verdict {
+    color: var(--haze);
+    text-decoration: line-through;
+    text-decoration-color: rgb(141 150 171 / 0.6);
+  }
+
+  [data-verdict='never-runs'] code {
+    color: var(--haze);
+  }
+
+  .section-head {
+    display: grid;
+    gap: 1.1rem;
+    max-width: 44rem;
+  }
+
+  .section-head > p {
+    color: rgb(var(--fg-rgb) / 0.82);
+    font-size: var(--step-1);
+    line-height: 1.5;
+  }
+
+  .more {
+    font-size: var(--step--1);
+  }
+
+  .more a {
+    color: var(--brass);
+    text-decoration-color: rgb(255 90 31 / 0.4);
+  }
+
+  .more a::after {
+    content: ' →';
+  }
+
+  /* The comparison: a row per moment of the day, the coding agent alone and inside Atlas. */
+  .compare-table {
+    display: grid;
+    margin-top: 3.25rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  .compare-row {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.5rem clamp(1.5rem, 4vw, 3rem);
+    padding: 1.4rem 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: var(--step--1);
+    line-height: 1.55;
+  }
+
+  .compare-row--head {
+    padding: 1rem 0;
+    color: var(--haze);
+    font-size: var(--step--2);
+    font-weight: 600;
+    font-stretch: var(--wide);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .compare-row--head .compare-atlas {
+    color: var(--brass);
+  }
+
+  .compare-moment {
+    font-size: var(--step-0);
+    font-weight: 600;
+    font-stretch: var(--wide);
+    line-height: 1.3;
+  }
+
+  .compare-alone {
+    color: var(--haze);
+  }
+
+  .compare-row:not(.compare-row--head) .compare-atlas {
+    position: relative;
+    padding-left: 1.6rem;
+    color: var(--starlight);
+  }
+
+  .compare-row:not(.compare-row--head) .compare-atlas::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.35rem;
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle, var(--brass) 0 30%, transparent 34%), radial-gradient(circle, var(--brass-soft) 0 100%);
+  }
+
+  .compare-label {
+    display: none;
+  }
+
+  /* What Atlas does beside the coding agents: a card each, lit where the pointer is. */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 3.25rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .card a {
+    position: relative;
+    display: grid;
+    align-content: start;
+    gap: 0.55rem;
+    height: 100%;
+    padding: 1.5rem 1.5rem 1.35rem;
+    border: 1px solid var(--rule);
+    border-radius: calc(var(--radius) + 4px);
+    background: linear-gradient(180deg, rgb(var(--bg-rgb) / 0.75), rgb(var(--bg-rgb) / 0.4));
+    color: inherit;
+    text-decoration: none;
+    overflow: hidden;
+    isolation: isolate;
+    transition:
+      border-color 0.3s,
+      translate 0.4s var(--ease-out);
+  }
+
+  .card a::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: radial-gradient(22rem circle at var(--x, 50%) var(--y, -30%), rgb(255 90 31 / 0.11), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.35s;
+  }
+
+  .card a:hover,
+  .card a:focus-visible {
+    border-color: rgb(255 90 31 / 0.35);
+    translate: 0 -2px;
+  }
+
+  .card a:hover::before,
+  .card a:focus-visible::before {
+    opacity: 1;
+  }
+
+  .card h3 {
+    font-size: var(--step-1);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+
+  .card p {
+    color: var(--haze);
+    font-size: var(--step--1);
+    line-height: 1.55;
+  }
+
+  .card-more {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    color: var(--brass);
+    font-size: var(--step--2);
+    font-weight: 560;
+    opacity: 0.75;
+    transition: opacity 0.3s;
+  }
+
+  .card-more svg {
+    width: 0.85rem;
+    height: 0.85rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: translate 0.3s var(--ease-out);
+  }
+
+  .card a:hover .card-more {
+    opacity: 1;
+  }
+
+  .card a:hover .card-more svg {
+    translate: 3px 0;
+  }
+
+  /* The questions: one open at a time, each a heading search engines read. */
+  .questions {
+    border-top: 1px solid var(--rule);
+  }
+
+  .questions details {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .questions summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.3rem 0;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .questions summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .questions h3 {
+    font-size: var(--step-0);
+    font-weight: 580;
+    font-stretch: var(--normal);
+    letter-spacing: -0.005em;
+    line-height: 1.4;
+    transition: color 0.2s;
+  }
+
+  .questions summary:hover h3 {
+    color: #fff;
+  }
+
+  .toggle {
+    position: relative;
+    flex: none;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 50%;
+    transition:
+      rotate 0.35s var(--ease-out),
+      border-color 0.2s;
+  }
+
+  .toggle::before,
+  .toggle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0.65rem;
+    height: 1.5px;
+    background: var(--starlight);
+    translate: -50% -50%;
+  }
+
+  .toggle::after {
+    rotate: 90deg;
+    transition: opacity 0.2s;
+  }
+
+  details[open] .toggle {
+    rotate: 180deg;
+    border-color: var(--brass);
+  }
+
+  details[open] .toggle::after {
+    opacity: 0;
+  }
+
+  .answer {
+    display: grid;
+    gap: 0.6rem;
+    max-width: 40rem;
+    padding: 0 3rem 1.5rem 0;
+    color: rgb(var(--fg-rgb) / 0.8);
+    font-size: var(--step--1);
+    line-height: 1.65;
+  }
+
+  /* Opening a question slides its answer in, where the browser can animate to a height of auto. */
+  @supports (interpolate-size: allow-keywords) {
+    .questions {
+      interpolate-size: allow-keywords;
+    }
+
+    .questions details::details-content {
+      height: 0;
+      overflow: clip;
+      transition:
+        height 0.4s var(--ease-out),
+        content-visibility 0.4s allow-discrete;
+    }
+
+    .questions details[open]::details-content {
+      height: auto;
+    }
+  }
+
+  .steps {
+    display: grid;
+    gap: 1.1rem;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  .steps li {
+    position: relative;
+    padding-left: 2.6rem;
+    color: rgb(var(--fg-rgb) / 0.86);
+    counter-increment: step;
+  }
+
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: -0.05rem;
+    color: var(--brass);
+    font-size: var(--step-1);
+    font-weight: 600;
+    font-stretch: var(--wide);
+    line-height: 1.2;
+  }
+
+  .section-intro > .aside,
+  .install-box > .aside {
+    color: var(--haze);
+    font-size: var(--step--1);
+  }
+
+  .install-box {
+    display: grid;
+    gap: 1.25rem;
+    padding-top: 0.4rem;
+  }
+
+  .read-on-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(2rem, 5vw, 4rem);
+  }
+
+  .read-on h2 {
+    font-size: var(--step-2);
+    margin-bottom: 1.25rem;
+  }
+
+  .read-on h2 a {
+    text-decoration: none;
+  }
+
+  .read-on h2 a:hover {
+    text-decoration: underline;
+  }
+
+  .read-on ul {
+    display: grid;
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .read-on li {
+    display: grid;
+    gap: 0.2rem;
+    font-size: var(--step--1);
+  }
+
+  .change {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
+  .meta,
+  .quiet {
+    color: var(--haze);
+    font-size: var(--step--2);
+  }
+
+  .quiet {
+    font-size: var(--step--1);
+  }
+
+  /* Narrow windows: the scene is a panel over the top of the screen, and the text scrolls up
+     under it, fading out at the panel's edge instead of running over the drawing. */
+  @media (max-width: 860px) {
+    .track {
+      z-index: 2;
+    }
+
+    .stage {
+      height: 54svh;
+      background: var(--night);
+      mask-image: linear-gradient(180deg, #000 80%, transparent);
+    }
+
+    .scene {
+      top: 4.25rem;
+    }
+
+    .glow {
+      background: radial-gradient(60% 55% at 50% 58%, rgb(60 60 60 / 0.5), transparent 75%);
+    }
+
+    .drawing {
+      inset: 0;
+    }
+
+    .drawing :global(svg) {
+      width: min(62vw, 34svh);
+    }
+
+    .scrim {
+      display: none;
+    }
+
+    .labels :global(.orrery-label) {
+      font-size: 0.6875rem;
+    }
+
+    .chapter,
+    .chapter--hero,
+    .chapter--close {
+      align-items: flex-start;
+      padding-top: 57svh;
+      padding-bottom: 14svh;
+    }
+
+    .chapter-body {
+      width: 100%;
+    }
+
+    .meter {
+      grid-template-columns: 1fr 5.5rem;
+    }
+
+    .meter-bar {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+
+    .section-grid,
+    .read-on-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .cards {
+      grid-template-columns: 1fr;
+    }
+
+    .compare-row {
+      grid-template-columns: 1fr;
+      gap: 0.6rem;
+    }
+
+    .compare-row--head {
+      display: none;
+    }
+
+    .compare-label {
+      display: block;
+      color: var(--haze);
+      font-size: var(--step--2);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .compare-atlas .compare-label {
+      color: var(--brass);
+    }
+
+    .proof {
+      grid-template-columns: 1fr;
+    }
+
+    .answer {
+      padding-right: 0;
+    }
+  }
+
+  @media (min-width: 861px) and (max-width: 1180px) {
+    .cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chapter--hero h1,
+    .rise,
+    .pulse::after {
+      animation: none;
+    }
+
+    .card a,
+    .toggle {
+      transition: none;
+    }
+
+    .scene canvas,
+    .drawing {
+      transition: none;
+    }
+  }
+
+  /* A band of the agents' names that runs between the story and what follows, faster as the page
+     is scrolled (scripts/chrome.ts). It stays orange and black in either theme. */
+  .marquee {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    padding: 0.9rem 0;
+    background: var(--brass);
+    color: #000;
+  }
+
+  .marquee-track {
+    display: flex;
+    width: max-content;
+    animation: run 38s linear infinite;
+  }
+
+  .marquee ul {
+    display: flex;
+    flex: none;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .marquee li {
+    display: flex;
+    align-items: center;
+    padding-right: 2rem;
+    font-family: var(--font-mono);
+    font-size: clamp(1rem, 1.8vw, 1.35rem);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .marquee li::after {
+    content: '';
+    width: 0.5em;
+    height: 0.5em;
+    margin-left: 2rem;
+    background: #000;
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  }
+
+  @keyframes run {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* The scene is drawn as light on night; on the light page it is inverted, hue kept, so it reads
+     as ink on paper. */
+  :global(:root[data-theme='light']) .scene canvas {
+    filter: invert(1) hue-rotate(180deg);
+  }
+
+  :global(:root[data-theme='light']) .glow {
+    display: none;
+  }
+
+  :global(:root[data-theme='light']) .labels :global(.orrery-label--core) {
+    color: var(--starlight);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track {
+      animation: none;
+    }
+  }
+
+  /* The statement: large type that lights word by word as it is read. Plain, fully lit, without script. */
+  .tagline {
+    position: relative;
+    z-index: 1;
+    padding: clamp(5rem, 14vw, 11rem) 0;
+  }
+
+  .tagline p {
+    max-width: 22em;
+    font-size: clamp(2rem, 5.2vw, 4.25rem);
+    font-weight: 600;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+
+  .tagline p.armed .word {
+    opacity: 0.28;
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tagline p.armed .word.lit {
+    opacity: 1;
+  }
+</style>

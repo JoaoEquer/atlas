@@ -366,6 +366,167 @@ export interface SettingChange {
   /** The new value as the screen edits it; `null` or blank takes the setting out of the file. */
   value?: string | null
 }
+/** Who writes down recordings, and the model on this computer (step 26). */
+export interface SpeechState {
+  /** `local`, `openai`, `gemini` or `off`: `[voice] transcription`. */
+  transcription: string
+  /** The model is on this computer, whole. */
+  present: boolean
+  /** Its download's size, in bytes. */
+  size: number
+  /** The bytes downloaded so far while a download runs; `None` when none does. */
+  downloading: number | null
+  /** A recording came for the model before it was there: the app asks once to download it. */
+  wanted: boolean
+  /** The user said no to the download, for every home of this machine. */
+  declined: boolean
+  /** Why the last download failed; empty when it did not. */
+  error: string
+  /** Whose the model is, and its license, said where it is offered. */
+  credit: string
+}
+export interface DictationWrite {
+  /** The recording, base64, 10 MB at most. */
+  audio: string
+  media_type?: string
+  where?: string
+}
+/** One dictation kept in the home (step 26): its recording, and what it said. */
+export interface DictationRow {
+  id: string
+  /** When it was recorded, ISO 8601 in the server's time zone. */
+  at: string
+  text: string
+  media_type: string
+  /** `box`, the conversation's microphone, or `anywhere`, the shortcut in any program. */
+  where: string
+  /** Why it was not written down, when it was not; the recording is kept all the same. */
+  error: string
+}
+export interface DictationList {
+  /** Newest first, the last 500. */
+  dictations: DictationRow[]
+}
+export interface DictationRef {
+  id: string
+}
+export interface DictationAudio {
+  /** The recording, base64. */
+  audio: string
+  media_type: string
+}
+export interface WorkspaceListParams {
+  /** A folder of a project, for that project's workspaces; empty for every one. */
+  folder?: string
+}
+export interface WorkspaceList {
+  workspaces: WorkspaceRow[]
+}
+/** A workspace (step 21): a task of a project, a worktree on a branch of its own. */
+export interface WorkspaceRow {
+  id: string
+  /** The project's main folder, which its workspaces group under. */
+  project_root: string
+  name: string
+  branch: string
+  /** The branch it was made from, where its work goes back. */
+  base: string
+  folder: string
+  /** `ready`, `preparing`, `setup_failed` or `archived`. */
+  state: string
+  created_at: string
+  /** Its ports, `4000-4009`, when its project names a range; empty otherwise. */
+  ports: string
+  /** The setup script's last words, when it ran. */
+  setup_output: string
+}
+export interface WorkspaceCreate {
+  /** Any folder of the project. */
+  folder: string
+  name: string
+  /** The branch to start from; empty for the one the project has checked out. */
+  base?: string
+}
+export interface WorkspaceRef {
+  id: string
+}
+export interface WorkspaceDelete {
+  id: string
+  /** The user said yes to deleting work not delivered. */
+  force?: boolean
+}
+/** What a workspace changed since it left its branch of origin (step 21, A2). */
+export interface WorkspaceDiff {
+  files: DiffFileRow[]
+  /** More files changed than are listed. */
+  more: boolean
+  /** It holds changes not committed (A4). */
+  uncommitted: boolean
+  /** The commits its branch has that its branch of origin has not. */
+  ahead: number
+}
+export interface DiffFileRow {
+  path: string
+  /** `added`, `modified`, `deleted` or `renamed`. */
+  status: string
+  added: number
+  removed: number
+  binary: boolean
+  /** Its lines were cut: the rest is not shown. */
+  truncated: boolean
+  lines: DiffLineRow[]
+}
+export interface DiffLineRow {
+  /** `same`, `plus`, `minus`, or `gap` between two hunks. */
+  kind: string
+  text: string
+  /** Its number in the file before and after; 0 where it has none. */
+  old: number
+  new: number
+}
+export interface CheckpointList {
+  /** The newest first. */
+  checkpoints: CheckpointRow[]
+}
+/** A workspace's folder as it was before a prompt (step 21, A3). */
+export interface CheckpointRow {
+  commit: string
+  /** The prompt it was kept before, or why it was kept. */
+  label: string
+  created_at: string
+}
+export interface WorkspaceRestore {
+  id: string
+  /** One of its checkpoints. */
+  commit: string
+}
+export interface WorkspaceCommit {
+  id: string
+  message: string
+}
+export interface WorkspacePushed {
+  /** What git said. */
+  said: string
+}
+export interface FolderRef {
+  /** A project folder; a relative one is the workspace's. */
+  folder: string
+}
+/** How a project prepares a new workspace. */
+export interface ProjectRow {
+  root: string
+  setup_script: string
+  /** The first port of its workspaces, 0 for none, and how many each gets. */
+  ports_start: number
+  ports_size: number
+}
+export interface ProjectSettings {
+  /** Any folder of the project. */
+  folder: string
+  setup_script: string
+  ports_start: number
+  ports_size: number
+}
 export interface MemoryEntriesParams {
   /** `user` is "About you", `USER.md`; `memory` is the memory, `MEMORY.md`. */
   target: 'user' | 'memory'
@@ -580,6 +741,8 @@ export interface PluginCallResult {
 export interface MarketplaceListParams {
   /** Read the marketplace again now, not only once the last read is an hour old. */
   refresh?: boolean
+  /** What the user searches for: the outside catalogs are searched for it (step 24); empty, they list what they list first. */
+  query?: string
 }
 export interface MarketplaceList {
   name: string
@@ -589,6 +752,8 @@ export interface MarketplaceList {
   read_at: string | null
   /** Why it could not be read now: the last read stands in, or nothing does. */
   problem: string | null
+  /** The outside catalogs that could not be read for this list, a line each (step 24). */
+  source_problems: string[]
 }
 /** An item as the marketplace's screen lists it (step 16s). */
 export interface MarketplaceRow {
@@ -613,6 +778,12 @@ export interface MarketplaceRow {
   source_url: string
   /** What keeps it from installing or running, or why it was retired. */
   problem: string | null
+  /** Where it comes from (step 24): `atlas`, the marketplace's own repository, or an outside catalog read directly, `mcp-registry`, `claude-plugins` or `skills.sh`. */
+  source: 'atlas' | 'mcp-registry' | 'claude-plugins' | 'skills.sh'
+  /** When its source last published it, `YYYY-MM-DD`; empty when the source does not say. */
+  updated: string
+  /** The installs its source counts; `null` when it counts none. */
+  installs: number | null
 }
 export interface MarketplaceRef {
   name: string
@@ -709,6 +880,8 @@ export interface ConversationModelParams {
 }
 export interface RoutineList {
   routines: RoutineRow[]
+  /** This week's runs, at the top of the screen (step 25). */
+  scoreboard: ScoreboardRow | null
 }
 /** A routine, as the screen lists it. Times are UTC text. */
 export interface RoutineRow {
@@ -729,6 +902,62 @@ export interface RoutineRow {
   running: boolean
   /** The bot it runs as, whose fixed conversation reads its result; `null`, the main agent. */
   bot: string | null
+  /** The command whose new output wakes its prompt (step 23); `null`, its schedule does. */
+  probe: string | null
+  /** The executor its prompt runs in (step 25); `null`, Atlas's model. */
+  executor: RoutineExecutorRow | null
+  /** The model pinned on it, `provider/model`, and its effort; empty, the settings' (step 25). */
+  model: string
+  effort: string
+}
+/** Where a routine's prompt runs when an outside executor runs it (step 25). */
+export interface RoutineExecutorRow {
+  name: string
+  /** The folder it works in, whole. */
+  folder: string
+  /** In the executor's automatic mode; otherwise its first question stops a run for the user. */
+  auto: boolean
+  /** Each run in a new workspace of the folder, archived when it changed nothing. */
+  workspace: boolean
+  /** A run that changed something opens a draft pull request (the GitHub plugin's). */
+  draft: boolean
+}
+/** This week's runs of every routine (step 25): since Monday at midnight, the user's time. */
+export interface ScoreboardRow {
+  since: string
+  /** Ended with nothing asked: answered, or silent. */
+  alone: number
+  /** Stopped at a question or an approval nobody gave. */
+  needed: number
+  failed: number
+}
+/** What the home does now, for a host that puts it to sleep when idle and wakes it in time (Atlas Cloud, step 20). Times are UTC text. */
+export interface Activity {
+  /** A turn, a review, a routine or an executor works now. */
+  working: boolean
+  /** The clients connected now (the app, a channel's bridge). */
+  clients: number
+  /** Since when nothing worked and no client was connected; `null` while something is. */
+  idle_since: string | null
+  /** When the next routine comes due; `null` when none will. */
+  next_wake: string | null
+}
+/** A prompt routine as the app's form writes it (step 25): made when `routine_id` is empty, changed otherwise. */
+export interface RoutineSave {
+  name: string
+  /** As `atlas routines create --schedule` takes it: `every day at 9am`, `every 30m`. */
+  schedule: string
+  prompt: string
+  routine_id?: string
+  /** A command whose new output wakes the prompt (step 23); empty, its schedule does. */
+  probe?: string
+  /** The bot it runs as; empty, the main agent. */
+  bot?: string
+  /** `provider/model` and its effort; empty, the settings'. */
+  model?: string
+  effort?: string
+  /** The executor that runs it in a folder; `null`, Atlas's model. */
+  executor?: RoutineExecutorRow | null
 }
 export interface RoutineRef {
   routine_id: string
@@ -749,6 +978,8 @@ export interface RunRow {
   /** The reply or the command's output, cut to its first 2,000 characters. */
   output: string
   error: string | null
+  /** What its probe heard, which woke it, cut to its first 2,000 characters; empty when its schedule fired it. */
+  event: string
 }
 export interface RoutineRemoved {
   removed: boolean
@@ -1049,6 +1280,9 @@ export interface InstanceRow {
   effort: string
   /** The other account it runs on (step 16h, `executor.accounts`); empty, the main account. `executor` is then its executor on that account (`claude-code@1a2b3c4d`). */
   account_id: string
+  /** The permission mode it runs in, one of `modes`, its harness's, its default first (`workbench.mode`); both empty for a harness that has only its automatic mode. */
+  mode: string
+  modes: string[]
 }
 /** An executor a plugin drives, as its detection found it, for the workbench and the onboarding. */
 export interface ExecutorRow {
@@ -1068,6 +1302,8 @@ export interface ExecutorRow {
   enabled: boolean
   declaration: string[]
   consent: string
+  /** Its plugin was turned on, but an update changed what it declares, so it waits, off, for the user's consent again (`consent again`): the sidebar and its sessions' tabs say so. */
+  consent_again: boolean
   /** It switches accounts (`executor.account`), from its place in the sidebar. */
   accounts: boolean
   /** Someone is logged in to its harness: until then a turn fails, so the screen asks for a login first. */
@@ -1080,6 +1316,13 @@ export interface ExecutorRow {
   nickname: string
   /** Its prompts take files (`workbench.prompt`'s `attachments`, step 16i). */
   files: boolean
+  /** A newer version than `version`, where its install updates from, and the command that installs it, as the user would type it (`executor.update`); empty when there is none, or Atlas does not know how this install updates. Only on the executor's own row. */
+  latest: string
+  update: string
+  /** Its update runs now, at the user's click. */
+  updating: boolean
+  /** Its harness's permission modes, its default first, for a session not started yet; empty, it has only its automatic mode. */
+  modes: string[]
 }
 export interface WorkbenchStartParams {
   executor: string
@@ -1112,11 +1355,40 @@ export interface WorkbenchSwitchParams {
   instance_id: string
   enabled: boolean
 }
+export interface WorkbenchModeParams {
+  instance_id: string
+  /** One of the instance's `modes`. */
+  mode: string
+}
 export interface WorkbenchModelParams {
   instance_id: string
   /** A model of `executor.models`, and one of its efforts; `null`, the harness's default. */
   model?: string | null
   effort?: string | null
+}
+/** A folder's git, for a session's environment (step 18g); `repository` false outside one. */
+export interface FolderGit {
+  folder: string
+  repository: boolean
+  branch: string
+  /** The repository's top folder, the worktree's own for a worktree. */
+  root: string
+  /** The folder is a worktree of another repository's folder. */
+  worktree: boolean
+}
+export interface WorktreeParams {
+  /** A folder in the repository the worktree is of. */
+  folder: string
+  /** Its name: its folder is `<repository>-<name>`, beside the repository, on a new branch `atlas/<name>` from the one checked out. */
+  name: string
+}
+export interface InstanceRef {
+  instance_id: string
+}
+/** How full a session's context is (step 18g): its tokens, when its harness says, and the window of the model it runs as, when the models' catalog knows it. */
+export interface SessionContext {
+  tokens: number | null
+  window: number | null
 }
 export interface WorkbenchFolderParams {
   instance_id: string
@@ -1131,48 +1403,6 @@ export interface WorkbenchUseAccountParams {
   instance_id: string
   /** An `executor.accounts` id; empty, the main account. */
   account_id: string
-}
-export interface InstanceRef {
-  instance_id: string
-}
-/** A session's route (asked for by the user on 21/10/2026): where it goes on, in order, when the destination it runs on reaches its plan's limit. With none, or `enabled` off, its executor's own accounts take over (`executor.failover`). */
-export interface SessionRouteRow {
-  instance_id: string
-  stops: RouteStopRow[]
-  enabled: boolean
-  /** A copy on another account compacts first, where its harness has `/compact`. */
-  compact: boolean
-}
-export interface RouteStopRow {
-  executor: string
-  account_id: string
-  /** Its executor on that account, as `workbench.executors` names it. */
-  name: string
-  title: string
-  /** The account's nickname; empty for the main account. */
-  nickname: string
-  /** Its executor is installed here; one that is not is passed over. */
-  installed: boolean
-  /** The model and the effort the session goes on with there; `None`, the ones it ran on. */
-  model: string | null
-  effort: string | null
-  /** It reached its plan's limit and has not reset: passed over until it does. */
-  limited: boolean
-}
-export interface WorkbenchRouteParams {
-  instance_id: string
-  /** In the order the session goes on to them at a plan's limit; empty, none. */
-  targets: RouteTargetParams[]
-  enabled?: boolean
-  /** A copy on another account of the same executor compacts first, where its harness has `/compact` (on by default). */
-  compact?: boolean
-}
-/** One destination of a session's route: an executor's own name and one of its `executor.accounts` ids (empty, the main account), and the model (an `executor.models` id) and the effort the session goes on with there; `None`, the ones it ran on. */
-export interface RouteTargetParams {
-  executor: string
-  account_id?: string
-  model?: string | null
-  effort?: string | null
 }
 /** What changes if an instance goes on on another account (step 16h). */
 export interface AccountSwitchRow {
@@ -1193,6 +1423,11 @@ export interface ExecutorList {
 export interface ExecutorRef {
   /** The executor's name (`claude-code`). */
   executor: string
+}
+/** How an executor's update ended: its output's end, to show when it failed. */
+export interface ExecutorUpdated {
+  updated: boolean
+  output: string
 }
 export interface SessionFolderList {
   /** The folders of instances not kept yet first, then the one changed last first. */
@@ -1335,35 +1570,12 @@ export interface AccountRow {
   login: string
   logged_in: boolean
 }
-export interface ExecutorAddAccountParams {
-  executor: string
-  /** The user's nickname for it ("company-b"), which names its folder too. */
-  nickname: string
-}
-export interface ExecutorAccountRef {
-  executor: string
-  account_id: string
-}
 export interface SessionDeleteParams {
   /** An `ExecutorRow.name`: the executor on the account that keeps the session. */
   executor: string
   session_id: string
   /** As `executor.sessions` names it. */
   folder: string
-}
-export interface ExecutorFailoverParams {
-  executor: string
-  /** Every account's `executor.accounts` id in the order they take over in, the main one as empty; one left out comes after. */
-  order: string[]
-  enabled: boolean
-  compact: boolean
-}
-export interface ExecutorFolderAccountParams {
-  executor: string
-  /** As `executor.folders` names it. */
-  folder: string
-  /** An `executor.accounts` id; empty, the main account. */
-  account_id: string
 }
 export interface ExecutorAccountParams {
   executor: string
@@ -1712,12 +1924,20 @@ export interface RpcMethods {
   'conversation.terminal': { params: TerminalParams; result: SendResult }
   /** Bring an archived conversation back to the list (step 9e), where its last activity puts it; every client hears it (`conversations.changed`). */
   'conversation.unarchive': { params: ConversationRef; result: Empty }
+  /** Write a kept dictation down again, as [voice] transcription says now. */
+  'dictation.again': { params: DictationRef; result: DictationRow }
+  /** A dictation's recording. */
+  'dictation.audio': { params: DictationRef; result: DictationAudio }
+  /** Delete a dictation and its recording. */
+  'dictation.delete': { params: DictationRef; result: Empty }
+  /** The home's dictations, newest first. */
+  'dictation.list': { params: Empty; result: DictationList }
+  /** Keep a recording the user dictated, then write it down as [voice] transcription says; one that could not be is kept with why. */
+  'dictation.write': { params: DictationWrite; result: DictationRow }
   /** Log an executor's harness into another account on the user's browser, from its place in the sidebar; the user's instances of it go on with their sessions on it. Refused while one of its instances works. */
   'executor.account': { params: ExecutorAccountParams; result: ExecutorRow }
   /** An executor's accounts, in the order they take over in at a plan's limit, each with who it is logged in as (step 16h). */
   'executor.accounts': { params: ExecutorRef; result: ExecutorAccounts }
-  /** Keep another account under a nickname, in the harness's folder for it, not logged in yet: `executor.account` on its row logs it in on the user's browser. */
-  'executor.add_account': { params: ExecutorAddAccountParams; result: AccountRow }
   /** The slash commands an executor takes in a folder, described, for the session's box: what its instance there said, or with none, what its plugin reads with no prompt (it takes seconds). An instance's `commands` changing says to read them again. */
   'executor.commands': { params: ExecutorCommandsParams; result: SlashCommandList }
   /** The MCP servers an executor has for its account, outside any project, with the state of each, read by its plugin with no prompt, for the side panel; it takes seconds. */
@@ -1726,20 +1946,16 @@ export interface RpcMethods {
   'executor.delete_session': { params: SessionDeleteParams; result: Empty }
   /** Look for the harnesses again, as at a start (installed, which version, which account): the executors tab asks when it shows, and on its "Look again". */
   'executor.detect': { params: Empty; result: ExecutorList }
-  /** The order an executor's accounts take over in when one reaches its plan's limit, whether they do, and whether a session compacts before it goes on; told to every screen as `executor.accounts`. */
-  'executor.failover': { params: ExecutorFailoverParams; result: ExecutorAccounts }
-  /** The account a folder's new sessions start on; empty, the main account. */
-  'executor.folder_account': { params: ExecutorFolderAccountParams; result: Empty }
   /** The folders an executor's sessions work in, read by its plugin without reading the sessions, for the executors tab, which reads a folder's sessions once it is opened. */
   'executor.folders': { params: ExecutorRef; result: SessionFolderList }
   /** The models an executor offers its account now and the efforts of each, its default first, read by its plugin with no prompt, for the session's box. */
   'executor.models': { params: ExecutorRef; result: ExecutorModels }
-  /** Forget another account; its folder stays, with its login and sessions, and its folders start on the main account again. Refused while an instance runs on it. */
-  'executor.remove_account': { params: ExecutorAccountRef; result: Empty }
   /** A session's steps, as its plugin reads them where its harness keeps them; nothing is copied into Atlas (step 16f). */
   'executor.session': { params: SessionReadParams; result: SessionRead }
   /** Every session of an executor, or of one of its folders, wherever it began, read by its plugin with no effect on it, each with the instance working on it here (step 16f, the executors tab). */
   'executor.sessions': { params: SessionListParams; result: SessionList }
+  /** Update an executor's harness to its newest version with the command its row shows, then look for it again: only the owner's click in the app, never the agent. Refused while one of its sessions runs, since a harness in use cannot be replaced. */
+  'executor.update': { params: ExecutorRef; result: ExecutorUpdated }
   /** How much of its plan's limits the account an executor is logged in as has used, read by its plugin with no prompt, for the side panel; also told as `executor.usage` while its instances work. It takes seconds. */
   'executor.usage': { params: ExecutorRef; result: ExecutorUsageRow }
   /** Write this home's backup, checked, at a path on the server's machine: the zip of `atlas backup`, never the vault. */
@@ -1832,6 +2048,10 @@ export interface RpcMethods {
   'routine.run': { params: RoutineRef; result: RoutineRow }
   /** A routine's runs, the newest first, at most 50. */
   'routine.runs': { params: RoutineRef; result: RunList }
+  /** Make a prompt routine, or change one (step 25): its name, its schedule or its probe, who runs it (Atlas, a bot or an executor in a folder), and its model. */
+  'routine.save': { params: RoutineSave; result: RoutineRow }
+  /** What the home does now (step 20): whether anything works, the clients connected, since when it is idle and when the next routine comes due. Also at GET /activity, with the token, for the host that sleeps it. */
+  'server.activity': { params: Empty; result: Activity }
   /** The editable settings of config.toml, for the settings screen (step 15b), each with the variable that wins over it. */
   'settings.read': { params: Empty; result: SettingsList }
   /** Write editable settings to config.toml, changing only their lines, and apply them without a restart; a refused value writes nothing. */
@@ -1842,6 +2062,12 @@ export interface RpcMethods {
   'soul.read': { params: Empty; result: Soul }
   /** Write the main agent's soul whole; it applies from the next conversation. */
   'soul.write': { params: SoulText; result: Soul }
+  /** The user's no to the model's download: the app does not ask again on this machine. */
+  'speech.decline': { params: Empty; result: SpeechState }
+  /** Download the speech model in the background, its progress told by speech.changed; it takes back an earlier no. */
+  'speech.download': { params: Empty; result: SpeechState }
+  /** Who writes down recordings (step 26), and whether the model is on this computer. */
+  'speech.status': { params: Empty; result: SpeechState }
   /** Who answers what an outside executor asks from now on: the user, or Atlas (the guardian for permissions, the conversation's model for questions). */
   'subagent.decides': { params: SubagentDecidesParams; result: SubagentControl }
   /** Stop a running subagent; what it had still reaches its parent. */
@@ -1880,26 +2106,56 @@ export interface RpcMethods {
   'workbench.atlas_answers': { params: WorkbenchSwitchParams; result: InstanceRow }
   /** The instance's own mode that asks no permission, on or off. */
   'workbench.auto': { params: WorkbenchSwitchParams; result: InstanceRow }
+  /** How many tokens of context the instance's session holds, and its model's window. */
+  'workbench.context': { params: InstanceRef; result: SessionContext }
   /** The same executor again, the user's, in another folder. */
   'workbench.duplicate': { params: WorkbenchFolderParams; result: InstanceRow }
   /** Move the user's idle instance to another folder, where its harness starts a new session. */
   'workbench.folder': { params: WorkbenchFolderParams; result: InstanceRow }
+  /** A project folder's git: the branch checked out, its repository, and whether it is a worktree. */
+  'workbench.git': { params: FolderRef; result: FolderGit }
   /** The workbench (step 16c): its executor instances, the executors the plugins found, and what the instances ask that still waits. */
   'workbench.list': { params: Empty; result: WorkbenchList }
+  /** The instance's permission mode, one its harness lists: `auto` is its automatic mode, as workbench.auto turns on. */
+  'workbench.mode': { params: WorkbenchModeParams; result: InstanceRow }
   /** The instance's model and effort from its next request on; an effort the model does not take is refused. */
   'workbench.model': { params: WorkbenchModelParams; result: InstanceRow }
   /** A prompt from an instance's card, with the files attached: a new turn, or a steer when one runs. */
   'workbench.prompt': { params: WorkbenchPromptParams; result: WorkbenchPrompted }
-  /** The instance's session's route: the destinations it goes on to at a plan's limit, accounts of its executor and of others, in order. */
-  'workbench.route': { params: InstanceRef; result: SessionRouteRow }
-  /** Set the instance's session's route, kept for its card. On an account of the same executor it goes on in a copy; on another executor in a new session, whose first prompt is a handoff packet Atlas puts together with no model call. */
-  'workbench.set_route': { params: WorkbenchRouteParams; result: SessionRouteRow }
   /** Start an executor in a folder, the user's instance; one that cannot start stays on the workbench saying why. */
   'workbench.start': { params: WorkbenchStartParams; result: InstanceRow }
   /** Stop an instance for good and take its card down. */
   'workbench.stop': { params: InstanceRef; result: Empty }
   /** Go on with the instance's conversation in the same folder on another account of its executor (step 16h): that account keeps a copy of its session, the original left as it was; never while it works. */
   'workbench.use_account': { params: WorkbenchUseAccountParams; result: InstanceRow }
+  /** A new workspace of the folder's repository, in the home on a new branch from the one checked out, for a session apart from the folder; nothing in the folder changes. */
+  'workbench.worktree': { params: WorktreeParams; result: FolderGit }
+  /** Keep a workspace's work in a commit on its branch and remove its folder. */
+  'workspace.archive': { params: WorkspaceRef; result: WorkspaceRow }
+  /** A workspace's checkpoints, its folder as it was before each prompt, the newest first. */
+  'workspace.checkpoints': { params: WorkspaceRef; result: CheckpointList }
+  /** Commit every change in a workspace on its branch, as the user's own commit. */
+  'workspace.commit': { params: WorkspaceCommit; result: WorkspaceRow }
+  /** Make a workspace of a folder's project: a worktree in the home on a branch of its own, the listed files copied; its setup script runs after, told by workspaces.changed. */
+  'workspace.create': { params: WorkspaceCreate; result: WorkspaceRow }
+  /** Delete a workspace, its folder and its branch; one with work not delivered only with force. */
+  'workspace.delete': { params: WorkspaceDelete; result: Empty }
+  /** What a workspace changed since it left its branch of origin, committed or not, line by line with each line's numbers, for the user to comment on. */
+  'workspace.diff': { params: WorkspaceRef; result: WorkspaceDiff }
+  /** The workspaces of the home, or of a folder's project (step 21). */
+  'workspace.list': { params: WorkspaceListParams; result: WorkspaceList }
+  /** Merge a workspace's branch into its branch of origin, the user's yes given in the app; refused with changes not committed, or when it does not merge cleanly. */
+  'workspace.merge': { params: WorkspaceRef; result: WorkspaceRow }
+  /** How a folder's project prepares a new workspace. */
+  'workspace.project': { params: FolderRef; result: ProjectRow }
+  /** Send a workspace's branch to the project's remote origin, the user's yes given in the app. */
+  'workspace.push': { params: WorkspaceRef; result: WorkspacePushed }
+  /** Put a workspace's files back as they were at one of its checkpoints, what they are now kept first as another; refused while a session works in it. */
+  'workspace.restore': { params: WorkspaceRestore; result: WorkspaceRow }
+  /** Set how a folder's project prepares a new workspace: its setup script and ports. */
+  'workspace.set_project': { params: ProjectSettings; result: ProjectRow }
+  /** Bring an archived workspace's folder back, its work as it was. */
+  'workspace.unarchive': { params: WorkspaceRef; result: WorkspaceRow }
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
@@ -1930,20 +2186,22 @@ export const RPC_METHODS = [
   'conversation.send',
   'conversation.terminal',
   'conversation.unarchive',
+  'dictation.again',
+  'dictation.audio',
+  'dictation.delete',
+  'dictation.list',
+  'dictation.write',
   'executor.account',
   'executor.accounts',
-  'executor.add_account',
   'executor.commands',
   'executor.connectors',
   'executor.delete_session',
   'executor.detect',
-  'executor.failover',
-  'executor.folder_account',
   'executor.folders',
   'executor.models',
-  'executor.remove_account',
   'executor.session',
   'executor.sessions',
+  'executor.update',
   'executor.usage',
   'home.backup',
   'home.backup_download',
@@ -1990,11 +2248,16 @@ export const RPC_METHODS = [
   'routine.resume',
   'routine.run',
   'routine.runs',
+  'routine.save',
+  'server.activity',
   'settings.read',
   'settings.write',
   'skill.list',
   'soul.read',
   'soul.write',
+  'speech.decline',
+  'speech.download',
+  'speech.status',
   'subagent.decides',
   'subagent.interrupt',
   'subagent.list',
@@ -2014,16 +2277,31 @@ export const RPC_METHODS = [
   'workbench.account_switch',
   'workbench.atlas_answers',
   'workbench.auto',
+  'workbench.context',
   'workbench.duplicate',
   'workbench.folder',
+  'workbench.git',
   'workbench.list',
+  'workbench.mode',
   'workbench.model',
   'workbench.prompt',
-  'workbench.route',
-  'workbench.set_route',
   'workbench.start',
   'workbench.stop',
-  'workbench.use_account'
+  'workbench.use_account',
+  'workbench.worktree',
+  'workspace.archive',
+  'workspace.checkpoints',
+  'workspace.commit',
+  'workspace.create',
+  'workspace.delete',
+  'workspace.diff',
+  'workspace.list',
+  'workspace.merge',
+  'workspace.project',
+  'workspace.push',
+  'workspace.restore',
+  'workspace.set_project',
+  'workspace.unarchive'
 ] as const satisfies readonly RpcMethod[]
 
 // -- Server requests (server to client, answered) --
@@ -2056,6 +2334,8 @@ export interface EventMap {
   'command.update': CommandRow
   /** A channel made a conversation, or a turn in one began or ended; read conversation.list. */
   'conversations.changed': ConversationsChanged
+  /** A dictation was kept, written down or deleted, from any client; read dictation.list. */
+  'dictations.changed': Empty
   /** An executor's accounts, or the account of one of its folders, changed; read executor.accounts and executor.folders. */
   'executor.accounts': AccountsChanged
   /** An executor's plan usage changed: read with executor.usage, or told by its harness as one of its instances worked. */
@@ -2096,6 +2376,8 @@ export interface EventMap {
   'routines.changed': RoutinesChanged
   /** The first frame of a connection: the version, and the epoch of event numbers. */
   'server.ready': Ready
+  /** The speech model's download moved, ended or failed, or a recording waited for it. */
+  'speech.changed': SpeechState
   /** Something happened to the conversation. */
   'status.update': StatusUpdate
   /** A subagent of the conversation started, ran a tool or ended. */
@@ -2118,12 +2400,15 @@ export interface EventMap {
   'workbench.activity': InstanceActivityPayload
   /** An executor instance on the workbench started, changed or ended; the workbench is the same in every conversation. */
   'workbench.update': InstanceRow
+  /** A workspace was made, prepared, archived, brought back or deleted; read workspace.list. */
+  'workspaces.changed': Empty
 }
 export type EventName = keyof EventMap
 export const EVENT_NAMES = [
   'bots.changed',
   'command.update',
   'conversations.changed',
+  'dictations.changed',
   'executor.accounts',
   'executor.usage',
   'marketplace.changed',
@@ -2144,6 +2429,7 @@ export const EVENT_NAMES = [
   'routine.finished',
   'routines.changed',
   'server.ready',
+  'speech.changed',
   'status.update',
   'subagent.update',
   'terminal.exit',
@@ -2154,7 +2440,8 @@ export const EVENT_NAMES = [
   'tool.start',
   'update.ended',
   'workbench.activity',
-  'workbench.update'
+  'workbench.update',
+  'workspaces.changed'
 ] as const satisfies readonly EventName[]
 /** Events that belong to a conversation: they carry its id and their number. */
 export const CONVERSATION_EVENT_NAMES = [

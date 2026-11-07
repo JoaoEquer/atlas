@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 
 import { t } from '@/i18n'
 import type { MemoryEntries as Entries, MemoryEdit } from '@/protocol/protocol.generated'
@@ -15,9 +15,22 @@ type Target = Entries['target']
  * (step 15b): each entry read, edited or removed, and one added, with the limit in characters in
  * view. Every edit names the exact entry it changes and goes through
  * the memory tool's own door on the server, so an entry the agent changed meanwhile is refused, not
- * overwritten. Read again whenever it shows or the home changes.
+ * overwritten. Read again whenever it shows, the home changes or its limit does (`limit`, the
+ * setting as written; `children`, the field that edits it).
  */
-export function MemoryEntries({ hint, target, title }: { hint: string; target: Target; title: string }) {
+export function MemoryEntries({
+  children,
+  hint,
+  limit,
+  target,
+  title
+}: {
+  children?: ReactNode
+  hint: string
+  limit?: null | string
+  target: Target
+  title: string
+}) {
   const home = useStore($home)
   const [read, setRead] = useState<Entries | null>(null)
   const [editing, setEditing] = useState<null | number>(null)
@@ -46,7 +59,7 @@ export function MemoryEntries({ hint, target, title }: { hint: string; target: T
     return () => {
       live = false
     }
-  }, [home, target])
+  }, [home, target, limit])
 
   const run = async (edit: Omit<MemoryEdit, 'target'>): Promise<boolean> => {
     setWorking(true)
@@ -76,6 +89,7 @@ export function MemoryEntries({ hint, target, title }: { hint: string; target: T
         )}
       </div>
       <p className="text-sm text-muted-foreground">{hint}</p>
+      {children}
       {read && (
         <code className="block truncate text-xs text-muted-foreground" title={read.path}>
           {read.path}

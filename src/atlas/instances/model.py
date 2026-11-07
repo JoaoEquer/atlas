@@ -41,10 +41,12 @@ WATCH_INTERVAL = "PT1M"
 
 
 class Transport(StrEnum):
-    """How the app reaches a machine. `relay` comes with Atlas Cloud (step 20)."""
+    """How the app reaches a machine: its tailnet, an SSH tunnel, or a relay both dial out to
+    (step 20)."""
 
     TAILSCALE = "tailscale"
     SSH = "ssh"
+    RELAY = "relay"
 
 
 def is_tailnet(address: str) -> bool:
@@ -87,6 +89,16 @@ def dump_always_on(state: AlwaysOn) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class RelayAddress:
+    """Where a home waits at a relay (step 20): the relay's `wss://` address, the home's room,
+    and the key of the tunnel, base64url."""
+
+    url: str
+    room: str
+    key: str
+
+
+@dataclass(frozen=True, slots=True)
 class ConnectionCode:
     """What another machine's app needs to open a home here: the home's name, the port its server
     listens on, its token, and the machine's tailnet name or address when the home is open (an
@@ -96,11 +108,15 @@ class ConnectionCode:
     port: int
     token: str
     tailnet: str | None = None
+    #: The relay the home waits at (step 20): its address, the home's room, and the key only the
+    #: home and its apps hold.
+    relay: RelayAddress | None = None
 
     @property
     def transports(self) -> tuple[Transport, ...]:
         """The transports this code can be used over."""
-        return (Transport.TAILSCALE, Transport.SSH) if self.tailnet else (Transport.SSH,)
+        found = (Transport.TAILSCALE, Transport.SSH) if self.tailnet else (Transport.SSH,)
+        return (*found, Transport.RELAY) if self.relay else found
 
 
 def encode_code(code: ConnectionCode) -> str:
@@ -108,6 +124,8 @@ def encode_code(code: ConnectionCode) -> str:
     data: dict[str, Any] = {"home": code.home, "port": code.port, "token": code.token}
     if code.tailnet:
         data["tailnet"] = code.tailnet
+    if code.relay:
+        data["relay"] = {"url": code.relay.url, "room": code.relay.room, "key": code.relay.key}
     raw = json.dumps(data, separators=(",", ":")).encode()
     return CODE_PREFIX + base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -140,7 +158,25 @@ def decode_code(text: str) -> ConnectionCode:
         and (tailnet is None or (isinstance(tailnet, str) and _is_host(tailnet)))
     ):
         raise CodeError("This code is cut or damaged; copy it again, whole.")
-    return ConnectionCode(home, cast("int", port), token, tailnet)
+    return ConnectionCode(home, cast("int", port), token, tailnet, _relay(fields.get("relay")))
+
+
+def _relay(value: object) -> RelayAddress | None:
+    """A code's relay, or `None`; raises `CodeError` when it is there but damaged."""
+    if value is None:
+        return None
+    fields = cast("dict[str, object]", value) if isinstance(value, dict) else {}
+    url, room, key = fields.get("url"), fields.get("room"), fields.get("key")
+    if not (
+        isinstance(url, str)
+        and url.startswith(("wss://", "ws://"))
+        and isinstance(room, str)
+        and room
+        and isinstance(key, str)
+        and len(key) == 43
+    ):
+        raise CodeError("This code is cut or damaged; copy it again, whole.")
+    return RelayAddress(url, room, key)
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,13 +9,13 @@ from types import ModuleType
 
 import httpx2
 
-from atlas.plugins import BUNDLED_FOLDER, Executor
+from atlas.plugins import OFFICIAL_FOLDER, Executor
 from atlas.plugins.store import import_plugin
 
 #: The fake `gemini`, as the plugin's `program` setting names a program and its arguments.
 FAKE = [sys.executable, str(Path(__file__).parent / "fake_gemini.py")]
 #: Where the plugin sits.
-FOLDER = BUNDLED_FOLDER / "gemini-cli"
+FOLDER = OFFICIAL_FOLDER / "gemini-cli"
 
 
 def plugin_module(name: str) -> ModuleType:

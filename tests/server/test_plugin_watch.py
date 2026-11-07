@@ -86,3 +86,20 @@ def test_a_saved_plugin_is_loaded_again_by_the_server_serving_it(
         listed = client.result("plugin.reload")["plugins"]
         assert [p["name"] for p in listed if p["name"] == "video"] == ["video"]
         assert client.result("plugin.call", call) == {"result": "three"}
+
+
+def test_a_call_made_while_the_plugins_load_waits_for_them(
+    serve: Serve, home: Home, vault: Vault
+) -> None:
+    folder = home.plugins_folder / "slow"
+    (folder / ".claude-plugin").mkdir(parents=True)
+    manifest = {"name": "slow", "atlas": {"api": 17, "calls": ["which"]}}
+    (folder / ".claude-plugin" / "plugin.json").write_text(json.dumps(manifest), "utf-8")
+    slow = "import time\n\ntime.sleep(1)\n" + CALL.format(said="loaded")
+    (folder / "__init__.py").write_text(slow, "utf-8")
+    _on(Plugins(home, Database(home.database_file), vault), "slow")
+
+    with serve().client() as client:
+        said = client.call("plugin.call", {"plugin": "slow", "name": "which", "params": None})
+
+    assert said.get("result") == {"result": "loaded"}, said

@@ -6,6 +6,10 @@
 import type { MarketplaceList, MarketplacePage, MarketplaceRow } from '@/protocol/protocol.generated'
 
 export type MarketKind = MarketplaceRow['kind']
+export type MarketSource = MarketplaceRow['source']
+
+/** The outside catalogs (step 24), in their order on screen. */
+export const OUTSIDE: Exclude<MarketSource, 'atlas'>[] = ['mcp-registry', 'claude-plugins', 'skills.sh']
 
 /** The tabs, in their order on screen. */
 export const KINDS: MarketKind[] = ['plugin', 'skill', 'mcp', 'executor']
@@ -70,15 +74,26 @@ export function actionOf(row: MarketplaceRow): MarketAction {
   return row.state === 'on' ? 'on' : 'installed'
 }
 
-/** The rows a tab shows for a search: the Atlas team's first, then the community's, each by title. */
+/**
+ * The rows a tab shows for a search: the Atlas team's first, then the community's, each by title;
+ * then each outside catalog's (step 24), as the server found them for the search, in its order.
+ */
 export function shown(
   list: MarketplaceList | null,
   kind: MarketKind,
   query: string
-): { community: MarketplaceRow[]; official: MarketplaceRow[] } {
+): {
+  community: MarketplaceRow[]
+  official: MarketplaceRow[]
+  outside: { rows: MarketplaceRow[]; source: Exclude<MarketSource, 'atlas'> }[]
+} {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-  const rows = (list?.items ?? [])
-    .filter(row => row.kind === kind)
+  const ofKind = (list?.items ?? []).filter(row => row.kind === kind)
+  const outside = OUTSIDE.map(source => ({ rows: ofKind.filter(row => row.source === source), source })).filter(
+    shelf => shelf.rows.length > 0
+  )
+  const rows = ofKind
+    .filter(row => row.source === 'atlas')
     .filter(row => {
       const text = `${row.name} ${row.title} ${row.summary} ${row.author}`.toLowerCase()
 
@@ -88,7 +103,8 @@ export function shown(
 
   return {
     community: rows.filter(row => row.tier === 'community'),
-    official: rows.filter(row => row.tier === 'official')
+    official: rows.filter(row => row.tier === 'official'),
+    outside
   }
 }
 

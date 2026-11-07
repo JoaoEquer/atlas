@@ -21,10 +21,11 @@ atlas plugins new my-plugin --folder ~/code   # or in a folder of yours, install
 
 `new` writes the smallest plugin that works: a manifest, a tool and a skill. `validate` loads it
 as Atlas does, in a home of its own that is thrown away after, and says what it registers and what
-is wrong. Then turn it on in the app, under **Settings**, **Extensions**, on its **Plugins** tab (or
+is wrong. Then turn it on in the app, under **Extensions**, in the sidebar, on its **Plugins** tab (or
 `atlas plugins enable my-plugin`): Atlas
 shows what it declares, and it runs only once you consent. A plugin that declares something new
-after an update is turned off until you consent again.
+after an update is turned off until you consent again: its card says so, and an executor it brings
+says so in the sidebar.
 
 A plugin's Python runs inside Atlas with your permissions. There is no sandbox.
 
@@ -79,7 +80,7 @@ what it keeps while it runs (caches, `node_modules`, renders) goes in its data f
 - `tools`, `channels` and `executors` name what its Python registers. Registering anything it
   does not name fails the plugin.
 - `secrets` are read from the vault, and only those named (`ctx.secret`). The user stores them on
-  plugin's card in Settings, Extensions, or with `atlas plugins secret`.
+  plugin's card in Extensions, or with `atlas plugins secret`.
 - `settings` are values the user may change, with their defaults (`ctx.setting`). With `choices`
   (needs `api` 25) the plugin's card lists them rather than taking typed text, and **Other…**
   still types one: a list of values (`["openai", "gemini"]`); `"models"`, the models Atlas's
@@ -92,6 +93,7 @@ what it keeps while it runs (caches, `node_modules`, renders) goes in its data f
 - `network` lists the hosts it reaches. It is shown at consent and not enforced.
 - `hooks` names the events its Python hooks into (needs `api` 15).
 - `readers` names the kinds of attachment its Python reads into text, `audio` (needs `api` 21).
+- `probes` names the sources of events its Python brings for routines (needs `api` 30).
 - `desktop` names what its screen does outside the app's window (needs `api` 23 and a screen):
   `shortcut`, a key heard in every program, and `paste`, text pasted into the program in focus.
 
@@ -211,8 +213,8 @@ stops when it is turned off.
   itself read-only (`readOnlyHint`), as Claude Code asks before a plugin's MCP tools. A plugin
   whose server only reads may say `"trust": "full"` in its entry.
 - A remote server that signs in with OAuth needs nothing more than its address: Atlas finds out
-  when the server asks, leaves it out until you sign in, and connects it once you run
-  `atlas mcp login plugin_<plugin>_<server>`.
+  when the server asks, leaves it out until you sign in, and connects it once you press **Sign
+  in** on the plugin's card, or run `atlas mcp login plugin_<plugin>_<server>`.
 
 An MCP server's tools reach the model behind the tool search, like every MCP tool.
 
@@ -265,8 +267,8 @@ may be `async`. A stop that raises is logged, and the others still run.
 
 ## Readers
 
-A reader turns one kind of attachment into text before the model reads it: the voice plugin
-writes down what an audio file says. Declare it under `atlas.readers` (`"api": 21`), and register
+A reader turns one kind of attachment into text before the model reads it: a service of your own
+that writes down what an audio file says, in place of Atlas's (Settings, Voice). Declare it under `atlas.readers` (`"api": 21`), and register
 it:
 
 ```python
@@ -283,11 +285,60 @@ def register(ctx: PluginContext) -> None:
 - **It reads every such file the user sends,** dropped in the app or sent on a channel, before
   the turn. What it returns goes to the model in the file's note, and Atlas keeps it with the
   file, so each is read once.
-- **One reader a kind:** when two plugins read audio, the first loaded reads it, and the other is
-  logged.
+- **One reader a kind:** a plugin's reader reads audio before Atlas's own; when two plugins read
+  it, the first loaded reads it, and the other is logged.
 - **It has 2 minutes.** One that raises, returns nothing or runs out leaves the file's note as it
   was, and the turn goes on.
 - `audio` is the only kind for now.
+
+## Programs it fetches
+
+A plugin whose service is reached through a program (GitHub through `gh`) can fetch that program
+when the computer has none, so nobody opens a terminal, and put it where the model's commands find
+it (`"api": 31`):
+
+```python
+def register(ctx: PluginContext) -> None:
+    ctx.add_programs(ctx.data_folder / "bin")  # what lands there later is found too
+```
+
+- **Only a folder of its own data**, `ctx.data_folder` or inside it; any other raises.
+- **First on the `PATH`** of the commands the model runs, while the plugin is on.
+- **Pin what you fetch:** a version and its SHA-256, and refuse a download whose digest differs.
+  The GitHub plugin Atlas ships does so for `gh`.
+
+## Probes
+
+A probe is a source of events for routines: it looks at what your plugin watches (new issues on
+GitHub, the next meetings in a calendar, unread mail) with no model and no cost, and a routine
+whose probe it is runs its prompt only when the probe found something new. Declare it under
+`atlas.probes` (`"api": 30`), and register it:
+
+```python
+from pathlib import Path
+
+
+def register(ctx: PluginContext) -> None:
+    async def issues(state: Path) -> str:
+        return await my_new_issues(since=state / "cursor")
+
+    ctx.register_probe("issues", issues)
+```
+
+The user makes a routine with it as its probe, by its full name:
+
+```bash
+atlas routines create issues --schedule "every 10m" --probe "plugin:github:issues" --prompt "Triage the new issues below."
+```
+
+- **Return what is there now, as text.** Atlas compares it with what last woke the routine: the
+  same text twice wakes it once, and empty text wakes nothing. What is new reaches the prompt
+  marked as text from outside.
+- **`state` is a folder of the routine's own** in the user's Atlas folder, the one a probe command
+  gets as `ATLAS_PROBE_STATE`: keep where you stopped there, so each routine has its own.
+- **It has 2 minutes.** One that raises or runs out is a failed look; at the third in a row the
+  user is told once, as a failed run.
+- **A routine whose plugin is off** fails each look, and says which probe is missing.
 
 ## Channels
 
@@ -346,7 +397,7 @@ def register(ctx: PluginContext) -> None:
   when the plugin is on and stops when it is turned off.
 - **`run` receives until it is cancelled.** It returns or raises only when it cannot go on; Atlas
   says so and does not start it again. `host.failed(reason)` says why first (a refused token), on
-  the plugin's card in Settings, Extensions.
+  the plugin's card in Extensions.
 - **`Inbound.user` is a stable id**, never a name: pairing lets people in by it. `name` is what the
   user sees when someone asks to pair.
 - **Files people send** go in `Inbound.files` (`"api": 7`), each an `InboundFile` with its `name`
@@ -354,8 +405,8 @@ def register(ctx: PluginContext) -> None:
   app.
 - **`send_file`** (`"api": 22`) sends a file a tool made; a channel without it gets a line naming
   the file instead.
-- The Telegram plugin Atlas ships is a whole channel:
-  [src/atlas/plugins/bundled/telegram](https://github.com/marqueskaio/atlas/tree/main/src/atlas/plugins/bundled/telegram).
+- The Telegram plugin Atlas makes is a whole channel:
+  [plugins/telegram](https://github.com/marqueskaio/atlas/tree/main/plugins/telegram).
 
 ## Executors
 
@@ -425,7 +476,15 @@ def register(ctx: PluginContext) -> None:
   | `account_folders` | `Executor.account_folder`, `new_account_folder`, `for_account`; `ExecutorSpec.resume_from` | 12 |
   | `delete_sessions` | `Executor.delete_session` | 12 |
   | `files` | `ExecutorInstance.prompt(files=)`, `ExecutorFile`, `ExecutorSpec.directories` | 13 |
+  | `updates` | `Executor.update_source`, `UpdateSource` | 27 |
+  | `modes` | Its permission modes, its default first, `auto` its automatic one; `ExecutorInstance.set_mode` | 28 |
 
+- **`update_source`** says where the harness's newest version is published (an npm package and
+  its dist-tag, a WinGet package, or an https address that answers the version as text) and the
+  command that updates the install it found, or `None` when that install updates some other way.
+  Atlas reads the version itself, at most once a day, so the plugin declares no host for it; the
+  app shows "Update available" on the executor's row, and the command runs only when the user
+  clicks **Update**.
 - **`ExecutorInstance`** is one running harness: `prompt` runs a turn until its `Finished` (Atlas
   never calls it while a turn runs), and `stop` ends it with every process it started.
 - **What happens is an event, handed to `host.event`:** `Started` (the session's id), `Said`,
@@ -438,10 +497,64 @@ def register(ctx: PluginContext) -> None:
   harness: `TranscriptEntry` items in a `Transcript`.
 - **A harness that speaks the Agent Client Protocol** needs no channel of its own:
   `atlas.plugins.acp` (`"api": 18`) starts it, speaks ACP over its stdio and turns its updates
-  into these events. The Gemini CLI and DeepSeek plugins Atlas ships use it:
-  [src/atlas/plugins/bundled/gemini-cli](https://github.com/marqueskaio/atlas/tree/main/src/atlas/plugins/bundled/gemini-cli),
-  [src/atlas/plugins/bundled/deepseek](https://github.com/marqueskaio/atlas/tree/main/src/atlas/plugins/bundled/deepseek). The Claude Code and
+  into these events. The Gemini CLI and DeepSeek plugins Atlas makes use it:
+  [plugins/gemini-cli](https://github.com/marqueskaio/atlas/tree/main/plugins/gemini-cli),
+  [plugins/deepseek](https://github.com/marqueskaio/atlas/tree/main/plugins/deepseek). The Claude Code and
   Codex plugins speak their harness's own protocol.
+
+## Other accounts
+
+Atlas runs each harness on your own login, one account. Running them on several accounts at once,
+and moving a session to another account when its plan runs out, is a plugin's: the **accounts**
+plugin Atlas makes does it, and one plugin a home may bring it (`"accounts": true`, `"api": 29`).
+
+```python
+from pathlib import Path
+
+from atlas.plugins.sdk import HandOver, NextStop, OtherAccount, PluginContext
+
+
+class MyAccounts:
+    def __init__(self, ctx: PluginContext) -> None:
+        self.ctx = ctx
+
+    def accounts(self, executor):
+        return [OtherAccount("1a2b3c4d", "company-b", Path.home() / ".claude-company-b")]
+
+    def folder_account(self, executor, folder):
+        return ""  # the harness's own login
+
+    def hand_over(self, executor):
+        return HandOver(enabled=True, compact=True, order=("", "1a2b3c4d"))
+
+    async def next_stop(self, name, conversation):
+        on = "claude-code@1a2b3c4d"
+        return NextStop(on) if await self.ctx.workbench.available(on) else None
+
+    def keep_route(self, conversation, executors): ...
+
+    def carry_route(self, source, conversation): ...
+
+
+def register(ctx: PluginContext) -> None:
+    ctx.register_accounts(MyAccounts(ctx))
+```
+
+- **`Accounts`** says which accounts each executor has beside its own login (`OtherAccount`: an
+  id, a nickname, the harness's folder for it), the account a folder's new sessions start on
+  (`folder_account`), and whether and in what order they take over at a plan's limit
+  (`hand_over`, a `HandOver`). Atlas runs each account as an executor of its own,
+  `<executor>@<id>`, made by the harness's plugin on that folder (`for_account`).
+- **At a plan's limit**, Atlas asks `next_stop`: a `NextStop` names where the session goes on
+  (an executor on an account, the model and effort there, whether it compacts first, and whether
+  a route chose it); a string says why none can; `None` leaves the session where it is, and
+  Atlas goes on there when the limit resets. Carrying the session is Atlas's: a copy on the same
+  harness, or a new session whose first prompt is a handoff packet on another.
+- **A route** is the stops one session goes on to, in order: `keep_route` keeps one the model
+  gave a delegated task, and `carry_route` keeps a card's when its session opens again.
+- **`ctx.workbench`** is what Atlas lends it (a `WorkbenchHost`): `executor(name)`,
+  `executors()`, `available(name)` (installed, logged in, not at its limit), `limited(name)`,
+  `running(name)`, and `accounts_changed(executor)`, which every screen hears.
 
 ## Two examples
 
@@ -576,7 +689,26 @@ export default {
 
 - `area: 'page'` is a page of the main area, with an entry in the sidebar; `area: 'panel'` is a tab
   of the side panel; `area: 'box'` is a button beside the words of the conversation's box, as the
-  voice plugin's microphone.
+  voice plugin's live conversation.
+- With `"api": 29` (screen version 4), `area: 'session'` sits by an executor's session box and
+  `area: 'executor'` atop an executor's tree in the sidebar, once opened; `render(place)` gets where
+  it is: `{ executor, folder, instance, conversation }` for a session (`instance` and
+  `conversation` are `null` before it starts), `{ executor, base, account, title }` for an
+  executor. The accounts plugin puts its pill and its accounts there.
+- Screen version 5 adds `area: 'connection'`, a part of the first run's Connections step, given
+  `{ away }`: calling it leaves the first run waiting a band away, in a new conversation, for a
+  setup Atlas leads there. The GitHub and Google Workspace plugins draw their connections there.
+- Screen version 6 adds `area: 'workspace'`, atop a workspace's Changes in the side panel, given
+  `{ id, folder, branch, base, root }` (its id for the server's `workspace.*` methods, through
+  `host.request`); and `area: 'project'`, under a project among the workspaces, given
+  `{ root, start(name, prompt) }`: `start` makes a workspace of that project and opens a session
+  there that begins with `prompt`. The GitHub plugin puts a workspace's pull request and its checks
+  in the first, and the project's issues, each starting a workspace, in the second.
+- `host.state.workbench` (the executors and their instances) and `host.state.accounts` (each
+  harness's accounts, once read) are the app's, `host.readAccounts(executor)` reads an executor's
+  accounts again, and `host.sessionAccount` moves the session on screen to another account of its
+  executor: `check(account)` says what changes (or, with no instance running, makes it the account
+  its next start runs on), and `switch(account, note)` goes on there in a copy.
 - `host.insertText(text)` puts words after what the conversation's box holds, for the user to read
   and send (a dictation); `host.send(text)` sends a message as the box does, making the
   conversation when none is open.
@@ -586,8 +718,8 @@ export default {
   text where the app's cursor is when its window has the focus (`app`), else pastes it in the
   program in focus (`pasted`), or leaves it on the clipboard when that program takes no keys
   (`copied`). `ctx.bar({ text, tone })` shows a floating bar that never takes the focus (`tone`:
-  `recording`, `working`, `done`, `error`), `null` hides it. The voice plugin's dictation anywhere
-  uses all three.
+  `recording`, `working`, `done`, `error`), `null` hides it. Atlas's own dictation anywhere does
+  the same with them.
 - `ctx.call(name, params)` calls the plugin's Python, which registers it with
   `ctx.register_call(name, run)` and names it under `atlas.calls` (`"api": 17`). It runs where
   Atlas runs, also when the app is on another machine.
@@ -600,7 +732,7 @@ export default {
 ## While you write it
 
 Save, and Atlas loads it again: its Python, its skills, its hooks and its screen, in the app that
-is open. A save that breaks it says why on its card in Settings, Extensions; the next save that
+is open. A save that breaks it says why on its card in Extensions; the next save that
 fixes it runs again. **Reload**, on the Plugins tab there, does the same on asking. Keep what the plugin writes in its
 data folder (`${CLAUDE_PLUGIN_DATA}`), not in its own: a plugin writing in its folder loads itself
 again and again.
@@ -688,9 +820,9 @@ image: https://raw.githubusercontent.com/your-github-account/atlas-video/<sha>/c
 
 ## What the SDK offers
 
-Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 25), and the ACP
+Everything a plugin's Python may import is in `atlas.plugins.sdk` (`API_VERSION` 31), and the ACP
 client in `atlas.plugins.acp`. Everything a screen may import is in `@atlas/plugin-sdk`
-(`SCREEN_API` 3). Each name below has its section above. A test keeps this list whole: a name the
+(`SCREEN_API` 6). Each name below has its section above. A test keeps this list whole: a name the
 SDK adds and the guide does not name fails it.
 
 **`register(ctx)` gets a `PluginContext`:**
@@ -710,6 +842,10 @@ SDK adds and the guide does not name fails it.
 | `ctx.notify(conversation, text)` | a message that starts a turn | 16 |
 | `ctx.register_call(name, run)` | what the screen's `ctx.call` reaches | 17 |
 | `ctx.register_reader(kind, run)` | an attachment read into text (Readers) | 21 |
+| `ctx.register_probe(name, run)` | a routine's source of events, a `ProbeRun` (Probes) | 30 |
+| `ctx.add_programs(folder)` | a folder of its data first on the model's `PATH` (Programs it fetches) | 31 |
+| `ctx.memory_limits()` | the memory's limits as the user set them, a `MemoryLimits` (`user`, `memory`), read only; `None` in a terminal command | 26 |
+| `ctx.register_accounts(accounts)`, `ctx.workbench` | the harnesses' other accounts (Other accounts) | 29 |
 
 **What Atlas hands what it registered:**
 
@@ -722,14 +858,15 @@ SDK adds and the guide does not name fails it.
   that starts an `ExecutorInstance`, with `ExecutorSpec`, `Capabilities`, `Detection`, `Account`,
   `Question`, `Option`, `Permission`, `Verdict`, `Transcript`, `TranscriptEntry`, `SessionInfo`,
   `SessionFolder`, `ModelChoice`, `Connector`, `SlashCommand`, `PlanUsage`, `UsageWindow`,
-  `ExecutorFile` and `ExecutorError`; its events are `Started`, `Said`, `Thought`, `Called`,
+  `ExecutorFile`, `UpdateSource` and `ExecutorError`; its events are `Started`, `Said`, `Thought`, `Called`,
   `Returned`, `LimitReached`, `Compacted`, `Finished`, `UsageChanged` and `CommandsChanged`.
 
 **A screen's `register(ctx)` gets:** `ctx.plugin`, `ctx.register`, `ctx.call`, `ctx.onEvent`,
 `ctx.onDispose`, `ctx.setInterval`, `ctx.setTimeout`, `ctx.storage` (`get`, `set`, `remove`), and
 with `desktop` declared `ctx.shortcut`, `ctx.paste` and `ctx.bar`. From `@atlas/plugin-sdk` it
-imports `useValue` and `host`: `host.state` (`connection`, `conversation`, `home`),
-`host.request`, `host.openPage`, `host.send`, `host.insertText` and `host.togglePanel`.
+imports `useValue` and `host`: `host.state` (`connection`, `conversation`, `home`, `workbench`,
+`accounts`), `host.request`, `host.openPage`, `host.send`, `host.insertText`, `host.togglePanel`,
+`host.readAccounts` and `host.sessionAccount`.
 
 ## Themes
 
@@ -769,5 +906,5 @@ sees the system's look until it is on again.
 ## Not yet
 
 Atlas lists a plugin that brings any of these, and refuses to turn it on: LSP servers, output
-styles and workflows. A screen has a page and a panel; a status bar and a palette are not in the
-app.
+styles and workflows. A screen has a page, a panel, a button in the box, a part of an
+executor's session and sidebar place, and one of the first run's Connections; a status bar and a palette are not in the app.

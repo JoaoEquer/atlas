@@ -52,17 +52,22 @@ jobs:
       - name: Boundaries
         run: uv run lint-imports
       - name: Dependencies
-        run: uv run deptry src
+        run: uv run deptry src plugins
       - name: Tests
         run: uv run pytest
 
   # The desktop app's gates, on both systems too: the app is used on Windows, and starting and
-  # stopping its server is what differs between them (docs/ARCHITECTURE.md, Desktop app).
+  # stopping its server is what differs between them (docs/ARCHITECTURE.md, Desktop app). Windows
+  # runs the end-to-end files about twice as slowly, so it splits them between two machines; the
+  # app's other gates run on the first.
   desktop:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - { os: ubuntu-latest, shard: "" }
+          - { os: windows-latest, shard: "1/2" }
+          - { os: windows-latest, shard: "2/2" }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -87,12 +92,16 @@ jobs:
           sudo apt-get install -y -qq xvfb libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6             xdg-utils libatspi2.0-0 libdrm2 libgbm1 libasound2t64
       - run: npm ci
       - name: Types
+        if: matrix.shard != '2/2'
         run: npm run typecheck
       - name: Lint
+        if: matrix.shard != '2/2'
         run: npm run lint
       - name: Format
+        if: matrix.shard != '2/2'
         run: npm run format:check
       - name: Tests
+        if: matrix.shard != '2/2'
         run: npm test
       - name: Build
         run: npm run build
@@ -101,21 +110,51 @@ jobs:
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" npx playwright test
         env:
           CI: "true"
+      # A dependency project runs in full on every shard, so the files that run alone are a step of
+      # their own, on the last machine, after its share of the others.
       - name: End to end (Windows)
         if: runner.os == 'Windows'
-        run: npx playwright test
+        run: npx playwright test --project=app --shard=${{ matrix.shard }}
+        env:
+          CI: "true"
+      - name: End to end, alone (Windows)
+        if: runner.os == 'Windows' && matrix.shard == '2/2'
+        run: npx playwright test --project=alone --no-deps
         env:
           CI: "true"
       - name: Failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-e2e-${{ matrix.os }}
+          name: desktop-e2e-${{ matrix.os }}-${{ strategy.job-index }}
           path: |
             apps/desktop/test-results
             apps/desktop/playwright-report
           retention-days: 14
           if-no-files-found: ignore
+
+  # The Setup (docs/ARCHITECTURE.md, The Setup): its types, lint, format and tests, which run a
+  # stand-in installer through PowerShell on Windows and bash on Linux. Its files are built and
+  # proved by setup.yml.
+  setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/setup/package-lock.json
+      - run: npm ci
+      - name: Checks
+        run: npm run check
 
   # The website (ROADMAP, step 19): its types, lint, format and tests, then a build that checks
   # every page and file agents read. The whole history, because the changelog page is main's log.
@@ -152,8 +191,9 @@ jobs:
       - run: uv sync --frozen
       - name: Build
         run: docker build -t atlas:ci .
+      # One process: the tests share one stack, and one reads what an earlier one left in it.
       - name: The image's tests
-        run: uv run pytest tests/docker --no-cov
+        run: uv run pytest tests/docker --no-cov -n0
         env:
           ATLAS_TEST_IMAGE: atlas:ci
       # Step 15: the app's SSH tunnel against a real sshd beside Atlas, on the image just built.
