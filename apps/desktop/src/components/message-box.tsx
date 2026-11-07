@@ -6,7 +6,6 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState
 } from 'react'
@@ -131,17 +130,6 @@ export function MessageBox(props: MessageBoxProps) {
     setHidden(null)
     setActive(0)
   }, [draftKey])
-
-  // The box grows with what is typed, up to its most, then scrolls (asked for by the user on
-  // 22/10/2026, where a long prompt read through one line).
-  useLayoutEffect(() => {
-    const element = box.current
-
-    if (element) {
-      element.style.height = 'auto'
-      element.style.height = `${String(element.scrollHeight + element.offsetHeight - element.clientHeight)}px`
-    }
-  }, [text])
 
   useEffect(() => {
     const back = restore?.()
@@ -366,7 +354,10 @@ export function MessageBox(props: MessageBoxProps) {
         {actions}
         <textarea
           aria-label={label}
-          className="max-h-[40vh] min-h-11 flex-1 resize-none overflow-y-auto rounded-lg border border-border-strong bg-raised px-3 py-2.5 placeholder:truncate"
+          // It grows with what is typed, up to its most, then scrolls (asked for by the user on
+          // 22/10/2026, where a long prompt read through one line). The browser sizes it, so it
+          // follows its width too: a height measured here stayed when the window widened.
+          className="field-sizing-content max-h-[40vh] min-h-11 flex-1 resize-none overflow-y-auto rounded-lg border border-border-strong bg-raised px-3 py-2.5 placeholder:truncate"
           data-testid={props.testId}
           disabled={blocked}
           onChange={event => {
