@@ -1,7 +1,9 @@
 """What a card of Claude Code's plugin directory says: only what the directory gives."""
 
 import json
+import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -424,3 +426,74 @@ def test_a_skill_s_picture_is_its_repository_s_owner() -> None:
 def test_an_item_with_no_picture_shows_who_owns_its_repository() -> None:
     assert publisher_picture("cloudflare/skills") == "https://github.com/cloudflare.png?size=96"
     assert publisher_picture("") == ""
+
+
+def test_one_plugin_read_by_name_asks_no_manifest_and_no_account(tmp_path: Path) -> None:
+    reads: list[str] = []
+    plugin = _plugin(
+        "notes", source={"source": "url", "url": "https://github.com/a/b", "sha": COMMIT}
+    )
+
+    def get(url: str, _limit: int) -> bytes | None:
+        reads.append(url)
+        return _catalog(plugin) if url == CATALOG else b'{"author": {"name": "Acme"}}'
+
+    sources = _reading(get, tmp_path)
+    item = sources.item("claude-plugins:notes")
+
+    assert item is not None
+    assert reads == [CATALOG]
+
+
+def test_the_plugins_listed_are_kept_so_each_read_by_name_asks_nothing_again() -> None:
+    reads: list[str] = []
+    plugins = [
+        _plugin(name, source={"source": "url", "url": "https://github.com/a/b", "sha": COMMIT})
+        for name in ("alpha", "beta", "gamma")
+    ]
+
+    def get(url: str, _limit: int) -> bytes | None:
+        reads.append(url)
+        return _catalog(*plugins) if url == CATALOG else b"{}"
+
+    sources = _reading(get)
+    listed = sources.plugins()
+    asked = len(reads)
+    for item in listed:
+        sources.item(item.name)
+
+    assert reads.count(CATALOG) == 1
+    assert len(reads) == asked
+
+
+def test_two_listings_at_once_read_the_catalog_and_its_manifests_once() -> None:
+    reads: list[str] = []
+
+    def get(url: str, _limit: int) -> bytes | None:
+        reads.append(url)
+        if url == CATALOG:
+            time.sleep(0.2)
+            return _catalog(_plugin("notes"), _plugin("words"))
+        return b"{}"
+
+    sources = _reading(get)
+    with ThreadPoolExecutor(2) as pool:
+        list(pool.map(lambda _: sources.search("x", NOW), range(2)))
+
+    assert reads.count(CATALOG) == 1
+    assert reads.count(_manifest_of("notes")) == 1
+
+
+def test_the_kept_facts_hold_only_what_the_plugins_listed_now_ask_for(tmp_path: Path) -> None:
+    catalog = [_catalog(_plugin("notes"), _plugin("words"))]
+
+    def get(url: str, _limit: int) -> bytes | None:
+        return catalog[0] if url == CATALOG else b"{}"
+
+    _reading(get, tmp_path).plugins()
+    catalog[0] = _catalog(_plugin("notes"))
+    _reading(get, tmp_path).plugins()
+
+    kept = json.loads((tmp_path / FACTS_FILE).read_text(encoding="utf-8"))
+
+    assert list(kept) == [f"{DIRECTORY}@HEAD/plugins/notes"]

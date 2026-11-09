@@ -38,6 +38,7 @@ which reads through the store's `Fetch`.
 import json
 import logging
 import re
+import threading
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
@@ -697,6 +698,9 @@ class Sources:
         self._heads: dict[str, tuple[str, datetime]] = {}
         #: What each manifest and GitHub account said, read from the folder at first.
         self._facts: dict[str, dict[str, str]] | None = None
+        #: Held while the catalog and its facts are read, so two listings at once (each in a
+        #: thread of its own) read them once and never change `_facts` together.
+        self._plugins_lock = threading.Lock()
 
     def search(self, query: str, now: datetime) -> Found:
         """What the sources list for `query`; with none, what each lists first: the registry's
@@ -730,10 +734,10 @@ class Sources:
         return Found(items, problems)
 
     def plugins(self) -> list[Item]:
-        """Every plugin of Claude Code's directory, its catalog read now. Raises
-        `MarketplaceError`."""
+        """Every plugin of Claude Code's directory, its catalog and what their manifests add read
+        now, then kept as a listing's are. Raises `MarketplaceError`."""
         self._plugins = None
-        return self._plugins_read(None) if self._plugins_url else []
+        return self._plugins_read(datetime.now(UTC)) if self._plugins_url else []
 
     def picture(self, name: str) -> str:
         """The picture of a plugin of the directory as last listed; empty for any other."""
@@ -786,7 +790,12 @@ class Sources:
 
     def _plugins_read(self, now: datetime | None) -> list[Item]:
         """The directory's catalog: as last read within the hour, read again, or kept from the
-        last read well when it cannot be read."""
+        last read well when it cannot be read. Manifests and GitHub accounts are asked only when
+        `now` is given (a listing): with none (one item), what was kept of them stands."""
+        with self._plugins_lock:
+            return self._plugins_read_held(now)
+
+    def _plugins_read_held(self, now: datetime | None) -> list[Item]:
         if self._plugins is not None and (now is None or now - self._plugins[1] < PLUGINS_STALE):
             return self._plugins[0]
         try:
@@ -801,7 +810,7 @@ class Sources:
             catalog = kept.encode("utf-8")
             items = self._counted(plugins_items(catalog, self._plugins_repository), catalog)
             return self._manifested(items, catalog, None)
-        items = self._manifested(items, data, now or datetime.now(UTC))
+        items = self._manifested(items, data, now)
         if self._folder is not None:
             self._folder.mkdir(parents=True, exist_ok=True)
             replace_file(self._folder / PLUGINS_FILE, data)
@@ -830,6 +839,8 @@ class Sources:
             return items
         facts = self._kept_facts()
         before = dict(facts)
+        manifests: dict[str, str] = {}
+        accounts: dict[str, str] = {}
         if now is not None:
             manifests = {
                 _facts_key(item): self._plugins_raw_url.format(
@@ -864,6 +875,10 @@ class Sources:
             self._read_facts(
                 facts, accounts, lambda key, data: organization_facts(data, key[1:]), now
             )
+            # What no plugin listed now asks for is dropped, so the kept file stays the catalog's
+            # size: a key pinned to a commit is never stale, and would otherwise stay forever.
+            for key in facts.keys() - manifests.keys() - accounts.keys():
+                del facts[key]
         if facts != before and self._folder is not None:
             self._folder.mkdir(parents=True, exist_ok=True)
             replace_file(self._folder / FACTS_FILE, json.dumps(facts).encode("utf-8"))
