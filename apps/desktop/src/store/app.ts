@@ -1279,6 +1279,13 @@ export class HomeSession {
 
     this.$openSession.set(next)
 
+    // Gone on to another account or harness: the side panel's executor tab, open on the one it
+    // left, follows it, so its plan's usage is the one the session now spends.
+    if (before && next.executor !== before.executor && this.$openExecutor.get() === before.executor) {
+      this.$openExecutors.setKey(next.executor, true)
+      this.followExecutor(next.executor)
+    }
+
     // Gone on to another harness by its route: the box offers that one's models.
     if (next.executor !== before?.executor && this.$executorModels.get()[next.executor] === undefined) {
       void this.refreshExecutorModels(next.executor).catch(() => undefined)
