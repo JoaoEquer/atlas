@@ -1395,6 +1395,34 @@ def test_a_message_sent_while_claude_code_works_reads_back_where_it_entered(
     ]
 
 
+def test_a_background_tasks_notice_is_not_read_back_as_the_users_words(tmp_path: Path) -> None:
+    """As 2.1.325 keeps it: a user line with `origin.kind` `task-notification`, hidden; the chain
+    still goes through it to what was said after."""
+    transcript = plugin_module("transcript")
+    folder = tmp_path / "projects" / "p"
+    folder.mkdir(parents=True)
+    lines = [
+        {"type": "user", "uuid": "a", "parentUuid": None,
+         "message": {"role": "user", "content": "Build it."}},
+        {"type": "user", "uuid": "b", "parentUuid": "a", "origin": {"kind": "task-notification"},
+         "message": {"role": "user", "content": (
+             "<task-notification>\n<task-id>x1</task-id>\n<status>stopped</status>\n"
+             "</task-notification>")}},
+        {"type": "assistant", "uuid": "c", "parentUuid": "b",
+         "message": {"role": "assistant", "content": [{"type": "text", "text": "Stopped."}]}},
+    ]  # fmt: skip
+    (folder / "s1.jsonl").write_text(
+        "\n".join(json.dumps(line) for line in lines), encoding="utf-8"
+    )
+
+    read = transcript.read_transcript(tmp_path, "s1", Path("p"))
+
+    assert [(e.by, e.text) for e in read.entries] == [
+        ("user", "Build it."),
+        ("harness", "Stopped."),
+    ]
+
+
 def test_a_compact_the_user_typed_reads_back_as_its_compaction_where_they_typed_it(
     tmp_path: Path,
 ) -> None:
