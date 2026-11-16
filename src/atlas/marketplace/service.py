@@ -59,7 +59,7 @@ from atlas.marketplace.model import (
     parse_meta,
     parse_removed,
 )
-from atlas.marketplace.sources import Sources
+from atlas.marketplace.sources import Sources, publisher_picture
 from atlas.marketplace.store import (
     MarketplaceStore,
     McpFile,
@@ -139,11 +139,12 @@ class Row:
     source_url: str = ""
     #: What keeps it from installing or running, or why it was retired.
     problem: str | None = None
-    #: Where it comes from (step 24), when its source last published it, and the installs its
-    #: source counts.
+    #: Where it comes from (step 24), when its source last published it, the installs its source
+    #: counts, and the category it files it under.
     source: Source = Source.ATLAS
     updated: str = ""
     installs: int | None = None
+    category: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -675,12 +676,14 @@ class Marketplace:
             update=record is not None
             and state not in (State.AVAILABLE, State.RETIRED)
             and self._revision(item) not in (None, record.revision),
-            image=item.image,
+            image=item.image
+            or (publisher_picture(item.repo) if item.source is Source.ATLAS else ""),
             source_url=item.source_url,
             problem=problem,
             source=item.source,
             updated=item.updated,
             installs=item.installs,
+            category=item.category,
         )
 
     def _revision(self, item: Item) -> str | None:
@@ -711,6 +714,7 @@ class Marketplace:
                 else "The marketplace no longer lists it."
             ),
             source=record.source,
+            image=self.sources.picture(record.name) if self.sources is not None else "",
         )
 
     def _state(

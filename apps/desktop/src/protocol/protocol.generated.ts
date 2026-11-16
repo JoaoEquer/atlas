@@ -784,6 +784,8 @@ export interface MarketplaceRow {
   updated: string
   /** The installs its source counts; `null` when it counts none. */
   installs: number | null
+  /** The category its source files it under, as the source writes it; empty when it says none. */
+  category: string
 }
 export interface MarketplaceRef {
   name: string

@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import type { MarketplaceList, MarketplacePage, MarketplaceRow } from '@/protocol/protocol.generated'
 
-import { actionOf, counts, resolved, shown, withRow } from './marketplace'
+import { actionOf, categories, counts, organized, plainTitle, resolved, shown, withRow } from './marketplace'
 
 function row(name: string, change: Partial<MarketplaceRow> = {}): MarketplaceRow {
   return {
     author: 'someone',
     image: '',
+    category: '',
     installs: null,
     kind: 'skill',
     license: 'MIT',
@@ -74,6 +75,95 @@ describe('a tab shows its kind, the Atlas team first', () => {
   it('counts each kind for its tab', () => {
     expect(counts(listing)).toEqual({ executor: 0, mcp: 1, plugin: 0, skill: 3 })
     expect(counts(null)).toEqual({ executor: 0, mcp: 0, plugin: 0, skill: 0 })
+  })
+})
+
+describe('a category filters a tab by what its source files', () => {
+  const filed = (name: string, category: string) => row(name, { category, kind: 'plugin', source: 'claude-plugins' })
+  const list = (items: MarketplaceRow[]): MarketplaceList => ({
+    description: '',
+    items,
+    name: '',
+    problem: null,
+    read_at: null,
+    source_problems: []
+  })
+
+  it('lists the categories of the tab alone, each once with its count, the fullest first', () => {
+    const found = list([filed('a', 'security'), filed('b', 'design'), filed('c', 'design'), filed('d', ''), row('e')])
+
+    expect(categories(found, 'plugin')).toEqual([
+      { count: 2, name: 'design' },
+      { count: 1, name: 'security' }
+    ])
+    expect(categories(found, 'skill')).toEqual([])
+  })
+
+  it('keeps only the rows filed under it, and all of them with none', () => {
+    const found = list([filed('a', 'security'), filed('b', 'design'), row('own', { kind: 'plugin' })])
+    const names = (category: string) =>
+      shown(found, 'plugin', '', category)
+        .outside.flatMap(shelf => shelf.rows)
+        .map(item => item.name)
+
+    expect(names('design')).toEqual(['b'])
+    expect(names('')).toEqual(['a', 'b'])
+    expect(shown(found, 'plugin', '', 'design').community).toEqual([])
+    expect(shown(found, 'plugin', '').community.map(item => item.name)).toEqual(['own'])
+  })
+})
+
+describe('a catalog of hundreds opens organized', () => {
+  const plugin = (name: string, category: string, problem: null | string = null) =>
+    row(name, { category, kind: 'plugin', problem, source: 'claude-plugins' })
+  const many = (prefix: string, count: number, category: string) =>
+    Array.from({ length: count }, (_, at) => plugin(`${prefix}${String(at)}`, category))
+
+  it('leads with the first twelve, then a short look at the rest of each category, the fullest first', () => {
+    const { groups, top } = organized([
+      ...many('top', 12, 'design'),
+      ...many('dev', 8, 'development'),
+      plugin('s', 'security')
+    ])
+
+    expect(top.map(item => item.name)).toEqual(many('top', 12, 'design').map(item => item.name))
+    expect(groups.map(group => [group.category, group.total, group.rows.length])).toEqual([
+      ['design', 12, 0],
+      ['development', 8, 6],
+      ['security', 1, 1]
+    ])
+  })
+
+  it('puts what cannot install after what can, and keeps every plugin with no category', () => {
+    const { top, unfiled } = organized([
+      plugin('broken', 'design', 'No.'),
+      ...many('ok', 12, 'design'),
+      ...many('u', 2, '')
+    ])
+
+    expect(top.map(item => item.name)).not.toContain('broken')
+    expect(unfiled.map(item => item.name)).toEqual(['u0', 'u1'])
+  })
+})
+
+describe("a plugin's identifier reads as words", () => {
+  const plugin = (title: string, author = '') =>
+    row(`claude-plugins:${title}`, { author, source: 'claude-plugins', title })
+
+  it('splits it, keeps initials as letters and the author as the author writes it', () => {
+    expect(plainTitle(plugin('frontend-design'))).toBe('Frontend Design')
+    expect(plainTitle(plugin('api-security_testing'))).toBe('API Security Testing')
+    expect(plainTitle(plugin('github', 'GitHub'))).toBe('GitHub')
+    expect(plainTitle(plugin('cloudflare', 'cloudflare'))).toBe('Cloudflare')
+    expect(plainTitle(plugin('deploy-on-aws'))).toBe('Deploy on AWS')
+    expect(plainTitle(plugin('typescript-lsp'))).toBe('TypeScript LSP')
+  })
+
+  it('leaves a name the directory gave, and every other source', () => {
+    const named = row('claude-plugins:gc-ai', { source: 'claude-plugins', title: 'GC AI' })
+
+    expect(plainTitle(named)).toBe('GC AI')
+    expect(plainTitle(row('notes-mcp'))).toBe('notes-mcp')
   })
 })
 

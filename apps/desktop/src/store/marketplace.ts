@@ -22,6 +22,8 @@ export interface Market {
   error: null | string
   kind: MarketKind
   query: string
+  /** The category the tab is filtered by, as its source writes it; empty for all of them. */
+  category: string
   /** The item whose page is open, and its page once read. */
   open: null | string
   page: MarketplacePage | null
@@ -39,6 +41,7 @@ export interface Market {
 export const EMPTY_MARKET: Market = {
   brought: [],
   busy: null,
+  category: '',
   confirming: null,
   error: null,
   failed: null,
@@ -77,18 +80,20 @@ export function actionOf(row: MarketplaceRow): MarketAction {
 /**
  * The rows a tab shows for a search: the Atlas team's first, then the community's, each by title;
  * then each outside catalog's (step 24), as the server found them for the search, in its order.
+ * A category keeps only the rows filed under it.
  */
 export function shown(
   list: MarketplaceList | null,
   kind: MarketKind,
-  query: string
+  query: string,
+  category = ''
 ): {
   community: MarketplaceRow[]
   official: MarketplaceRow[]
   outside: { rows: MarketplaceRow[]; source: Exclude<MarketSource, 'atlas'> }[]
 } {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-  const ofKind = (list?.items ?? []).filter(row => row.kind === kind)
+  const ofKind = (list?.items ?? []).filter(row => row.kind === kind && (!category || row.category === category))
   const outside = OUTSIDE.map(source => ({ rows: ofKind.filter(row => row.source === source), source })).filter(
     shelf => shelf.rows.length > 0
   )
@@ -106,6 +111,114 @@ export function shown(
     official: rows.filter(row => row.tier === 'official'),
     outside
   }
+}
+
+/** The categories a tab's items are filed under, as their sources write them, the fullest first. */
+export function categories(list: MarketplaceList | null, kind: MarketKind): { count: number; name: string }[] {
+  const found = new Map<string, number>()
+
+  for (const row of list?.items ?? []) {
+    if (row.kind === kind && row.category) {
+      found.set(row.category, (found.get(row.category) ?? 0) + 1)
+    }
+  }
+
+  return [...found]
+    .map(([name, count]) => ({ count, name }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+}
+
+/** How many plugins lead a catalog, and how many each category shows before its whole list. */
+const MOST_INSTALLED = 12
+const CATEGORY_PREVIEW = 6
+
+/**
+ * A catalog with categories as it opens: the most installed, then a shelf per category, the fullest
+ * first, each a short look at the rest. An item that cannot install comes after the ones that can,
+ * and one with no category keeps a shelf, so every item is reachable.
+ */
+export function organized(rows: MarketplaceRow[]): {
+  groups: { category: string; rows: MarketplaceRow[]; total: number }[]
+  top: MarketplaceRow[]
+  unfiled: MarketplaceRow[]
+} {
+  const ready = [...rows].sort((a, b) => Number(actionOf(a) === 'unavailable') - Number(actionOf(b) === 'unavailable'))
+  const top = ready.slice(0, MOST_INSTALLED)
+  const rest = ready.slice(MOST_INSTALLED)
+  const totals = new Map<string, number>()
+
+  for (const row of ready) {
+    if (row.category) {
+      totals.set(row.category, (totals.get(row.category) ?? 0) + 1)
+    }
+  }
+
+  const groups = [...totals]
+    .sort(([a, one], [b, other]) => other - one || a.localeCompare(b))
+    .map(([category, total]) => ({
+      category,
+      rows: rest.filter(row => row.category === category).slice(0, CATEGORY_PREVIEW),
+      total
+    }))
+
+  return { groups, top, unfiled: rest.filter(row => !row.category) }
+}
+
+/** Words a plugin's name holds that read as letters, not as a word. */
+const INITIALS = new Set('ai amd api aws cli crm css gcp html lsp mcp php pr qa sap sdk seo sql ui ui5 ux'.split(' '))
+
+/** Names a plugin's identifier lowers, as their owners write them. */
+const SPELLED: Record<string, string | undefined> = {
+  bigquery: 'BigQuery',
+  clickhouse: 'ClickHouse',
+  cockroachdb: 'CockroachDB',
+  duckdb: 'DuckDB',
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  mysql: 'MySQL',
+  pagerduty: 'PagerDuty',
+  paypal: 'PayPal',
+  postgresql: 'PostgreSQL',
+  posthog: 'PostHog',
+  sonarqube: 'SonarQube',
+  typescript: 'TypeScript',
+  wordpress: 'WordPress'
+}
+
+/** Words that stay small inside a name. */
+const LINKING = new Set('a and by for in of on the to with'.split(' '))
+
+/**
+ * What a card calls an item. A plugin of Claude Code's directory that gives no display name has only
+ * its identifier, which is written for a command line, so it reads as words here (`api-security`:
+ * `API Security`), a word of its author's name as the author writes it. Only the spelling changes:
+ * its page still shows the identifier.
+ */
+export function plainTitle(row: MarketplaceRow): string {
+  if (row.source !== 'claude-plugins' || row.name !== `${row.source}:${row.title}`) {
+    return row.title
+  }
+
+  // An account's lowercase login says nothing of how its owner spells the name.
+  const maker = row.author.split(/\s+/).filter(name => name !== name.toLowerCase())
+
+  return row.title
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word, place) => {
+      const spelled = maker.find(name => name.toLowerCase() === word.toLowerCase()) ?? SPELLED[word]
+
+      if (spelled) {
+        return spelled
+      }
+
+      if (INITIALS.has(word)) {
+        return word.toUpperCase()
+      }
+
+      return place > 0 && LINKING.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)
+    })
+    .join(' ')
 }
 
 /** How many items each tab holds, for its label. */

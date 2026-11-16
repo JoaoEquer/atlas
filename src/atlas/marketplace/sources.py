@@ -14,7 +14,16 @@ and no copy, beside its own repository.
   at most once an hour, and searched here; a plugin installs from its repository at the commit the
   catalog pins, or, when it pins none, at the one its branch is on then, and arrives off, as every
   plugin. Atlas's marketplace marks the ones that do not work in Atlas (`outside.yaml`), which do
-  not install.
+  not install. A card says what the directory says: its name, its display name when it gives one,
+  its category, and the installs a branch of its repository counts, the most first. That count is
+  not documented, so when it cannot be read a plugin shows no number; nothing is guessed. Where
+  the catalog is silent, the plugin's own manifest (`.claude-plugin/plugin.json`, at the commit
+  the catalog pins) says the rest: its display name, its author, its icon. Its picture is that
+  icon, or else its publisher's GitHub avatar when the catalog says who that is, or else the
+  avatar of the GitHub organization the author's name is, once GitHub says the organization goes
+  by that name (a plugin by "Anthropic" must not show the person who holds that login). What a
+  manifest says is kept, so a commit is read once; one that cannot be read only leaves its card
+  as the catalog has it, and a plugin nothing identifies has no picture.
 - **skills.sh**, whose search gives each skill's installs. Opening the tab is one search (the most
   installed for "skill"), and each search another; its API is not documented, so the last opening
   list read is kept, and stands in, said, when the search breaks. A skill installs from its GitHub
@@ -29,7 +38,9 @@ which reads through the store's `Fetch`.
 import json
 import logging
 import re
-from collections.abc import Mapping
+import threading
+from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -71,6 +82,26 @@ CLAUDE_PLUGINS_FILE = ".claude-plugin/marketplace.json"
 #: Where the last catalog of Claude Code's plugin directory read is kept, and how long it stands.
 PLUGINS_FILE = "claude-plugins.json"
 PLUGINS_STALE = timedelta(hours=1)
+#: Where the directory's repository counts its plugins' installs.
+PLUGINS_INSTALLS_REF = "stats"
+PLUGINS_INSTALLS_FILE = "stats/plugin-installs.json"
+#: A plugin's own manifest, in its folder.
+PLUGIN_MANIFEST = ".claude-plugin/plugin.json"
+#: Where what the manifests and GitHub said is kept, how long what is not pinned to a commit
+#: stands, the most a manifest may weigh, how many are read at once, and how long a listing waits
+#: for them, in seconds: the ones not read by then wait for the next read.
+FACTS_FILE = "claude-plugins-facts.json"
+FACTS_STALE = timedelta(days=1)
+MANIFEST_BYTES = 256 * 1024
+MANIFEST_READERS = 8
+MANIFEST_WAIT = 10.0
+#: Where in a plugin's folder a picture of its own may be.
+_PICTURE = re.compile(r"(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.(?:png|svg|jpe?g|webp)")
+#: What a manifest read at a commit is kept under: that commit never says otherwise.
+_PINNED = re.compile(r"@[0-9a-f]{40}/")
+_LOGIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}")
+#: How a company's legal form trails its name, which its GitHub account does not carry.
+_LEGAL_FORM = re.compile(r",?\s+(?:inc|llc|ltd|gmbh)\.?$", re.IGNORECASE)
 _GITHUB_URL = re.compile(
     r"^https://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}?)(?:\.git)?/?$"
 )
@@ -83,6 +114,9 @@ _GITHUB_NAMESPACE = "io.github."
 _PLAIN = frozenset({"mcp", "server", "mcp-server", "mcpserver", "remote", "api"})
 _VARIABLE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _SECRET_NAME = re.compile(r"[^A-Z0-9_]")
+
+#: A GitHub account's avatar: what says who published an outside item, not the item itself.
+AVATAR = "https://github.com/{owner}.png?size=96"
 
 _logger = logging.getLogger("atlas.marketplace")
 
@@ -101,10 +135,14 @@ def outside_sources(
         registry_url=settings.registry_url,
         skills_url=settings.skills_url,
         github_api_url=settings.github_api_url,
+        plugins_raw_url=settings.raw_url,
         plugins_url=settings.raw_url.format(
             repo=settings.claude_plugins, ref="main", path=CLAUDE_PLUGINS_FILE
         ),
         plugins_repository=settings.claude_plugins,
+        plugins_installs_url=settings.raw_url.format(
+            repo=settings.claude_plugins, ref=PLUGINS_INSTALLS_REF, path=PLUGINS_INSTALLS_FILE
+        ),
         folder=folder,
     )
 
@@ -127,6 +165,34 @@ def registry_items(data: bytes) -> list[Item]:
         if item is not None:
             found.append(item)
     return found
+
+
+def _avatar(owner: str) -> str:
+    return AVATAR.format(owner=owner) if owner else ""
+
+
+def publisher_picture(repo: str) -> str:
+    """The avatar of who owns `repo`, for an item that brings no picture of its own."""
+    return _avatar(repo.split("/", 1)[0])
+
+
+def _registry_picture(server: Mapping[str, Any], namespace: str, repository: str) -> str:
+    """The icon a server publishes, or the avatar of the GitHub account it names."""
+    icons = server.get("icons")
+    for icon in cast("list[object]", icons) if isinstance(icons, list) else []:
+        source = (
+            _text(cast("Mapping[str, Any]", icon).get("src")) if isinstance(icon, Mapping) else ""
+        )
+        if source.startswith("https://"):
+            return source
+    match = _GITHUB_URL.match(repository)
+    if match is not None:
+        return _avatar(match.group(1).split("/", 1)[0])
+    return (
+        _avatar(namespace.removeprefix(_GITHUB_NAMESPACE))
+        if namespace.startswith(_GITHUB_NAMESPACE)
+        else ""
+    )
 
 
 def registry_item(entry: object) -> Item | None:
@@ -161,6 +227,7 @@ def registry_item(entry: object) -> Item | None:
         author=_author(namespace),
         license="",
         version=_text(server.get("version")),
+        image=_registry_picture(server, namespace, _text(repository.get("url"))),
         homepage=homepage if homepage.startswith("https://") else "",
         server=entry_,
         secrets=secrets,
@@ -367,6 +434,7 @@ def skills_item(entry: object) -> Item | None:
         author=repo.split("/", 1)[0],
         license="",
         repo=repo,
+        image=_avatar(repo.split("/", 1)[0]),
         source=Source.SKILLS_SH,
         target=target,
         installs=installs if isinstance(installs, int) else None,
@@ -418,11 +486,119 @@ def plugins_items(data: bytes, repository: str) -> list[Item]:
     plugins = fields.get("plugins")
     if not isinstance(plugins, list):
         raise MarketplaceError("The plugin directory lists no plugins.")
-    found = [plugins_item(entry, repository) for entry in cast("list[object]", plugins)]
+    maker = _maker(fields)
+    found = [plugins_item(entry, repository, maker) for entry in cast("list[object]", plugins)]
     return sorted((item for item in found if item is not None), key=lambda item: item.title.lower())
 
 
-def plugins_item(entry: object, repository: str) -> Item | None:
+def _maker(catalog: Mapping[str, Any]) -> str:
+    """Who the directory's catalog says owns it."""
+    owner: object = catalog.get("owner")
+    return _text(cast("Mapping[str, Any]", owner).get("name")) if isinstance(owner, Mapping) else ""
+
+
+def plugins_installs(data: bytes, marketplace: str) -> dict[str, int]:
+    """How many times the directory counts each plugin installed, by name, from its rows written
+    `<plugin>@<marketplace>`; empty when what it answered is not that count."""
+    try:
+        document: object = json.loads(data)
+    except ValueError:
+        return {}
+    fields: Mapping[str, Any] = (
+        cast("Mapping[str, Any]", document) if isinstance(document, Mapping) else {}
+    )
+    rows = fields.get("plugins")
+    found: dict[str, int] = {}
+    own = f"@{marketplace}"
+    for row in cast("list[object]", rows) if isinstance(rows, list) else []:
+        if not isinstance(row, Mapping):
+            continue
+        entry = cast("Mapping[str, Any]", row)
+        plugin = _text(entry.get("plugin"))
+        count = entry.get("unique_installs")
+        if plugin.endswith(own) and type(count) is int and count >= 0:
+            found[plugin.removesuffix(own)] = count
+    return found
+
+
+def _document(data: bytes) -> Mapping[str, Any]:
+    """A JSON object as read; empty when `data` is not one."""
+    try:
+        document: object = json.loads(data)
+    except ValueError:
+        return {}
+    return cast("Mapping[str, Any]", document) if isinstance(document, Mapping) else {}
+
+
+def _marketplace_name(catalog: bytes) -> str:
+    """The name the directory's catalog gives itself, which its install count is keyed by."""
+    return _text(_document(catalog).get("name"))
+
+
+def manifest_facts(data: bytes) -> dict[str, str]:
+    """What a plugin's manifest says of it: `title`, `author` and `picture`, a path in its folder.
+    All empty when it is not a manifest."""
+    fields = _document(data)
+    author: object = fields.get("author")
+    named = (
+        _text(cast("Mapping[str, Any]", author).get("name")) if isinstance(author, Mapping) else ""
+    )
+    picture = (_text(fields.get("icon")) or _text(fields.get("logo"))).removeprefix("./")
+    safe = _PICTURE.fullmatch(picture) is not None and ".." not in picture.split("/")
+    return {
+        "title": _text(fields.get("displayName")),
+        "author": named,
+        "picture": picture if safe else "",
+    }
+
+
+def _company(author: str) -> str:
+    return _LEGAL_FORM.sub("", author)
+
+
+def organization_facts(data: bytes, author: str) -> dict[str, str]:
+    """The `picture` of a GitHub account, when GitHub says it is an organization going by the
+    author's name; a login alone says nothing of who holds it."""
+    fields = _document(data)
+    named, wanted = _text(fields.get("name")).lower(), _company(author).lower()
+    same = named == wanted or named.startswith((f"{wanted} ", f"{wanted},"))
+    organization = fields.get("type") == "Organization"
+    return {"picture": _avatar(_text(fields.get("login"))) if organization and same else ""}
+
+
+def _facts_key(item: Item) -> str:
+    return f"{item.repo}@{item.sha or 'HEAD'}/{item.path}"
+
+
+def _described(item: Item, facts: Mapping[str, str], raw_url: str) -> Item:
+    """`item` with what its manifest adds: what the catalog says stands, but for the picture, where
+    the plugin's own comes before its publisher's."""
+    title = facts.get("title", "") if item.title == item.target else ""
+    picture = facts.get("picture", "")
+    path = f"{item.path}/{picture}".lstrip("/")
+    return replace(
+        item,
+        title=title[:TITLE_CHARS] or item.title,
+        author=item.author or facts.get("author", ""),
+        image=raw_url.format(repo=item.repo, ref=item.sha or "HEAD", path=path)
+        if picture
+        else item.image,
+    )
+
+
+def _stale(kept: Mapping[str, str] | None, key: str, now: datetime) -> bool:
+    """Whether what is kept under `key` should be read again: never at a pinned commit."""
+    if kept is None:
+        return True
+    if _PINNED.search(key):
+        return False
+    try:
+        return now - datetime.fromisoformat(kept.get("read_at", "")) >= FACTS_STALE
+    except ValueError:
+        return True
+
+
+def plugins_item(entry: object, repository: str, maker: str = "") -> Item | None:
     """One plugin of the directory as an item: its repository, its folder in it, and the commit
     the catalog pins (none when it pins none)."""
     if not isinstance(entry, Mapping):
@@ -452,16 +628,23 @@ def plugins_item(entry: object, repository: str) -> Item | None:
         problem = f"Its name, {name}, cannot be a plugin's name here."
     author: object = fields.get("author")
     homepage = _text(fields.get("homepage"))
+    # A plugin in the directory's own folders is not by whoever owns the directory, so only a
+    # repository of its own says whose it is when the catalog does not.
+    owner = repo.split("/", 1)[0] if repo != repository else ""
+    named = (
+        _text(cast("Mapping[str, Any]", author).get("name")) if isinstance(author, Mapping) else ""
+    )
+    # There, the catalog naming the directory's own maker as the author is what says it is theirs.
+    publisher = owner or (repository.split("/", 1)[0] if maker and named == maker else "")
     return Item(
         name=f"{Source.CLAUDE_PLUGINS.value}:{name}",
         kind=Kind.PLUGIN,
-        title=name[:TITLE_CHARS],
+        title=(_text(fields.get("displayName")) or name)[:TITLE_CHARS],
         summary=_cut(" ".join(_text(fields.get("description")).split()), SUMMARY_CHARS),
-        author=_text(cast("Mapping[str, Any]", author).get("name"))
-        if isinstance(author, Mapping)
-        else "",
+        author=named or owner,
         license="",
         version=_text(fields.get("version")),
+        image=_avatar(publisher),
         repo=repo,
         sha=sha if COMMIT.fullmatch(sha) else "",
         path=path,
@@ -469,6 +652,7 @@ def plugins_item(entry: object, repository: str) -> Item | None:
         source=Source.CLAUDE_PLUGINS,
         target=name,
         problem=problem,
+        category=_text(fields.get("category")),
     )
 
 
@@ -493,21 +677,30 @@ class Sources:
         registry_url: str,
         skills_url: str,
         github_api_url: str,
+        plugins_raw_url: str = "",
         plugins_url: str = "",
         plugins_repository: str = "",
+        plugins_installs_url: str = "",
         folder: Path | None = None,
     ) -> None:
         self._get = get
         self._registry = registry_url
         self._skills = skills_url
         self._github = github_api_url.rstrip("/")
+        self._plugins_raw_url = plugins_raw_url
         self._plugins_url = plugins_url
         self._plugins_repository = plugins_repository
+        self._plugins_installs_url = plugins_installs_url
         self._folder = folder
         #: The directory's catalog as last read, and when.
         self._plugins: tuple[list[Item], datetime] | None = None
         #: Each repository's newest commit as last read, and when.
         self._heads: dict[str, tuple[str, datetime]] = {}
+        #: What each manifest and GitHub account said, read from the folder at first.
+        self._facts: dict[str, dict[str, str]] | None = None
+        #: Held while the catalog and its facts are read, so two listings at once (each in a
+        #: thread of its own) read them once and never change `_facts` together.
+        self._plugins_lock = threading.Lock()
 
     def search(self, query: str, now: datetime) -> Found:
         """What the sources list for `query`; with none, what each lists first: the registry's
@@ -541,10 +734,15 @@ class Sources:
         return Found(items, problems)
 
     def plugins(self) -> list[Item]:
-        """Every plugin of Claude Code's directory, its catalog read now. Raises
-        `MarketplaceError`."""
+        """Every plugin of Claude Code's directory, its catalog and what their manifests add read
+        now, then kept as a listing's are. Raises `MarketplaceError`."""
         self._plugins = None
-        return self._plugins_read(None) if self._plugins_url else []
+        return self._plugins_read(datetime.now(UTC)) if self._plugins_url else []
+
+    def picture(self, name: str) -> str:
+        """The picture of a plugin of the directory as last listed; empty for any other."""
+        listed = self._plugins[0] if self._plugins is not None else []
+        return next((item.image for item in listed if item.name == name), "")
 
     def revision(self, item: Item, now: datetime) -> str | None:
         """The commit an outside skill would install from now, read at most once an hour per
@@ -592,25 +790,143 @@ class Sources:
 
     def _plugins_read(self, now: datetime | None) -> list[Item]:
         """The directory's catalog: as last read within the hour, read again, or kept from the
-        last read well when it cannot be read."""
+        last read well when it cannot be read. Manifests and GitHub accounts are asked only when
+        `now` is given (a listing): with none (one item), what was kept of them stands."""
+        with self._plugins_lock:
+            return self._plugins_read_held(now)
+
+    def _plugins_read_held(self, now: datetime | None) -> list[Item]:
         if self._plugins is not None and (now is None or now - self._plugins[1] < PLUGINS_STALE):
             return self._plugins[0]
         try:
             data = self._get(self._plugins_url, SOURCE_BYTES)
             if data is None:
                 raise MarketplaceError("The plugin directory's catalog is not there.")
-            items = plugins_items(data, self._plugins_repository)
+            items = self._counted(plugins_items(data, self._plugins_repository), data)
         except MarketplaceError:
             kept = self._kept(PLUGINS_FILE)
             if kept is None:
                 raise
-            return plugins_items(kept.encode("utf-8"), self._plugins_repository)
+            catalog = kept.encode("utf-8")
+            items = self._counted(plugins_items(catalog, self._plugins_repository), catalog)
+            return self._manifested(items, catalog, None)
+        items = self._manifested(items, data, now)
         if self._folder is not None:
             self._folder.mkdir(parents=True, exist_ok=True)
             replace_file(self._folder / PLUGINS_FILE, data)
         if now is not None:
             self._plugins = (items, now)
         return items
+
+    def _counted(self, items: list[Item], catalog: bytes) -> list[Item]:
+        """The directory's plugins with the installs it counts, the most first, and as they came
+        when that count cannot be read: it only ever adds to a card."""
+        if not self._plugins_installs_url:
+            return items
+        try:
+            data = self._get(self._plugins_installs_url, SOURCE_BYTES)
+        except MarketplaceError as error:
+            _logger.info("The plugin directory's installs could not be read: %s", error)
+            return items
+        counts = plugins_installs(data or b"", _marketplace_name(catalog))
+        counted = [replace(item, installs=counts.get(item.target)) for item in items]
+        return sorted(counted, key=lambda item: -(item.installs or 0))
+
+    def _manifested(self, items: list[Item], catalog: bytes, now: datetime | None) -> list[Item]:
+        """The directory's plugins with what their manifests and GitHub add, read when `now` is
+        given and only as kept when not: it only ever adds to a card."""
+        if not self._plugins_raw_url:
+            return items
+        facts = self._kept_facts()
+        before = dict(facts)
+        manifests: dict[str, str] = {}
+        accounts: dict[str, str] = {}
+        if now is not None:
+            manifests = {
+                _facts_key(item): self._plugins_raw_url.format(
+                    repo=item.repo,
+                    ref=item.sha or "HEAD",
+                    path=f"{item.path}/{PLUGIN_MANIFEST}".lstrip("/"),
+                )
+                for item in items
+                if item.repo
+            }
+            self._read_facts(facts, manifests, lambda _key, data: manifest_facts(data), now)
+        described = [
+            _described(item, facts.get(_facts_key(item), {}), self._plugins_raw_url)
+            for item in items
+        ]
+        # As in the catalog, naming the directory's own maker is what says a plugin is theirs.
+        maker = _maker(_document(catalog))
+        directory = _avatar(self._plugins_repository.split("/", 1)[0])
+        described = [
+            replace(item, image=directory)
+            if not item.image and maker and item.author == maker
+            else item
+            for item in described
+        ]
+        if now is not None:
+            accounts = {
+                f"@{item.author}": f"{self._github}/users/{login}"
+                for item in described
+                if not item.image
+                and _LOGIN.fullmatch(login := re.sub(r"[^A-Za-z0-9-]", "", _company(item.author)))
+            }
+            self._read_facts(
+                facts, accounts, lambda key, data: organization_facts(data, key[1:]), now
+            )
+            # What no plugin listed now asks for is dropped, so the kept file stays the catalog's
+            # size: a key pinned to a commit is never stale, and would otherwise stay forever.
+            for key in facts.keys() - manifests.keys() - accounts.keys():
+                del facts[key]
+        if facts != before and self._folder is not None:
+            self._folder.mkdir(parents=True, exist_ok=True)
+            replace_file(self._folder / FACTS_FILE, json.dumps(facts).encode("utf-8"))
+        return [
+            item
+            if item.image
+            else replace(item, image=facts.get(f"@{item.author}", {}).get("picture", ""))
+            for item in described
+        ]
+
+    def _read_facts(
+        self,
+        facts: dict[str, dict[str, str]],
+        wanted: Mapping[str, str],
+        told: Callable[[str, bytes], dict[str, str]],
+        now: datetime,
+    ) -> None:
+        """Reads into `facts` the `wanted` addresses it does not hold, a few at once. One that
+        fails, or takes too long, is tried at the next read."""
+
+        def read(key: str, url: str) -> dict[str, str]:
+            data = self._get(url, MANIFEST_BYTES)
+            return {} if data is None else told(key, data)
+
+        missing = {key: url for key, url in wanted.items() if _stale(facts.get(key), key, now)}
+        if not missing:
+            return
+        pool = ThreadPoolExecutor(MANIFEST_READERS)
+        reads = {pool.submit(read, key, url): key for key, url in missing.items()}
+        done = wait(reads, timeout=MANIFEST_WAIT).done
+        pool.shutdown(wait=False, cancel_futures=True)
+        for finished in done:
+            try:
+                facts[reads[finished]] = {**finished.result(), "read_at": format_utc(now)}
+            except MarketplaceError as error:
+                _logger.info("A plugin's facts could not be read: %s", error)
+
+    def _kept_facts(self) -> dict[str, dict[str, str]]:
+        if self._facts is None:
+            kept = _document((self._kept(FACTS_FILE) or "").encode("utf-8"))
+            self._facts = {
+                key: {
+                    name: _text(value) for name, value in cast("Mapping[str, object]", row).items()
+                }
+                for key, row in kept.items()
+                if isinstance(row, Mapping)
+            }
+        return self._facts
 
     def _kept(self, file: str) -> str | None:
         if self._folder is None:

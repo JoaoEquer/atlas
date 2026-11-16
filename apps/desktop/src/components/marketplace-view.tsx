@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useState } from 'react'
+import { type ComponentType, type ReactNode, useState } from 'react'
 import { Streamdown } from 'streamdown'
 
 import { t } from '@/i18n'
@@ -12,17 +12,18 @@ import {
   openMarketItem,
   PLUGIN_GUIDE,
   refreshMarketplace,
+  setMarketCategory,
   setMarketKind,
   setMarketQuery,
   showExtensions,
   storeMarketSecret,
   writePlugin
 } from '@/store/app'
-import { actionOf, counts, resolved, shown } from '@/store/marketplace'
+import { actionOf, categories, counts, organized, plainTitle, resolved, shown } from '@/store/marketplace'
 
 import { Badge, KindPicture, KindTabs } from './extension-card'
 import { PageHeader } from './page-header'
-import { Robot } from './ui/icons'
+import { AccountsMark, GitHubMark, GoogleMark, Robot, TelegramMark, VoiceMark } from './ui/icons'
 
 /**
  * The marketplace (step 16s): skills, MCP servers, plugins and executors made for Atlas, a tab
@@ -43,8 +44,9 @@ export function MarketplaceView() {
 
 function Listing() {
   const market = useStore($market)
-  const { community, official, outside } = shown(market.list, market.kind, market.query)
+  const { community, official, outside } = shown(market.list, market.kind, market.query, market.category)
   const total = counts(market.list)
+  const filed = categories(market.list, market.kind)
   const nothing = official.length + community.length + outside.length === 0
 
   return (
@@ -96,22 +98,65 @@ function Listing() {
       </PageHeader>
       <Notice />
       <KindTabs counts={total} current={market.kind} onPick={setMarketKind} testId="marketplace-tab" />
+      {filed.length > 0 && (
+        <div aria-label={t.marketplace.category} className="flex flex-wrap gap-1.5" role="group">
+          <Chip current={market.category} label={t.marketplace.allCategories} value="" />
+          {filed.map(({ count, name }) => (
+            <Chip
+              count={count}
+              current={market.category}
+              key={name}
+              label={categoryLabels[name] ?? name}
+              value={name}
+            />
+          ))}
+        </div>
+      )}
       {market.failed && <Failed text={market.failed} />}
       {nothing && (
         <p className="text-sm text-muted-foreground">
           {market.list === null && market.reading
             ? t.marketplace.reading
-            : market.query
+            : market.query || market.category
               ? t.marketplace.noMatch
               : t.marketplace.empty}
         </p>
       )}
       <Shelf rows={official} title={t.marketplace.official} />
       <Shelf rows={community} title={t.marketplace.community} />
-      {outside.map(shelf => (
-        <Shelf key={shelf.source} rows={shelf.rows} title={t.marketplace.sources[shelf.source]} />
-      ))}
+      {outside.map(shelf =>
+        !market.query && !market.category && shelf.rows.some(row => row.category) ? (
+          <Directory key={shelf.source} rows={shelf.rows} title={t.marketplace.sources[shelf.source]} />
+        ) : (
+          <Shelf key={shelf.source} rows={shelf.rows} title={t.marketplace.sources[shelf.source]} />
+        )
+      )}
     </>
+  )
+}
+
+/** A category to filter by; the one on, clicked, shows them all again. */
+function Chip({ count, current, label, value }: { count?: number; current: string; label: string; value: string }) {
+  const on = current === value
+
+  return (
+    <button
+      aria-pressed={on}
+      className={`rounded-full border px-2.5 py-0.5 text-xs ${
+        on
+          ? 'border-primary bg-primary text-primary-foreground'
+          : 'border-border text-soft hover:border-border-strong hover:text-foreground'
+      }`}
+      data-testid="marketplace-category"
+      data-value={value}
+      onClick={() => {
+        setMarketCategory(on ? '' : value)
+      }}
+      type="button"
+    >
+      {label}
+      {count !== undefined && <span className={`ml-1.5 ${on ? '' : 'text-muted-foreground'}`}>{count}</span>}
+    </button>
   )
 }
 
@@ -143,14 +188,49 @@ function Notice() {
   )
 }
 
-function Shelf({ rows, title }: { rows: MarketplaceRow[]; title: string }) {
+/** A catalog of hundreds as it opens: what most people install, then a look at each category. */
+function Directory({ rows, title }: { rows: MarketplaceRow[]; title: string }) {
+  const { groups, top, unfiled } = organized(rows)
+
+  return (
+    <section className="space-y-4 pt-2" data-testid="marketplace-directory">
+      <h2 className="text-sm font-medium text-muted-foreground">{title}</h2>
+      <Shelf rows={top} title={t.marketplace.mostInstalled} />
+      {groups.map(({ category, rows: preview, total }) => (
+        <Shelf
+          key={category}
+          more={
+            <button
+              className="link text-xs"
+              data-testid="marketplace-see-all"
+              onClick={() => {
+                setMarketCategory(category)
+              }}
+              type="button"
+            >
+              {t.marketplace.seeAll(total)}
+            </button>
+          }
+          rows={preview}
+          title={categoryLabels[category] ?? category}
+        />
+      ))}
+      <Shelf rows={unfiled} title={t.marketplace.unfiled} />
+    </section>
+  )
+}
+
+function Shelf({ more, rows, title }: { more?: ReactNode; rows: MarketplaceRow[]; title: string }) {
   if (rows.length === 0) {
     return null
   }
 
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-medium text-muted-foreground">{title}</h2>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-medium text-muted-foreground">{title}</h2>
+        {more}
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {rows.map(row => (
           <Card key={row.name} row={row} />
@@ -180,8 +260,8 @@ function Card({ row }: { row: MarketplaceRow }) {
       <div className="flex items-start gap-3">
         <Picture row={row} size={40} />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{row.title}</p>
-          <p className="truncate text-xs text-muted-foreground">{t.marketplace.by(row.author)}</p>
+          <p className="truncate font-medium">{plainTitle(row)}</p>
+          {row.author && <p className="truncate text-xs text-muted-foreground">{t.marketplace.by(row.author)}</p>}
         </div>
         {row.tier === 'official' && <Badge>{t.marketplace.officialBadge}</Badge>}
       </div>
@@ -217,7 +297,7 @@ function ItemPage() {
       <button className="link text-sm" onClick={closeMarketItem} type="button">
         ← {t.marketplace.back}
       </button>
-      {row && <Head row={row} />}
+      {row && <Head homepage={page?.homepage ?? ''} row={row} />}
       {market.failed && <Failed text={market.failed} />}
       {market.brought.length > 0 && (
         <p className="text-sm text-soft">{t.marketplace.brought(market.brought.join(', '))}</p>
@@ -231,7 +311,7 @@ function ItemPage() {
   )
 }
 
-function Head({ row }: { row: MarketplaceRow }) {
+function Head({ homepage, row }: { homepage: string; row: MarketplaceRow }) {
   const market = useStore($market)
   const [removing, setRemoving] = useState(false)
   const removable = !row.shipped && row.state !== 'available'
@@ -241,26 +321,39 @@ function Head({ row }: { row: MarketplaceRow }) {
       <Picture row={row} size={64} />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-semibold">{row.title}</h1>
+          <h1 className="text-lg font-semibold">{plainTitle(row)}</h1>
           {row.tier === 'official' && <Badge>{t.marketplace.officialBadge}</Badge>}
           <span className="text-xs text-muted-foreground">{t.marketplace.kinds[row.kind]}</span>
         </div>
         <p className="text-sm text-muted-foreground">
           {[
-            t.marketplace.by(row.author),
+            plainTitle(row) === row.title ? '' : row.title,
+            row.author ? t.marketplace.by(row.author) : '',
             row.shipped ? t.marketplace.shipped : '',
             row.version ? t.marketplace.version(row.version) : '',
-            row.license ? t.marketplace.license(row.license) : ''
+            row.license ? t.marketplace.license(row.license) : '',
+            row.category ? (categoryLabels[row.category] ?? row.category) : '',
+            row.installs !== null ? t.marketplace.installs(row.installs) : ''
           ]
             .filter(Boolean)
             .join(' · ')}
         </p>
         <p className="text-sm">{row.summary}</p>
+        {row.source !== 'atlas' && (
+          <p className="text-sm text-muted-foreground" data-testid="marketplace-provenance">
+            {t.marketplace.provenance(t.marketplace.sources[row.source])}
+          </p>
+        )}
         {row.problem && <p className="text-sm text-waiting-text">{row.problem}</p>}
         <div className="flex flex-wrap gap-3 text-sm">
           {row.source_url && (
             <a className="link" href={row.source_url} rel="noreferrer" target="_blank">
               {row.kind === 'mcp' ? t.marketplace.homepage : t.marketplace.source}
+            </a>
+          )}
+          {homepage && row.kind !== 'mcp' && homepage !== row.source_url && (
+            <a className="link" href={homepage} rel="noreferrer" target="_blank">
+              {t.marketplace.homepage}
             </a>
           )}
         </div>
@@ -532,13 +625,32 @@ function Confirm({ name }: { name: string }) {
 }
 
 function Picture({ row, size }: { row: MarketplaceRow; size: number }) {
-  if (row.image) {
+  // A picture that does not load leaves the kind's own icon, never a broken image.
+  const [broken, setBroken] = useState('')
+
+  if (row.image && row.image !== broken) {
     return (
-      <img alt="" className="shrink-0 rounded-md object-cover" src={row.image} style={{ height: size, width: size }} />
+      <span
+        className="flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-white ring-1 ring-border"
+        style={{ height: size, width: size }}
+      >
+        <img
+          alt=""
+          className="h-full w-full object-contain"
+          data-testid="marketplace-picture"
+          loading="lazy"
+          onError={() => {
+            setBroken(row.image)
+          }}
+          src={row.image}
+        />
+      </span>
     )
   }
 
-  return <KindPicture glyph={row.kind === 'executor' && row.shipped ? Robot : undefined} kind={row.kind} size={size} />
+  const glyph = row.shipped ? (row.kind === 'executor' ? Robot : SHIPPED_MARKS[row.name]) : undefined
+
+  return <KindPicture glyph={glyph} kind={row.kind} size={size} />
 }
 
 function Failed({ text }: { text: string }) {
@@ -548,6 +660,18 @@ function Failed({ text }: { text: string }) {
     </p>
   )
 }
+
+/** What Atlas ships brings no picture from a repository, so its mark is drawn here. */
+const SHIPPED_MARKS: Record<string, ComponentType<{ size?: number; stroke?: number }> | undefined> = {
+  accounts: AccountsMark,
+  github: GitHubMark,
+  google: GoogleMark,
+  telegram: TelegramMark,
+  voice: VoiceMark
+}
+
+/** The directory's categories in the app's language; one it adds later shows as it writes it. */
+const categoryLabels: Record<string, string | undefined> = t.marketplace.categories
 
 const BUTTON = 'rounded-md border border-border-strong px-2 py-1 text-sm hover:bg-muted disabled:opacity-40'
 const PRIMARY =

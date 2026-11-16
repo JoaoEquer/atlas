@@ -11,6 +11,7 @@ import { MarketplaceView } from './marketplace-view'
 function row(name: string, change: Partial<MarketplaceRow> = {}): MarketplaceRow {
   return {
     author: 'someone',
+    category: '',
     image: '',
     installs: null,
     kind: 'skill',
@@ -136,6 +137,60 @@ describe('the marketplace lists each kind in its tab, the Atlas team first', () 
     await open(() => listing([row('pdf')], { problem: 'GitHub answered HTTP 503.' }))
 
     expect(screen.getByTestId('marketplace-notice').textContent).toContain('GitHub answered HTTP 503.')
+  })
+})
+
+describe('the plugin directory says what it gives', () => {
+  const plugin = (name: string, change: Partial<MarketplaceRow> = {}) =>
+    row(`claude-plugins:${name}`, { kind: 'plugin', source: 'claude-plugins', title: name, version: '', ...change })
+
+  it('filters by category, and a new tab starts with all of them', async () => {
+    await open(() =>
+      listing([
+        plugin('audit', { category: 'security', installs: 1200 }),
+        plugin('sketch', { category: 'design' }),
+        row('pdf')
+      ])
+    )
+
+    expect(cards()).toEqual(['claude-plugins:audit', 'claude-plugins:sketch'])
+    expect(screen.getAllByTestId('marketplace-card-meta')[0]?.textContent).toBe('1,200 installs')
+    const chip = (value: string) => screen.getAllByTestId('marketplace-category').find(c => c.dataset.value === value)
+    fireEvent.click(chip('design') as HTMLElement)
+    expect(cards()).toEqual(['claude-plugins:sketch'])
+    expect(chip('design')?.getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.click(screen.getByTestId('marketplace-tab-skill'))
+    expect(screen.queryByTestId('marketplace-category')).toBeNull()
+    fireEvent.click(screen.getByTestId('marketplace-tab-plugin'))
+    expect(cards()).toEqual(['claude-plugins:audit', 'claude-plugins:sketch'])
+  })
+
+  it("opens on the most installed, and a category's whole list is a click away", async () => {
+    const filed = Array.from({ length: 15 }, (_, at) => plugin(`p${String(at)}`, { category: 'design' }))
+    await open(() => listing(filed))
+
+    expect(cards()).toHaveLength(15)
+    expect(screen.getByText('Most installed')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('marketplace-see-all'))
+
+    expect(screen.queryByTestId('marketplace-directory')).toBeNull()
+    expect(cards()).toHaveLength(15)
+  })
+
+  it("leaves the kind's own icon when a picture does not load", async () => {
+    await open(() => listing([plugin('notes', { image: 'https://github.com/someone.png?size=96' })]))
+
+    fireEvent.error(screen.getByTestId('marketplace-picture'))
+
+    expect(screen.queryByTestId('marketplace-picture')).toBeNull()
+  })
+
+  it('shows no author line when nobody is named, and no number it was not given', async () => {
+    await open(() => listing([plugin('notes', { author: '' })]))
+
+    expect(screen.getByTestId('marketplace-card').textContent).not.toContain('by ')
+    expect(screen.getByTestId('marketplace-card-meta').textContent).toBe('')
   })
 })
 

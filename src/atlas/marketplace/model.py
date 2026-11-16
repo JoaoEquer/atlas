@@ -153,8 +153,11 @@ class Item:
     target: str = ""
     #: When its source last published it, `YYYY-MM-DD`; empty when the source does not say.
     updated: str = ""
-    #: The source counts its installs (skills.sh); `None` when it does not.
+    #: The source counts its installs (skills.sh, Claude Code's plugin directory); `None` when it
+    #: does not.
     installs: int | None = None
+    #: The category its source files it under, as the source writes it; empty when it says none.
+    category: str = ""
     #: An MCP Registry server whose name a domain verifies: the vendor's own.
     vendor: bool = False
     #: Why its source's entry cannot install here, said on its card.
