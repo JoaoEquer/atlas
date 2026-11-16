@@ -413,6 +413,80 @@ class TerminalResizeParams:
 
 
 @dataclass(frozen=True, slots=True)
+class BrowserHostParams:
+    """The app's main process offers the app browser to this server, with the proof that it shares
+    the server's files (the browser endpoint's host proof)."""
+
+    #: A file the app wrote in its own folder, `browser-proof/<32 hex>`.
+    proof_file: str
+    #: What the file holds: 64 hex characters.
+    nonce: str
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserHosted:
+    accepted: bool
+    #: Why not, when it was not accepted.
+    reason: str = ""
+    #: The name of the home this server serves, which the app keys the browser's partition by.
+    home: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserEventParams:
+    """A page of the app browser said something (a CDP event, or that its debugger let go)."""
+
+    tab: str
+    method: str
+    params: Json
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserTabRow:
+    id: str
+    url: str
+    title: str
+    #: The conversation it belongs to; empty for the draft's.
+    owner: str
+    loading: bool
+    #: The tab selected on the panel.
+    selected: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserTabs:
+    tabs: list[BrowserTabRow]
+    #: What the app browser's pages send, and the Chrome they run on (`Chrome/<version>`).
+    user_agent: str
+    product: str
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserOpenParams:
+    owner: str
+    url: str
+    #: Opened behind the tab on the panel, which stays selected.
+    background: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserTabRef:
+    id: str
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserCdpParams:
+    id: str
+    method: str
+    params: Json
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserCdpResult:
+    result: Json
+
+
+@dataclass(frozen=True, slots=True)
 class SendResult:
     #: `started` a turn, or `steered` the one running.
     status: Literal["started", "steered"]
@@ -2483,6 +2557,22 @@ METHODS: Mapping[str, Method] = {
             "Stop one of this client's terminals; nothing when it is already gone.",
         ),
         Method(
+            "browser.host",
+            BrowserHostParams,
+            BrowserHosted,
+            "The app offers the app browser to this server for `browser_exec`, proving the app and "
+            "the server share files: a file the app wrote, read here. Accepted only on the same "
+            "computer; this connection then answers the server's `browser.*` requests, and no "
+            "other.",
+        ),
+        Method(
+            "browser.event",
+            BrowserEventParams,
+            Empty,
+            "A page of the app browser sent a DevTools event, only from the connection that hosts "
+            "the app browser. Sent as a notification, with no id and no answer.",
+        ),
+        Method(
             "trust.check",
             CommandParams,
             CommandCheck,
@@ -3748,6 +3838,54 @@ SERVER_REQUESTS: Mapping[str, ServerRequest] = {
             SecretResult,
             "The agent asks the user for an API key by name (the secrets tool). The card is "
             "masked; the value goes straight to the vault and is never sent back.",
+        ),
+        ServerRequest(
+            "browser.tabs",
+            Empty,
+            BrowserTabs,
+            "The tabs of the app browser and its user agent. Only to the connection that hosts "
+            "the app browser.",
+        ),
+        ServerRequest(
+            "browser.open",
+            BrowserOpenParams,
+            BrowserTabRef,
+            "Open a tab of the app browser for a conversation. Only to the connection that hosts "
+            "the app browser.",
+        ),
+        ServerRequest(
+            "browser.close",
+            BrowserTabRef,
+            Empty,
+            "Close a tab of the app browser. Only to the connection that hosts the app browser.",
+        ),
+        ServerRequest(
+            "browser.show",
+            BrowserTabRef,
+            Empty,
+            "Bring a tab of the app browser to the front. Only to the connection that hosts the "
+            "app browser.",
+        ),
+        ServerRequest(
+            "browser.attach",
+            BrowserTabRef,
+            Empty,
+            "Start sending the DevTools events of a tab (`browser.event`). Only to the connection "
+            "that hosts the app browser.",
+        ),
+        ServerRequest(
+            "browser.detach",
+            BrowserTabRef,
+            Empty,
+            "Stop sending the DevTools events of a tab. Only to the connection that hosts the app "
+            "browser.",
+        ),
+        ServerRequest(
+            "browser.cdp",
+            BrowserCdpParams,
+            BrowserCdpResult,
+            "Run a DevTools command in a tab of the app browser. Only to the connection that "
+            "hosts the app browser; an error carries the command's own message.",
         ),
         ServerRequest(
             "executor.approval",

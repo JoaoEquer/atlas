@@ -1,21 +1,34 @@
 """The browser's pure rules: the tool's words, the cloud metadata floor, and how Chrome and the
 engine are started."""
 
+import re
+
+import pytest
+
 from atlas.browser.model import (
     DEFAULT_TIMEOUT,
     MAX_TIMEOUT,
     MIN_TIMEOUT,
     BrowserMode,
+    HostTab,
+    HostTabs,
+    app_session_name,
+    browser_version,
+    cdp_refused,
     chrome_arguments,
+    conversation_tabs,
     description,
     devtools_endpoint,
     engine_environment,
     host_of,
     metadata_address,
     metadata_host,
+    navigation_url,
     printed_images,
     session_name,
+    target_info,
     timeout_of,
+    url_refused,
     urls_in,
 )
 
@@ -29,6 +42,11 @@ def test_the_description_follows_what_the_model_sees() -> None:
         assert "never guess or type credentials" in text
         assert "'clean'" in text
         assert "'headless'" in text
+        assert "list_tabs() also shows the pages the user opened" in text
+        assert "cdp('Emulation.setDeviceMetricsOverride', width=1280" in text
+        assert "the browser beside the conversation in the app" in text
+        assert "web_search and web_fetch are faster" in text
+        assert "only when the user asks for no window" in text
 
 
 def test_the_timeout_stays_within_bounds() -> None:
@@ -119,3 +137,107 @@ def test_the_modes() -> None:
     assert not BrowserMode.CLEAN.kept
     assert BrowserMode.CLEAN.windowed
     assert not BrowserMode.HEADLESS.windowed
+
+
+#: The same table is in the app's `app-browser-rules.test.ts`: the two lists must not drift.
+CDP_CASES = [
+    ("Page.navigate", True),
+    ("Page.captureScreenshot", True),
+    ("Runtime.evaluate", True),
+    ("DOM.getDocument", True),
+    ("Input.dispatchMouseEvent", True),
+    ("Network.enable", True),
+    ("Accessibility.getFullAXTree", True),
+    ("Emulation.setDeviceMetricsOverride", True),
+    ("Emulation.clearDeviceMetricsOverride", True),
+    ("Emulation.setFocusEmulationEnabled", True),
+    ("Inspector.enable", True),
+    ("Security.enable", True),
+    ("Network.setCacheDisabled", True),
+    ("Target.getTargets", False),
+    ("Target.createTarget", False),
+    ("Browser.close", False),
+    ("Browser.getVersion", False),
+    ("Page.setDownloadBehavior", False),
+    ("Page.close", False),
+    ("IO.read", False),
+    ("Storage.getCookies", False),
+    ("Network.getAllCookies", False),
+    ("Network.getCookies", False),
+    ("Network.setCookie", False),
+    ("Network.deleteCookies", False),
+    ("Network.clearBrowserCookies", False),
+    ("Network.clearBrowserCache", False),
+    ("DOMStorage.getDOMStorageItems", False),
+    ("IndexedDB.requestDatabaseNames", False),
+    ("CacheStorage.requestCacheNames", False),
+    ("Security.setIgnoreCertificateErrors", False),
+    ("SystemInfo.getInfo", False),
+    ("Tracing.start", False),
+    ("page.navigate", False),
+    ("Navigate", False),
+    ("", False),
+]
+
+
+@pytest.mark.parametrize(("method", "allowed"), CDP_CASES)
+def test_a_page_session_reaches_only_the_pages_domains(method: str, allowed: bool) -> None:
+    refused = cdp_refused(method)
+    assert (refused is None) is allowed
+    if refused is not None:
+        assert method in refused
+
+
+def test_the_addresses_the_engine_may_load() -> None:
+    assert url_refused("https://example.com/a") is None
+    assert url_refused("http://192.168.0.1/") is None
+    assert url_refused("about:blank") is None
+    assert url_refused("http://169.254.169.254/latest") is not None
+    assert url_refused("http://metadata.google.internal/") is not None
+    assert url_refused("file:///etc/passwd") is not None
+    assert url_refused("chrome://settings") is not None
+    assert url_refused("javascript:alert(1)") is not None
+    assert url_refused("data:text/html,x") is not None
+    assert url_refused("http://[::1") is not None
+
+
+def test_the_address_a_command_would_load() -> None:
+    assert navigation_url("Page.navigate", {"url": "https://a.example"}) == "https://a.example"
+    assert navigation_url("Target.createTarget", {"url": "about:blank"}) == "about:blank"
+    assert navigation_url("Page.navigate", {}) is None
+    assert navigation_url("Page.navigate", {"url": 3}) is None
+    assert navigation_url("Runtime.evaluate", {"url": "https://a.example"}) is None
+
+
+def test_a_conversations_tabs_start_with_the_one_on_the_panel() -> None:
+    tabs = HostTabs(
+        (
+            HostTab("t1", "https://a.example", "A", "c-1"),
+            HostTab("t2", "https://b.example", "B", "c-2"),
+            HostTab("t3", "https://c.example", "C", "c-1"),
+            HostTab("t4", "", "D", "c-1", selected=True),
+            HostTab("t5", "https://e.example", "E", ""),
+        ),
+        "agent/1",
+        "Chrome/1",
+    )
+    assert [tab.id for tab in conversation_tabs(tabs, "c-1")] == ["t4", "t3", "t1"]
+    assert [tab.id for tab in conversation_tabs(tabs, "c-2")] == ["t2"]
+    assert conversation_tabs(tabs, "c-3") == []
+    # The draft's tabs (owner "") are the draft's alone.
+    assert [tab.id for tab in conversation_tabs(tabs, "")] == ["t5"]
+    info = target_info(tabs.tabs[3], attached=True)
+    assert info["url"] == "about:blank"
+    assert info["type"] == "page"
+    assert info["attached"] is True
+    assert info["targetId"] == "t4"
+    assert browser_version(tabs)["userAgent"] == "agent/1"
+    assert browser_version(tabs)["product"] == "Chrome/1"
+
+
+def test_the_app_browser_has_a_session_of_its_own() -> None:
+    app = app_session_name("c-1")
+    assert app.startswith("atlas-app-")
+    assert app != session_name("c-1", BrowserMode.PROFILE)
+    assert app != app_session_name("c-2")
+    assert re.fullmatch(r"[A-Za-z0-9_-]{1,64}", app)

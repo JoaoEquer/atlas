@@ -219,6 +219,26 @@ export class Channel {
     return this.request(method, params as Record<string, unknown>, timeoutMs) as Promise<RpcMethods[M]['result']>
   }
 
+  /**
+   * Tell the server something and expect nothing back: a frame with no `id`, which the server never
+   * answers. `false` when there is no connection or it would not take the frame.
+   */
+  notify<M extends RpcMethod>(method: M, params: RpcMethods[M]['params']): boolean {
+    const link = this.link
+
+    if (link === null) {
+      return false
+    }
+
+    try {
+      link.send(JSON.stringify({ jsonrpc: '2.0', method, params }))
+    } catch {
+      return false
+    }
+
+    return true
+  }
+
   request(
     method: string,
     params: Record<string, unknown>,

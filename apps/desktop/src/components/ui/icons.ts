@@ -10,6 +10,8 @@ export {
   IconArrowDown as ArrowDown,
   IconArrowLeft as ArrowLeft,
   IconArrowRight as ArrowRight,
+  IconArrowsMaximize as Expand,
+  IconArrowsMinimize as Collapse,
   IconArrowUp as ArrowUp,
   IconAsterisk as ClaudeCode,
   IconBrandGithub as GitHubMark,
@@ -55,6 +57,7 @@ export {
   IconPlus as Plus,
   IconPrompt as Codex,
   IconPuzzle as Puzzle,
+  IconRadar as Radar,
   IconRefresh as Refresh,
   IconRobot as Robot,
   IconSearch as Search,
@@ -70,5 +73,6 @@ export {
   IconTrash as Trash,
   IconUpload as Upload,
   IconUserCircle as UserCircle,
+  IconWorld as Web,
   IconX as Close
 } from '@tabler/icons-react'

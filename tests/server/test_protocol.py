@@ -77,6 +77,13 @@ def test_every_entry_is_declared_with_a_doc() -> None:
         "ask_user",
         "approval",
         "secret",
+        "browser.tabs",
+        "browser.open",
+        "browser.close",
+        "browser.show",
+        "browser.attach",
+        "browser.detach",
+        "browser.cdp",
         "executor.approval",
         "executor.question",
     }

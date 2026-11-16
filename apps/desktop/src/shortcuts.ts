@@ -5,3 +5,8 @@ export const MAC = typeof navigator !== 'undefined' && navigator.userAgent.inclu
 export function shortcut(key: string): string {
   return MAC ? `⌘${key}` : `Ctrl+${key}`
 }
+
+/** The same with Shift held too: ⇧⌘B on a Mac, Ctrl+Shift+B elsewhere. */
+export function shiftShortcut(key: string, mac = MAC): string {
+  return mac ? `⇧⌘${key}` : `Ctrl+Shift+${key}`
+}

@@ -8,8 +8,11 @@ import {
   RAIL_DEFAULT,
   RAIL_MAX,
   RAIL_MIN,
+  railMax,
   resetRailWidth,
   setRailWidth,
+  shownWidth,
+  WIDE_MAX,
   widest
 } from '@/store/layout'
 
@@ -34,6 +37,21 @@ describe("the rails' widths", () => {
     // A 288px rail beside a 500px conversation gives 116px more at most.
     expect(widest(288, 500)).toBe(404)
     expect(widest(288, 300)).toBe(RAIL_MIN)
+  })
+
+  it('let the panel pass the bound on the Browser tab only, the conversation keeping its minimum', () => {
+    expect(railMax('panel', true)).toBe(WIDE_MAX)
+    expect(railMax('panel', false)).toBe(RAIL_MAX)
+    expect(railMax('sidebar', true)).toBe(RAIL_MAX)
+    // A 640px browser beside a 1000px conversation goes to 1256px, the conversation keeping 384px.
+    expect(widest(640, 1000, WIDE_MAX)).toBe(1256)
+    expect(widest(640, 1000)).toBe(RAIL_MAX)
+    setRailWidth('panel', 1100, true, WIDE_MAX)
+    expect($panelWidth.get()).toBe(1100)
+    // Kept for the browser, shown within the bounds on another tab.
+    expect(shownWidth(1100, true)).toBe(1100)
+    expect(shownWidth(1100, false)).toBe(RAIL_MAX)
+    expect(shownWidth(300, false)).toBe(300)
   })
 
   it('keep a width once a drag ends, and forget it on a reset', () => {

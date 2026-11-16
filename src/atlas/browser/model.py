@@ -16,6 +16,7 @@ Decided with the user on 12/10/2026 (docs/ARCHITECTURE.md, Browser):
 import ipaddress
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
 from urllib.parse import urlsplit
@@ -96,15 +97,30 @@ _HELPERS = (
     "cdp('Domain.method', **kwargs) is raw CDP: cdp('Accessibility.getFullAXTree')['nodes'] "
     "gives every element's role/name/backendDOMNodeId (thousands of nodes, so filter them in "
     "Python before printing), and cdp('DOM.getBoxModel', backendNodeId=n) then gives the "
-    "coordinates to click. ensure_real_tab() gets back from a stale or internal tab."
+    "coordinates to click. ensure_real_tab() gets back from a stale or internal tab. The app's "
+    "browser is as narrow as its panel, so some sites show their phone layout. When a site needs "
+    "its desktop layout, call cdp('Emulation.setDeviceMetricsOverride', width=1280, height=800, "
+    "deviceScaleFactor=1, mobile=False) first, and cdp('Emulation.clearDeviceMetricsOverride') "
+    "when done."
 )
-#: Atlas's modes, and the stop at logins, CAPTCHAs and payments (decided with the user).
+#: Atlas's modes, the app browser's tabs, and the stop at logins, CAPTCHAs and payments (decided
+#: with the user).
 _MODES = (
-    "\n\nMODES: 'profile' (default) is Atlas's own browser profile, where the user signed into "
-    "their sites: use it to act as them. 'clean' is a fresh profile signed into nothing; "
-    "'headless' is a fresh profile with no window, for reading and extracting.\n\n"
+    "\n\nWHEN: to search the web or read a page's text, web_search and web_fetch are faster and "
+    "cheaper than any browser. Come here when a page has to be used: clicked, filled, signed "
+    "into, or seen working (a local server, say).\n\n"
+    "MODES: 'profile' (default) is Atlas's own browser: the browser beside the conversation "
+    "in the app when the app is open on this computer, otherwise Atlas's Chrome window. The user "
+    "sees the page there and signed into their sites there, so use it unless they ask for "
+    "another. 'clean' is a fresh profile signed into nothing, in a window; 'headless' is a fresh "
+    "profile with no window, only when the user asks for no window; both always run in "
+    "Chrome.\n\n"
+    "TABS: in the app's browser, list_tabs() also shows the pages the user opened in this "
+    "conversation, the one on their screen first. new_tab() never takes over a page of the "
+    "user's; to go on where the user is (after they sign in, say), switch_tab(list_tabs()[0]). "
+    "ensure_real_tab() lands there too, but only while your own tab is still blank.\n\n"
     "THE USER'S PART: never guess or type credentials. At a login, a CAPTCHA, a payment or "
-    "anything only the user should do, stop and ask them to do it in the browser window; once they "
+    "anything only the user should do, stop and ask them to do it in that browser; once they "
     "say it is done, read the page again before acting."
 )
 
@@ -203,6 +219,172 @@ def metadata_host(host: str) -> bool:
     """Whether a host is a cloud metadata name or address, read as written (the service also
     resolves names)."""
     return host in _METADATA_HOSTS or metadata_address(host)
+
+
+#: What the model reads when no browser can be driven.
+NO_BROWSER = (
+    "There is no browser to drive: open the Atlas app on this computer, or install Chrome, Edge "
+    "or Chromium."
+)
+#: What it reads when a mode that is always Chrome has no Chrome.
+CHROME_ONLY = "The clean and headless modes need Chrome, Edge or Chromium, and none is installed."
+#: The note on the call that ended because the app did.
+APP_CLOSED = (
+    "The app closed during this call; the next call runs in Atlas's Chrome window, a new tab "
+    "where the user may have to sign in again."
+)
+APP_CLOSED_NO_CHROME = (
+    "The app closed during this call; browser_exec needs the app open again, or a Chrome, Edge "
+    "or Chromium installed."
+)
+#: The note on the first call in another browser than the one before it.
+TO_APP = (
+    "This call ran in the app's browser, not where the earlier calls ran: the tabs they opened "
+    "are not there, and the user may have to sign in again."
+)
+TO_CHROME = (
+    "This call ran in Atlas's Chrome window, not where the earlier calls ran: the tabs they "
+    "opened are not there, and the user may have to sign in again."
+)
+
+
+# -- the app browser: what the engine may ask of it ------------------------------------------------
+
+#: The CDP domains a page's session may use in the app browser. What is not here (`Target`,
+#: `Browser`, `Storage`, `IO`, the tracing and profiling ones…) reaches past the page, and so do
+#: `DOMStorage`, `IndexedDB` and `CacheStorage`, which take any origin.
+CDP_DOMAINS = frozenset(
+    {
+        "Page", "Runtime", "DOM", "DOMSnapshot", "DOMDebugger", "CSS", "Input", "Network", "Fetch",
+        "Emulation", "Accessibility", "Log", "Console", "Overlay", "Performance", "Security",
+        "Animation", "Audits", "Debugger", "Inspector",
+    }
+)  # fmt: skip
+#: Methods of an allowed domain that stay refused, since they reach past the page: one writes files
+#: wherever it likes; one closes the view behind the app's back (a tab is closed with
+#: `Target.closeTarget`); the cookies and the cache are the home's partition's, every site's and
+#: every conversation's (`getCookies` takes any URL); and certificate errors would be ignored for
+#: every page.
+CDP_REFUSED = frozenset(
+    {
+        "Page.setDownloadBehavior", "Page.close",
+        "Network.getAllCookies", "Network.getCookies", "Network.setCookie", "Network.setCookies",
+        "Network.deleteCookies", "Network.clearBrowserCookies", "Network.clearBrowserCache",
+        "Security.setIgnoreCertificateErrors", "Security.setOverrideCertificateErrors",
+        "Security.handleCertificateError",
+    }
+)  # fmt: skip
+#: The one origin the app browser's contexts report.
+BROWSER_CONTEXT = "atlas-app"
+#: What a session that does not exist is told: the engine looks for this very sentence to attach
+#: again, and its helpers tolerate the other.
+SESSION_NOT_FOUND = "Session with given id not found."
+NO_SUCH_SESSION = "No session with given id"
+#: The error codes of Chrome's DevTools protocol that Atlas answers with.
+CDP_NOT_FOUND = -32601
+CDP_SERVER_ERROR = -32000
+CDP_NO_SESSION = -32001
+#: What a conversation's engine reads when the whole app browser is gone.
+APP_GONE = "The app browser closed: the app is gone."
+
+
+def cdp_refused(method: str) -> str | None:
+    """Why a command may not reach an app browser page, or `None` when it may."""
+    domain = method.partition(".")[0]
+    if domain not in CDP_DOMAINS or method in CDP_REFUSED:
+        return f"{method} is not available in the app's browser."
+    return None
+
+
+def wrong_method(method: str) -> str:
+    """What Chrome says of a command it does not have."""
+    return f"'{method}' wasn't found"
+
+
+def url_refused(url: str) -> str | None:
+    """Why a URL the engine navigates to may not be loaded, or `None`: only web pages and the
+    blank one; the cloud metadata floor is checked by name and by number here, and the vault and
+    the name's resolution by the service."""
+    if url == "about:blank":
+        return None
+    try:
+        scheme = urlsplit(url).scheme.lower()
+    except ValueError:
+        return "Blocked: not an address."
+    if scheme not in ("http", "https"):
+        return "Blocked: only http and https addresses open in the app's browser."
+    if metadata_host(host_of(url)):
+        return METADATA_REFUSED
+    return None
+
+
+def navigation_url(method: str, params: Mapping[str, object]) -> str | None:
+    """The address a command would load: `Page.navigate`'s and `Target.createTarget`'s `url`."""
+    if method not in ("Page.navigate", "Target.createTarget"):
+        return None
+    url = params.get("url")
+    return url if isinstance(url, str) else None
+
+
+@dataclass(frozen=True, slots=True)
+class HostTab:
+    """One tab of the app browser, as the browser host lists it."""
+
+    id: str
+    url: str
+    title: str
+    owner: str
+    loading: bool = False
+    #: The tab selected on the panel.
+    selected: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class HostTabs:
+    """The app browser's tabs, and what it says of itself for `Browser.getVersion`."""
+
+    tabs: tuple[HostTab, ...]
+    user_agent: str
+    product: str
+
+
+def conversation_tabs(tabs: HostTabs, conversation_id: str) -> list[HostTab]:
+    """A conversation's tabs, whoever opened them: the one selected on the panel first (it is the
+    page the user is looking at, which the engine's `ensure_real_tab` falls on), then the rest from
+    the newest to the oldest (the host lists them oldest first)."""
+    mine = [tab for tab in tabs.tabs if tab.owner == conversation_id]
+    selected = [tab for tab in mine if tab.selected]
+    return selected + [tab for tab in reversed(mine) if not tab.selected]
+
+
+def target_info(tab: HostTab, *, attached: bool) -> dict[str, object]:
+    """A tab as DevTools describes a page target."""
+    return {
+        "targetId": tab.id,
+        "type": "page",
+        "title": tab.title,
+        "url": tab.url or "about:blank",
+        "attached": attached,
+        "canAccessOpener": False,
+        "browserContextId": BROWSER_CONTEXT,
+    }
+
+
+def browser_version(tabs: HostTabs) -> dict[str, str]:
+    """`Browser.getVersion`'s answer: the engine reads the user agent to pick Ctrl or Cmd."""
+    return {
+        "protocolVersion": "1.3",
+        "product": tabs.product,
+        "revision": "",
+        "userAgent": tabs.user_agent,
+        "jsVersion": "",
+    }
+
+
+def app_session_name(conversation_id: str) -> str:
+    """The engine's session for a conversation in the app browser: its own daemon, never one the
+    Chrome sessions hold (`BU_NAME`, 1 to 64 letters, digits, `-` and `_`)."""
+    return f"atlas-app-{sha256(conversation_id.encode()).hexdigest()[:16]}"
 
 
 # -- Chrome and the engine -------------------------------------------------------------------------

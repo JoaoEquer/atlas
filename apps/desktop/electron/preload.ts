@@ -1,10 +1,10 @@
 /**
  * What the window may ask of the main process: a home's server address and token, to let a home's
  * server go, to be brought forward, a backup's path from the system's dialogs, to keep the home on
- * screen for next time, a session's folder opened in VS Code, the app's update, and a plugin's
- * screen's powers outside the window (a shortcut, a paste, a bar). Nothing else
- * crosses: the bridge stays narrow. A sandboxed preload loads only Electron's own modules, so this
- * file imports nothing else.
+ * screen for next time, a session's folder opened in VS Code, the app's update, a plugin's
+ * screen's powers outside the window (a shortcut, a paste, a bar), and the side panel's browser.
+ * Nothing else crosses: the bridge stays narrow. A sandboxed preload loads only Electron's own
+ * modules, so this file imports nothing else.
  */
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -14,6 +14,35 @@ const remote = ipcRenderer.sendSync('atlas:remote') === true
 const terminalWait = ipcRenderer.sendSync('atlas:terminal-wait') as null | number
 
 contextBridge.exposeInMainWorld('atlas', {
+  /** The side panel's browser (electron/app-browser.ts): a command (its shape is checked in the main
+   * process), its state, and its changes. */
+  browser: {
+    command: (command: unknown): Promise<unknown> => ipcRenderer.invoke('atlas:browser:command', command),
+    onChange: (listener: (state: unknown) => void): (() => void) => {
+      const handler = (_event: unknown, state: unknown) => {
+        listener(state)
+      }
+      ipcRenderer.on('atlas:browser:changed', handler)
+
+      return () => {
+        ipcRenderer.removeListener('atlas:browser:changed', handler)
+      }
+    },
+    /** A page the agent opened or asked to bring forward: whether the panel shows it is for the window to decide. */
+    onSurface: (listener: (surface: unknown) => void): (() => void) => {
+      const handler = (_event: unknown, surface: unknown) => {
+        listener(surface)
+      }
+      ipcRenderer.on('atlas:browser:surface', handler)
+
+      return () => {
+        ipcRenderer.removeListener('atlas:browser:surface', handler)
+      }
+    },
+    /** The ports, of the common ones and these, where a web server answers on this machine. */
+    servers: (extra: number[]): Promise<unknown> => ipcRenderer.invoke('atlas:browser:servers', extra),
+    state: (): Promise<unknown> => ipcRenderer.invoke('atlas:browser:state')
+  },
   /** Where a home's backup goes, from the system's save dialog; `null` when the user cancelled.
    * `label` names the zip files in its filter. */
   backupTarget: (home: string, label: string): Promise<null | string> =>

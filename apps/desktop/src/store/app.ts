@@ -10,6 +10,7 @@
  */
 import { atom, map, type ReadableAtom, type WritableAtom } from 'nanostores'
 
+import { browserHome } from '@/browser-home'
 import { locale, t } from '@/i18n'
 import { emitPluginEvent } from '@/plugins/events'
 import { type EventParams, notFound, type ServerRequest } from '@/protocol/channel'
@@ -80,6 +81,7 @@ import type {
   UserSaid
 } from '@/protocol/protocol.generated'
 
+import { adoptDraft } from './browser'
 import { applyCommand } from './commands'
 import type { ExtensionKind } from './extensions'
 import { markDone } from './first-steps'
@@ -2349,6 +2351,8 @@ export class HomeSession {
 
     // A tab of its own, on screen unless the user went to another meanwhile.
     this.tabs.made({ conversationId, kind: 'conversation' }, '')
+    // The tabs the browser opened in the draft are the conversation's now.
+    adoptDraft(conversationId, browserHome($machine.get(), $home.get() ?? 'default'))
 
     if (this.$view.get() === 'conversation' && this.$selected.get() === null) {
       this.$selected.set(conversationId)

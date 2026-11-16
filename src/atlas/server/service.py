@@ -81,7 +81,7 @@ from atlas.assistant import (
     other_accounts,
 )
 from atlas.bots import Bot, BotError
-from atlas.browser import ENGINE
+from atlas.browser import APP_GONE, ENGINE, HostError
 from atlas.conversations import LIMITS as ATTACHMENT_LIMITS
 from atlas.conversations import (
     AttachmentError,
@@ -184,6 +184,7 @@ from atlas.plugins import Permission as ExecutorPermission
 from atlas.plugins import Question as ExecutorQuestion
 from atlas.plugins import Verdict as ExecutorVerdict
 from atlas.secrets import MCP_SIGN_IN_FILE, SecretsError, Vault
+from atlas.server.browser_host import HostLink, check_proof
 from atlas.server.channels import ChannelRunner
 from atlas.server.connection import Connection, Peer
 from atlas.server.previews import read_preview
@@ -226,6 +227,9 @@ from atlas.server.protocol import (
     BotRef,
     BotRow,
     BotsChanged,
+    BrowserEventParams,
+    BrowserHosted,
+    BrowserHostParams,
     CallRow,
     CheckpointList,
     CheckpointRow,
@@ -488,6 +492,10 @@ PLUGIN_WATCH_SECONDS = 1.0
 DETECT_SECONDS = 60.0
 #: The key of the workbench's requests: they belong to no conversation, and reach every screen.
 _WORKBENCH = ""
+#: The `conversation_id` of the requests to the app browser's host, which belong to none.
+_BROWSER_HOST = "\x00browser-host"
+#: How long the app browser's host has to answer a request: a page may take long to load.
+BROWSER_HOST_SECONDS = 120.0
 #: How long the start waits for the executors before going on without them.
 EXECUTORS_WAIT_SECONDS = 5.0
 #: The most conversations a list returns: a client reads again every row its list holds in one
@@ -533,6 +541,8 @@ class _Pending:
     method: str
     params: dict[str, Any]
     answer: "asyncio.Future[object | None]"
+    #: Set for a request to one connection alone (the app browser's host), not to a conversation.
+    connection: Connection | None = None
 
 
 type _Handler = Callable[[Connection, Any], Awaitable[object]]
@@ -604,6 +614,8 @@ class Gateway:
         #: The MCP servers as the clients were last told, so `mcp.changed` says only a change.
         self._mcp_shown = McpList([], None)
         self._requests: dict[str, _Pending] = {}
+        #: The connection that lends the app browser to this server, if any (`browser.host`).
+        self._browser_host: Connection | None = None
         self._housekeeping: asyncio.Task[None] | None = None
         #: The server's event loop, once it runs: what happens in a worker thread is told to
         #: the clients from here.
@@ -734,6 +746,8 @@ class Gateway:
             "conversation.commands": self._conversation_commands,
             "trust.check": self._check_command,
             "preview.read": self._preview_read,
+            "browser.host": self._browser_host_offer,
+            "browser.event": self._browser_event,
             "terminal.available": self._terminal_available,
             "terminal.open": self._terminal_open,
             "terminal.input": self._terminal_input,
@@ -1246,6 +1260,7 @@ class Gateway:
                 await self._receive(connection, text)
         finally:
             self._connections.discard(connection)
+            await self._release_browser(connection)
             # Its terminals and the backups it did not take go with it; stopping a shell may
             # wait a moment.
             await asyncio.to_thread(self.terminals.close_owner, connection)
@@ -1267,7 +1282,7 @@ class Gateway:
         fields: dict[str, Any] = frame  # pyright: ignore[reportUnknownVariableType]
         if "method" not in fields:
             if "id" in fields and ("result" in fields or "error" in fields):
-                self._answer(fields)
+                self._answer(fields, connection)
             else:
                 connection.put(_error(fields.get("id"), INVALID_REQUEST, "No method in the frame."))
             return
@@ -1297,10 +1312,14 @@ class Gateway:
             raise TypeError(f"{declared.name} returned {type(result).__name__}.")
         return result
 
-    def _answer(self, frame: dict[str, Any]) -> None:
+    def _answer(self, frame: dict[str, Any], connection: Connection | None = None) -> None:
         pending = self._requests.get(str(frame.get("id")))
         if pending is None or pending.answer.done():
             return  # the wait already ended
+        if pending.connection is not None:
+            if pending.connection is connection:
+                self._host_answered(pending, frame)
+            return  # a request to one connection is answered by that one, and by nobody else
         if "error" in frame:
             result = None
         else:
@@ -1528,6 +1547,90 @@ class Gateway:
     async def _terminal_close(self, connection: Connection, params: TerminalRef) -> Empty:
         await asyncio.to_thread(self.terminals.close, connection, params.id)
         return Empty()
+
+    # -- the app browser -------------------------------------------------------------------------
+
+    async def _browser_host_offer(
+        self, connection: Connection, params: BrowserHostParams
+    ) -> BrowserHosted:
+        """The app lends its browser, with the proof that it shares this computer's files. It
+        answers at once: nothing here waits for the app's own requests, which this very loop
+        would have to read."""
+        reason = check_proof(params.proof_file, params.nonce)
+        if reason is not None:
+            return BrowserHosted(False, reason)
+        link = HostLink(lambda method, body: self._host_request(connection, method, body))
+        self._browser_host = connection
+        await self.assistant.browser.host(link)
+        return BrowserHosted(True, "", home_name(self._home.root))
+
+    async def _browser_event(self, connection: Connection, params: BrowserEventParams) -> Empty:
+        """A page of the app browser sent a DevTools event, for the engines driving it."""
+        if connection is self._browser_host:
+            await self.assistant.browser.host_event(params.tab, params.method, params.params)
+        return Empty()
+
+    async def _release_browser(self, connection: Connection) -> None:
+        """A connection ended: what it was asked fails now, and, if it lent the app browser, the
+        browser is gone with it."""
+        for pending in list(self._requests.values()):
+            if pending.connection is connection and not pending.answer.done():
+                pending.answer.set_exception(HostError(APP_GONE))
+        if connection is self._browser_host:
+            self._browser_host = None
+            await self.assistant.browser.unhost()
+
+    async def _host_request(
+        self,
+        connection: Connection,
+        method: str,
+        params: object,
+        seconds: float | None = None,
+    ) -> object:
+        """Ask the app browser's host, and nobody else: no conversation, no `request.cancel`, no
+        replay. Raises `HostError` with the host's own words when it answers with an error, and
+        when it does not answer or is gone."""
+        if connection.gone or connection not in self._connections:
+            raise HostError(APP_GONE)
+        seconds = BROWSER_HOST_SECONDS if seconds is None else seconds
+        pending = _Pending(
+            f"srq-{secrets.token_hex(6)}",
+            _BROWSER_HOST,
+            method,
+            dump(params),
+            asyncio.get_running_loop().create_future(),
+            connection,
+        )
+        self._requests[pending.id] = pending
+        connection.put(
+            {"jsonrpc": "2.0", "id": pending.id, "method": method, "params": pending.params}
+        )
+        try:
+            async with asyncio.timeout(seconds):
+                return await pending.answer
+        except TimeoutError:
+            raise HostError(
+                f"The app browser did not answer {method} in {seconds:.0f} s."
+            ) from None
+        finally:
+            self._requests.pop(pending.id, None)
+
+    def _host_answered(self, pending: _Pending, frame: dict[str, Any]) -> None:
+        if "error" in frame:
+            raw = frame["error"]
+            said = cast("dict[str, Any]", raw).get("message") if isinstance(raw, dict) else None
+            pending.answer.set_exception(
+                HostError(said if isinstance(said, str) and said else "The app browser failed.")
+            )
+            return
+        try:
+            result = read(SERVER_REQUESTS[pending.method].result, frame.get("result"), "result")
+        except ProtocolError as error:
+            pending.answer.set_exception(
+                HostError(f"The app browser answered {pending.method} wrongly: {error.message}")
+            )
+            return
+        pending.answer.set_result(result)
 
     async def _check_command(self, connection: Connection, params: CommandParams) -> CommandCheck:
         """The trust gate's own detection, before a ▶ runs a command (step 16f): what is
@@ -3490,6 +3593,8 @@ class Gateway:
             raise ProtocolError(INVALID_PARAMS, str(error)) from error
 
     def _cancelled(self, pending: _Pending, reason: str) -> None:
+        if pending.connection is not None:
+            return
 
         payload = RequestCancel(pending.id, pending.method, reason)  # pyright: ignore[reportArgumentType]
         if pending.conversation_id == _WORKBENCH:

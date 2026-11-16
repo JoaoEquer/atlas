@@ -120,6 +120,11 @@ export class AtlasClient {
     return this.channel.call(method, params, timeoutMs)
   }
 
+  /** A notification: a method sent with no id and no answer; `false` when not connected. */
+  notify<M extends RpcMethod>(method: M, params: RpcMethods[M]['params']): boolean {
+    return this.channel.notify(method, params)
+  }
+
   /** Paint this conversation's events after `seq`, the number its messages were read at. */
   watch(conversationId: string, seq: number): void {
     this.watermarks.set(conversationId, seq)

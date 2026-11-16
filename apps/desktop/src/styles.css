@@ -287,6 +287,21 @@ details[open]::details-content {
   padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
 }
 
+/* The browser expanded (store/browser.ts) takes the conversation's place, the sidebar staying: the
+   conversation is hidden, not unmounted, and the panel fills the rest, in a narrow window too. */
+[data-panel-expanded] .main-pane {
+  display: none;
+}
+
+[data-panel-expanded] .side-panel-open {
+  position: relative;
+  inset-block: auto;
+  right: auto;
+  flex: 1 1 0;
+  width: auto;
+  box-shadow: none;
+}
+
 /* While an edge is dragged, a frame or the terminal under the pointer does not take it away. */
 .rail-resizing,
 .rail-resizing * {

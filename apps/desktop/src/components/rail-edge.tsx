@@ -3,13 +3,15 @@ import { type KeyboardEvent, type PointerEvent, useRef, useState } from 'react'
 
 import { t } from '@/i18n'
 import {
+  $panelWide,
   $panelWidth,
   $sidebarWidth,
   type Rail,
-  RAIL_MAX,
   RAIL_MIN,
+  railMax,
   resetRailWidth,
   setRailWidth,
+  shownWidth,
   widest
 } from '@/store/layout'
 
@@ -23,7 +25,11 @@ const STEP = 16
  * under the pointer do not take the pointer away (`rail-resizing`, styles.css).
  */
 export function RailEdge({ rail }: { rail: Rail }) {
-  const width = useStore(rail === 'sidebar' ? $sidebarWidth : $panelWidth)
+  const kept = useStore(rail === 'sidebar' ? $sidebarWidth : $panelWidth)
+  // The Browser tab drags past the rails' bound (store/layout.ts).
+  const wide = useStore($panelWide) && rail === 'panel'
+  const max = railMax(rail, wide)
+  const width = shownWidth(kept, wide)
   const [dragging, setDragging] = useState(false)
   const drag = useRef<null | { max: number; start: number; x: number }>(null)
   // The sidebar's edge is on its right and the panel's on its left: a drag right widens one and
@@ -36,7 +42,7 @@ export function RailEdge({ rail }: { rail: Rail }) {
     const current = edge.parentElement?.getBoundingClientRect().width ?? width
     const main = document.querySelector('.main-pane')?.getBoundingClientRect().width ?? 0
 
-    return { current, max: widest(current, main) }
+    return { current, max: widest(current, main, max) }
   }
 
   const finish = (event: PointerEvent<HTMLDivElement>) => {
@@ -47,7 +53,7 @@ export function RailEdge({ rail }: { rail: Rail }) {
     drag.current = null
     setDragging(false)
     document.documentElement.classList.remove('rail-resizing')
-    setRailWidth(rail, (rail === 'sidebar' ? $sidebarWidth : $panelWidth).get(), true)
+    setRailWidth(rail, (rail === 'sidebar' ? $sidebarWidth : $panelWidth).get(), true, max)
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
@@ -62,15 +68,15 @@ export function RailEdge({ rail }: { rail: Rail }) {
     }
 
     event.preventDefault()
-    const { current, max } = measure(event.currentTarget)
-    setRailWidth(rail, Math.min(max, current + sign * step), true)
+    const { current, max: room } = measure(event.currentTarget)
+    setRailWidth(rail, Math.min(room, current + sign * step), true, max)
   }
 
   return (
     <div
       aria-label={label}
       aria-orientation="vertical"
-      aria-valuemax={RAIL_MAX}
+      aria-valuemax={max}
       aria-valuemin={RAIL_MIN}
       aria-valuenow={width}
       className={`group/edge absolute inset-y-0 z-10 w-1.5 cursor-col-resize outline-none ${
@@ -89,8 +95,8 @@ export function RailEdge({ rail }: { rail: Rail }) {
         }
 
         event.preventDefault()
-        const { current, max } = measure(event.currentTarget)
-        drag.current = { max, start: current, x: event.clientX }
+        const { current, max: room } = measure(event.currentTarget)
+        drag.current = { max: room, start: current, x: event.clientX }
         event.currentTarget.setPointerCapture(event.pointerId)
         document.documentElement.classList.add('rail-resizing')
         setDragging(true)
@@ -99,7 +105,7 @@ export function RailEdge({ rail }: { rail: Rail }) {
         const from = drag.current
 
         if (from) {
-          setRailWidth(rail, Math.min(from.max, from.start + sign * (event.clientX - from.x)))
+          setRailWidth(rail, Math.min(from.max, from.start + sign * (event.clientX - from.x)), false, max)
         }
       }}
       onPointerUp={finish}

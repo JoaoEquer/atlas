@@ -1,18 +1,21 @@
 """A stand-in for browser-harness, for the tests: run as Atlas runs the engine (`python
 tests/fake_engine.py`, the code on its standard input), it checks that the browser at `BU_CDP_WS`
-still listens, then runs the code with helpers that pretend: each session's tab is a JSON file in
-`BH_HOME`, so what one call opened the next one finds. `--reload` stops nothing and is logged.
+accepts a WebSocket handshake on its path, then runs the code with helpers that pretend: each
+session's tab is a JSON file in `BH_HOME`, so what one call opened the next one finds. `--reload`
+stops nothing and is logged.
 
 Every run is appended to `FAKE_ENGINE_LOG`: its arguments, the engine's variables Atlas set, and
 the code."""
 
 import json
 import os
-import socket
 import sys
 import time
 from pathlib import Path
 from typing import Any
+
+from websockets.exceptions import WebSocketException
+from websockets.sync.client import connect
 
 _HOME = Path(os.environ.get("BH_HOME", "."))
 _NAME = os.environ.get("BU_NAME", "default")
@@ -94,9 +97,9 @@ def main() -> None:
     _log({"argv": arguments, "variables": variables, "code": code})
     endpoint = os.environ.get("BU_CDP_WS", "")
     try:
-        port = int(endpoint.split(":")[2].split("/")[0])
-        socket.create_connection(("127.0.0.1", port), timeout=2).close()
-    except (OSError, ValueError, IndexError):
+        # A real handshake on the very path: the browser endpoint refuses any other.
+        connect(endpoint, open_timeout=5).close()
+    except (OSError, ValueError, WebSocketException):
         sys.stderr.write(f"browser-harness: fatal: CDP WS handshake failed: {endpoint}\n")
         sys.exit(1)
     helpers = {name: value for name, value in globals().items() if not name.startswith("_")}

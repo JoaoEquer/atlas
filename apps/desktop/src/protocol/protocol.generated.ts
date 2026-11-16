@@ -266,6 +266,26 @@ export interface TerminalResizeParams {
 export interface TerminalRef {
   id: string
 }
+/** The app's main process offers the app browser to this server, with the proof that it shares the server's files (the browser endpoint's host proof). */
+export interface BrowserHostParams {
+  /** A file the app wrote in its own folder, `browser-proof/<32 hex>`. */
+  proof_file: string
+  /** What the file holds: 64 hex characters. */
+  nonce: string
+}
+export interface BrowserHosted {
+  accepted: boolean
+  /** Why not, when it was not accepted. */
+  reason: string
+  /** The name of the home this server serves, which the app keys the browser's partition by. */
+  home: string
+}
+/** A page of the app browser said something (a CDP event, or that its debugger let go). */
+export interface BrowserEventParams {
+  tab: string
+  method: string
+  params: unknown
+}
 export interface CommandParams {
   command: string
 }
@@ -1675,6 +1695,39 @@ export interface SecretResult {
   value?: string
   skipped?: boolean
 }
+export interface BrowserTabs {
+  tabs: BrowserTabRow[]
+  /** What the app browser's pages send, and the Chrome they run on (`Chrome/<version>`). */
+  user_agent: string
+  product: string
+}
+export interface BrowserTabRow {
+  id: string
+  url: string
+  title: string
+  /** The conversation it belongs to; empty for the draft's. */
+  owner: string
+  loading: boolean
+  /** The tab selected on the panel. */
+  selected?: boolean
+}
+export interface BrowserOpenParams {
+  owner: string
+  url: string
+  /** Opened behind the tab on the panel, which stays selected. */
+  background: boolean
+}
+export interface BrowserTabRef {
+  id: string
+}
+export interface BrowserCdpParams {
+  id: string
+  method: string
+  params: unknown
+}
+export interface BrowserCdpResult {
+  result: unknown
+}
 /** What an executor instance asks to do, on its card (step 16c: every screen gets it). */
 export interface ExecutorApprovalParams {
   instance_id: string
@@ -1890,6 +1943,10 @@ export interface RpcMethods {
   'bot.options': { params: Empty; result: BotOptions }
   /** Write a bot's definition anew, whole; its memory, skills and conversation stay. */
   'bot.update': { params: BotDefinition; result: BotRow }
+  /** A page of the app browser sent a DevTools event, only from the connection that hosts the app browser. Sent as a notification, with no id and no answer. */
+  'browser.event': { params: BrowserEventParams; result: Empty }
+  /** The app offers the app browser to this server for `browser_exec`, proving the app and the server share files: a file the app wrote, read here. Accepted only on the same computer; this connection then answers the server's `browser.*` requests, and no other. */
+  'browser.host': { params: BrowserHostParams; result: BrowserHosted }
   /** A conversation's running background commands, for its agent map. */
   'command.list': { params: ConversationRef; result: CommandList }
   /** The end of a background command's output, running or among the last ended. */
@@ -2170,6 +2227,8 @@ export const RPC_METHODS = [
   'bot.open',
   'bot.options',
   'bot.update',
+  'browser.event',
+  'browser.host',
   'command.list',
   'command.output',
   'command.stop',
@@ -2312,6 +2371,20 @@ export interface ServerRequestMap {
   approval: { params: ApprovalParams; result: ApprovalResult }
   /** The agent asks the user 1 to 5 questions (the ask_user tool). */
   ask_user: { params: AskParams; result: AskResult }
+  /** Start sending the DevTools events of a tab (`browser.event`). Only to the connection that hosts the app browser. */
+  'browser.attach': { params: BrowserTabRef; result: Empty }
+  /** Run a DevTools command in a tab of the app browser. Only to the connection that hosts the app browser; an error carries the command's own message. */
+  'browser.cdp': { params: BrowserCdpParams; result: BrowserCdpResult }
+  /** Close a tab of the app browser. Only to the connection that hosts the app browser. */
+  'browser.close': { params: BrowserTabRef; result: Empty }
+  /** Stop sending the DevTools events of a tab. Only to the connection that hosts the app browser. */
+  'browser.detach': { params: BrowserTabRef; result: Empty }
+  /** Open a tab of the app browser for a conversation. Only to the connection that hosts the app browser. */
+  'browser.open': { params: BrowserOpenParams; result: BrowserTabRef }
+  /** Bring a tab of the app browser to the front. Only to the connection that hosts the app browser. */
+  'browser.show': { params: BrowserTabRef; result: Empty }
+  /** The tabs of the app browser and its user agent. Only to the connection that hosts the app browser. */
+  'browser.tabs': { params: Empty; result: BrowserTabs }
   /** An outside executor asks to use one of its tools; it waits, with no deadline, until the user answers or it is stopped. */
   'executor.approval': { params: ExecutorApprovalParams; result: ExecutorApprovalResult }
   /** An outside executor asks the user questions; it waits, with no deadline. */
@@ -2323,6 +2396,13 @@ export type ServerRequestMethod = keyof ServerRequestMap
 export const SERVER_REQUEST_METHODS = [
   'approval',
   'ask_user',
+  'browser.attach',
+  'browser.cdp',
+  'browser.close',
+  'browser.detach',
+  'browser.open',
+  'browser.show',
+  'browser.tabs',
   'executor.approval',
   'executor.question',
   'secret'

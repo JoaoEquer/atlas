@@ -22,6 +22,7 @@ from atlas.home import (
 )
 from atlas.models import ToolResult
 from atlas.secrets import Vault
+from fake_app_host import FakeAppHost
 from fake_model import FakeCall, FakeModelServer, FakeReply
 from model_support import Connect
 
@@ -95,8 +96,14 @@ def test_the_model_finds_the_browser_and_drives_it(
 
 
 def test_without_a_browser_installed_there_is_no_browser_exec(
-    home: Home, vault: Vault, fake: FakeModelServer, connect: Connect, tmp_path: Path
+    home: Home,
+    vault: Vault,
+    fake: FakeModelServer,
+    connect: Connect,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("atlas.assistant.service._installed_browser", lambda: None)
     fake.reply(FakeReply(text="Hi."))
     assistant = _assistant(home, vault, fake, connect, tmp_path)
 
@@ -109,7 +116,8 @@ def test_without_a_browser_installed_there_is_no_browser_exec(
 
     asyncio.run(scenario())
 
-    assert assistant.browser is None
+    assert assistant.browser is not None
+    assert not assistant.browser.available
     search = next(
         (t for t in fake.bodies(CHAT)[0]["tools"] if t["function"]["name"] == "tool_search"),
         None,
@@ -147,3 +155,31 @@ def test_the_chrome_setting_names_the_browser(
     assistant = Assistant(home, named, models, vault, listener=lambda _c, _e: None)
     assert assistant.browser is not None
     asyncio.run(assistant.close())
+
+
+def test_browser_exec_is_offered_while_the_app_lends_its_browser(
+    home: Home,
+    vault: Vault,
+    fake: FakeModelServer,
+    connect: Connect,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("atlas.assistant.service._installed_browser", lambda: None)
+    assistant = _assistant(home, vault, fake, connect, tmp_path, browser_engine=FAKE_ENGINE)
+    shared = assistant._shared  # pyright: ignore[reportPrivateUsage]
+
+    async def scenario() -> None:
+        assert not assistant.browser.available
+        without, _, _ = shared.tools("c-1", [], None, None, browser=True)
+        assert without.get("browser_exec") is None
+        await assistant.browser.host(FakeAppHost())
+        assert assistant.browser.available
+        lent, _, _ = shared.tools("c-1", [], None, None, browser=True)
+        assert lent.get("browser_exec") is not None
+        await assistant.browser.unhost()
+        gone, _, _ = shared.tools("c-1", [], None, None, browser=True)
+        assert gone.get("browser_exec") is None
+        await assistant.close()
+
+    asyncio.run(scenario())

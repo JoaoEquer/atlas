@@ -55,6 +55,34 @@ describe('a call the app makes', () => {
 /** A server request the app must answer. */
 const serverAsks = (method: string) => ({ id: 'srq-1', jsonrpc: '2.0', method, params: {} })
 
+describe('a notification the app sends', () => {
+  it('goes out with no id, and nothing waits for an answer', async () => {
+    const { channel, outbox, receive } = harness()
+    const event = { method: 'Page.loadEventFired', params: {}, tab: 't1' }
+
+    expect(channel.notify('browser.event', event)).toBe(true)
+    expect(outbox).toEqual([{ jsonrpc: '2.0', method: 'browser.event', params: event }])
+    expect(outbox[0]).not.toHaveProperty('id')
+    // The next call still takes the first id, and no answer is pending for the notification.
+    const pending = channel.call('conversation.list', {})
+    expect(outbox[1]?.id).toBe('r1')
+    receive({ id: 'r1', jsonrpc: '2.0', result: { conversations: [] } })
+    await expect(pending).resolves.toEqual({ conversations: [] })
+  })
+
+  it('is not sent, and says so, with no connection or a transport that throws', () => {
+    const idle = new Channel()
+    expect(idle.notify('browser.event', { method: 'x', params: {}, tab: 't' })).toBe(false)
+    const broken = new Channel()
+    broken.attach({
+      send: () => {
+        throw new Error('closed')
+      }
+    })
+    expect(broken.notify('browser.event', { method: 'x', params: {}, tab: 't' })).toBe(false)
+  })
+})
+
 describe('a request the server makes', () => {
   it('sends only the first of several answers', () => {
     const { channel, outbox, receive } = harness()

@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import signal
 import sys
 from collections.abc import Awaitable, Callable
@@ -16,6 +17,8 @@ import pytest
 
 from atlas.agent import ToolOutput
 from atlas.browser import Browser, BrowserMode
+from atlas.browser.model import session_name
+from fake_app_host import FakeAppHost
 
 TESTS = Path(__file__).parent.parent
 FAKE_CHROME = [sys.executable, str(TESTS / "fake_chrome.py")]
@@ -311,3 +314,198 @@ async def _kill(pid: int) -> None:
     else:
         os.kill(pid, 9)
     await asyncio.sleep(0.5)
+
+
+# -- the app's browser ---------------------------------------------------------------------------
+
+
+def _app_setup(setup: Setup, *, chrome: bool = True) -> Browser:
+    async def resolve(host: str) -> list[str]:
+        return setup.resolved.get(host, [])
+
+    return Browser(
+        setup.folder,
+        FAKE_CHROME if chrome else None,
+        redact=lambda text: text.replace(SECRET, "[REDACTED]"),
+        engine=FAKE_ENGINE,
+        resolve=resolve,
+        environ=dict(os.environ),
+    )
+
+
+def _code_runs(setup: Setup) -> list[dict[str, Any]]:
+    return [run for run in setup.runs() if "code" in run]
+
+
+def test_a_profile_call_runs_in_the_app_browser_when_it_is_lent(setup: Setup) -> None:
+    async def main() -> None:
+        browser = _app_setup(setup)
+        assert browser.available
+        await browser.host(FakeAppHost())
+        try:
+            first = await browser.run("c-1", "print('one')", BrowserMode.PROFILE, 30)
+            assert _result(first.text)["output"].strip() == "one"
+            assert "note" not in _result(first.text)
+            await browser.run("c-1", "print('two')", BrowserMode.PROFILE, 30)
+            await browser.run("c-2", "print('three')", BrowserMode.PROFILE, 30)
+        finally:
+            await browser.close()
+
+    asyncio.run(main())
+    runs = setup.runs()
+    codes = _code_runs(setup)
+    assert len(codes) == 3
+    variables = codes[0]["variables"]
+    # The engine connects to the endpoint, a path of this conversation's alone; no Chrome opened.
+    assert re.fullmatch(r"ws://127\.0\.0\.1:\d+/devtools/browser/[\w-]{43}", variables["BU_CDP_WS"])
+    assert variables["BU_CDP_WS"] != codes[2]["variables"]["BU_CDP_WS"]
+    assert variables["BU_NAME"].startswith("atlas-app-")
+    assert not setup.chrome_log.exists()
+    # Without the tab preamble: the engine's daemon makes the conversation's tab itself.
+    assert codes[0]["code"] == "print('one')"
+    # The agent's workspace is the profile mode's, whatever the browser.
+    profile_session = session_name("c-1", BrowserMode.PROFILE)
+    assert variables["BH_AGENT_WORKSPACE"] == str(setup.folder / "workspaces" / profile_session)
+    # The first call of each conversation stops the daemon of an earlier life, once.
+    kinds = ["reload" if "reload" in run else "code" for run in runs]
+    assert kinds[:2] == ["reload", "code"]
+    assert runs[0]["reload"].startswith("atlas-app-")
+    assert kinds[:3].count("reload") == 1
+    assert kinds.count("reload") >= 2
+
+
+def test_the_throwaway_modes_stay_in_chrome_even_with_the_app_lent(setup: Setup) -> None:
+    async def main() -> None:
+        browser = _app_setup(setup)
+        await browser.host(FakeAppHost())
+        try:
+            for mode in (BrowserMode.CLEAN, BrowserMode.HEADLESS):
+                result = await browser.run("c-1", "print(1)", mode, 30)
+                assert _result(result.text)["success"] is True
+        finally:
+            await browser.close()
+
+    asyncio.run(main())
+    assert len(setup.chromes()) == 2
+    names = [run["variables"]["BU_NAME"] for run in _code_runs(setup)]
+    assert names[0].startswith("atlas-clean-")
+    assert names[1].startswith("atlas-headless-")
+
+
+def test_without_chrome_the_app_browser_alone_serves_the_profile_mode(setup: Setup) -> None:
+    async def main() -> None:
+        browser = _app_setup(setup, chrome=False)
+        assert not browser.available
+        nothing = await browser.run("c-1", "print(1)", BrowserMode.PROFILE, 30)
+        assert "no browser to drive" in json.loads(nothing.text)["error"]
+        await browser.host(FakeAppHost())
+        assert browser.available
+        try:
+            served = await browser.run("c-1", "print(2)", BrowserMode.PROFILE, 30)
+            assert _result(served.text)["output"].strip() == "2"
+            for mode in (BrowserMode.CLEAN, BrowserMode.HEADLESS):
+                refused = await browser.run("c-1", "print(3)", mode, 30)
+                assert "need Chrome, Edge or Chromium" in json.loads(refused.text)["error"]
+        finally:
+            await browser.close()
+        assert not browser.available
+
+    asyncio.run(main())
+    assert len(_code_runs(setup)) == 1
+
+
+def test_the_first_call_in_another_browser_says_so(setup: Setup) -> None:
+    async def call(browser: Browser, code: str) -> dict[str, Any]:
+        return _result((await browser.run("c-1", code, BrowserMode.PROFILE, 30)).text)
+
+    async def main() -> None:
+        browser = _app_setup(setup)
+        try:
+            noted = [await call(browser, "print(1)")]
+            await browser.host(FakeAppHost())
+            noted.append(await call(browser, "print(2)"))
+            noted.append(await call(browser, "print(3)"))
+            # The app closes between calls: the next one runs in Chrome, and says so, once.
+            await browser.unhost()
+            noted.append(await call(browser, "print(4)"))
+            noted.append(await call(browser, "print(5)"))
+        finally:
+            await browser.close()
+        assert [found.get("note") is not None for found in noted] == [
+            False,
+            True,
+            False,
+            True,
+            False,
+        ]
+        assert "app's browser" in noted[1]["note"]
+        assert "Chrome window" in noted[3]["note"]
+
+    asyncio.run(main())
+
+
+def test_an_app_that_closes_during_a_call_fails_it_with_a_note(setup: Setup) -> None:
+    async def main() -> None:
+        browser = _app_setup(setup)
+        await browser.host(FakeAppHost())
+        try:
+            running = asyncio.create_task(
+                browser.run("c-1", "time.sleep(2)\nprint('late')", BrowserMode.PROFILE, 30)
+            )
+            for _ in range(200):
+                if _code_runs(setup):
+                    break
+                await asyncio.sleep(0.05)
+            await browser.unhost()
+            result = _result((await running).text)
+            assert result["success"] is False
+            assert "app closed during this call" in result["note"]
+            assert "Chrome window" in result["note"]
+            # It is not repeated for the user: the next call runs in Chrome, in a new tab.
+            again = await browser.run("c-1", "print('again')", BrowserMode.PROFILE, 30)
+            after = _result(again.text)
+            assert after["output"].strip() == "again"
+            assert "Chrome window" in after["note"]
+        finally:
+            await browser.close()
+
+    asyncio.run(main())
+    assert len(setup.chromes()) == 1
+    reloaded = [run["reload"] for run in setup.runs() if "reload" in run]
+    assert sum(name.startswith("atlas-app-") for name in reloaded) >= 2  # at the start, and the end
+
+
+def test_a_second_host_replaces_the_first(setup: Setup) -> None:
+    async def main() -> None:
+        browser = _app_setup(setup)
+        try:
+            await browser.host(FakeAppHost())
+            await browser.run("c-1", "print(1)", BrowserMode.PROFILE, 30)
+            await browser.host(FakeAppHost())
+            await browser.run("c-1", "print(2)", BrowserMode.PROFILE, 30)
+        finally:
+            await browser.close()
+
+    asyncio.run(main())
+    first, second = (run["variables"]["BU_CDP_WS"] for run in _code_runs(setup))
+    assert first != second
+    # The daemon of the first life is stopped before the conversation's first call on the second.
+    assert [run["reload"] for run in setup.runs() if "reload" in run].count(
+        next(run["reload"] for run in setup.runs() if "reload" in run)
+    ) >= 3
+
+
+def test_an_address_is_refused_by_the_same_rules_wherever_it_is_asked(setup: Setup) -> None:
+    setup.resolved["sneaky.example"] = ["169.254.169.254"]
+
+    async def main() -> None:
+        browser = _app_setup(setup)
+        try:
+            assert await browser.refused_url("https://example.com/") is None
+            assert "cloud metadata" in str(await browser.refused_url("https://sneaky.example/"))
+            assert "cloud metadata" in str(await browser.refused_url("http://169.254.1.1/"))
+            assert "vault" in str(await browser.refused_url(f"https://a.example/?k={SECRET}"))
+        finally:
+            await browser.close()
+
+    asyncio.run(main())

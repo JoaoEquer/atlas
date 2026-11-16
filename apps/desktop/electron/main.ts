@@ -44,9 +44,12 @@ import {
 } from 'electron'
 
 import { messagesFor, pickLocale } from '../src/i18n'
+import { AtlasClient } from '../src/protocol/client'
 
 import { activeHome, AttachedServer, cliRunner, failure, homeFolder, readAlwaysOn } from './always-on'
+import { AppBrowser, registerAppBrowser } from './app-browser'
 import { BackupDownloads } from './backup-down'
+import { BrowserHost } from './browser-host'
 import { Bar, e2ePowers, registerDesktopPowers, systemKeys } from './desktop-powers'
 import { openFolder, openInEditor } from './editor'
 import { backupName, homesRoot, lastHome, rememberHome } from './homes'
@@ -137,10 +140,37 @@ function server(home: null | string): AttachedServer | OwnedServer {
   return found
 }
 
+/** The browser host of each of this machine's servers the window dialled (browser-host.ts): its own
+ * connection, offering the app's browser. */
+const browserHosts = new Map<null | string, BrowserHost>()
+
+/** Offer the app's browser to the server a key opens, once for each key; never to another machine's. */
+function offerBrowser(key: null | string): void {
+  if (key?.startsWith(MACHINE) || !appBrowser || browserHosts.has(key)) {
+    return
+  }
+
+  const host = new BrowserHost({
+    browser: appBrowser,
+    connection: new AtlasClient({ endpoint: () => endpoint(key) }),
+    log,
+    userData: app.getPath('userData')
+  })
+  browserHosts.set(key, host)
+  host.start()
+}
+
+/** Stop offering to a key's server: before it is stopped, or the host's next dial would start it again. */
+function withdrawBrowser(key: null | string): void {
+  browserHosts.get(key)?.stop()
+  browserHosts.delete(key)
+}
+
 /** Let go of a home's servers, so the next dial reaches the right one: the app's, or always on. */
 function forgetHome(name: string): void {
   for (const [key, found] of owned) {
     if (homeOf(key) === name) {
+      withdrawBrowser(key)
       found.stop()
       owned.delete(key)
     }
@@ -244,6 +274,8 @@ function lookForUpdate(now = false): Promise<null | UpdateStatus> {
 }
 
 let window: BrowserWindow | null = null
+/** The side panel's browser (app-browser.ts), made with the window. */
+let appBrowser: AppBrowser | null = null
 
 // No File, Edit, View bar on the window (asked for by the user on 17/10/2026): Windows and Linux
 // get no application menu, set before Electron installs its default one.
@@ -361,11 +393,17 @@ function createWindow(): void {
     event.preventDefault()
     openOutside(url)
   })
+  appBrowser = new AppBrowser(window, log)
   window.once('ready-to-show', () => window?.show())
   window.on('closed', () => {
+    for (const key of [...browserHosts.keys()]) {
+      withdrawBrowser(key)
+    }
+
     window = null
     // The bar is a window too: left open, the app would not quit.
     desktopBar?.close()
+    appBrowser = null
   })
   // Back after an hour away, the window looks for an update again.
   window.on('focus', () => {
@@ -382,9 +420,15 @@ function createWindow(): void {
 
 const homeArgument = (value: unknown): null | string => (typeof value === 'string' && value ? value : null)
 
-ipcMain.handle('atlas:connection', (_event, home: unknown) => endpoint(homeArgument(home)))
+ipcMain.handle('atlas:connection', (_event, home: unknown) => {
+  const key = homeArgument(home)
+  offerBrowser(key)
+
+  return endpoint(key)
+})
 ipcMain.handle('atlas:release', (_event, home: unknown) => {
   const name = homeArgument(home)
+  withdrawBrowser(name)
 
   if (name?.startsWith(MACHINE)) {
     reached.get(name.slice(MACHINE.length))?.close()
@@ -657,6 +701,10 @@ if (!app.requestSingleInstanceLock()) {
     window?.focus()
   })
   app.on('before-quit', () => {
+    for (const key of [...browserHosts.keys()]) {
+      withdrawBrowser(key)
+    }
+
     for (const each of owned.values()) {
       each.stop()
     }
@@ -686,6 +734,7 @@ if (!app.requestSingleInstanceLock()) {
     updateEnded = takeResult(updates)
     registerPreviews(ipcMain, protocol)
     startDesktopPowers()
+    registerAppBrowser(ipcMain, () => appBrowser)
     // Start the opening home's server while the window loads; the window's first dial waits for it.
     void endpoint(null).catch((error: unknown) => {
       log(String(error))

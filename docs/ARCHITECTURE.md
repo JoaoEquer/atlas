@@ -35,7 +35,7 @@ src/atlas/
   trust/       the approval gate, dangerous commands, the guardian, auto mode, threat scanning
   jobs/        background jobs, tasks, cron
   bots/        the home's bots: their definitions, their memory and skills folders, the roster
-  browser/     the browser: Atlas's own Chrome, the code that drives it, the user taking over
+  browser/     the browser: Atlas's own Chrome, the code that drives it, the app browser's endpoint
   server/      HTTP + WebSocket, and the client protocol (single source)
   instances/   talking to more than one machine
   logins/      the logins of gh and gws, the programs Atlas reaches GitHub and Google through
@@ -669,6 +669,12 @@ an id, and may withdraw them.
   wins and the others get `request.cancel`. With no client attached it is undelivered at once
   instead of waiting out the deadline. A stopped turn withdraws its open requests.
   The deadline is 300 seconds: `[trust] approval_timeout` for approvals.
+- **A request to the browser host** (`browser.*`, The app browser, below) is not a conversation's:
+  it goes to the host's connection alone, never withdrawn with `request.cancel` nor sent again to a
+  client that comes back; an answer from another connection is ignored, an error comes back with
+  its text, and the host's connection closing fails its open requests at once. The deadline is 120
+  seconds. A handler on the connection's own loop never waits on a request to that host, which
+  would wait on a frame the loop does not read.
 - **The turn lives in the server, not in the connection.** Closing the app does not stop it. Every
   event of a conversation gets a number, the server keeps the last 512 (4 MiB at most) per
   conversation, and a client that comes back asks for those after the last it saw; the requests
@@ -2430,12 +2436,13 @@ Step 14 (`atlas.browser`). Decided with the user on 12/10/2026.
   of its own. Two more modes, **clean** (a temporary profile, a window) and **headless** (a
   temporary profile, no window), are thrown away when Atlas closes them. Chrome, Edge or Chromium,
   found where they install or named in `[browser] chrome` (the program and its first arguments); the
-  tool is offered only when one is found. One Chrome per mode, each conversation in its own tab.
-  Edge's launcher on Windows can end with code 0 and leave the browser running in another process,
-  which writes `DevToolsActivePort` a moment later (found on 25/10/2026, where Edge was the only one
-  installed): a launcher that ends with 0 gets 5 seconds for the file before it counts as a browser
-  that did not start, and closing waits for the endpoint to stop listening before the profile goes
-  (a browser still listening keeps its `DevToolsActivePort`, so the next start uses it).
+  tool is offered when one is found or the app lends its browser (The app browser, below). One
+  Chrome per mode, each conversation in its own tab. Edge's launcher on Windows can end with code 0
+  and leave the browser running in another process, which writes `DevToolsActivePort` a moment
+  later (found on 25/10/2026, where Edge was the only one installed): a launcher that ends with 0
+  gets 5 seconds for the file before it counts as a browser that did not start, and closing waits
+  for the endpoint to stop listening before the profile goes (a browser still listening keeps its
+  `DevToolsActivePort`, so the next start uses it).
 - **The agent stops at logins, CAPTCHAs and payments** and asks the user to do that part in the
   window, then reads the page again once they say it is done; it never guesses credentials. A
   password manager (1Password) is left for later, by the user's
@@ -2458,6 +2465,98 @@ Step 14 (`atlas.browser`). Decided with the user on 12/10/2026.
   `tests/fake_engine.py` over real processes; and the installed Chrome with the real engine), the
   assistant's tests, and `scripts/prove_browser.py` against the installed Chrome and a real model
   (13/10/2026).
+
+### The app browser — decided 2026-10-25
+
+Proposed by a contributor on 24/10/2026, worked out with them on 25/10/2026 and accepted on
+26/10/2026: a browser in the side panel (The executors tab and the side panel, below) that the user
+browses in by hand and that `browser_exec` drives in `profile` mode, in place of Atlas's Chrome
+window, when the app is open on the server's computer. The user and the agent see the same page, so
+a login the agent stops at is done beside the conversation, and "go on from here" works on the page
+the user is on. A computer with no Chrome gets a browser too.
+
+- **Electron's own debugger, never a debugging port.** Each page is a `WebContentsView`, and the
+  agent's commands go to that view's `webContents.debugger`. With `--remote-debugging-port` the app
+  would list its own window as a target, and the agent's Python could click the approval cards
+  (found by the feasibility test of 24/10/2026). A view hidden, laid off the window or in a
+  minimized window ignores `Input.*` and never answers `Page.captureScreenshot` unless it is told
+  it has the focus, is active and is not throttled; each view gets the three as it is made and
+  after each navigation, and a hidden view is laid out at 1280×800.
+- **The browser host is the main process, on a connection of its own** (`browser-host.ts`): for
+  each server of this computer the window dials (one the app started, an always-on one,
+  `ATLAS_DESKTOP_URL`), never for `machine:<id>`. The window never gets a channel of raw DevTools
+  commands to pages that hold the user's logins, and the path does not depend on the window being
+  loaded. It answers the server's requests `browser.tabs`, `open`, `close`, `show`, `attach`,
+  `detach` and `cdp`, and sends the watched tabs' events as `browser.event` notifications.
+- **The host proof is a file, not an address**: an SSH tunnel and a published Docker port arrive
+  from the loopback too. The main process writes a random nonce to
+  `<userData>/browser-proof/<32 hex>` (mode 0o600), names it in `browser.host`, and removes it
+  when the server answers; the server accepts only an absolute path in a folder of that name, a
+  file of 128 bytes at most, holding the nonce. A server on another machine, in a container or in
+  WSL does not see the file, refuses, and `browser_exec` stays on Chrome. It guards against the
+  honest mistake of driving this computer's browser from a server elsewhere, not against a hostile
+  app: whoever holds the token already runs commands through the agent. The answer names the home
+  the server serves, and the host answers for that home's tabs alone. One host per server; a newer
+  one replaces it.
+- **The browser endpoint is in the server** (`atlas.browser.endpoint`): a DevTools WebSocket on
+  `127.0.0.1`, one path per conversation with a random token, where the engine connects as to a
+  Chrome (`BU_CDP_WS`). `Target.*` and `Browser.getVersion` are answered there, from the tabs the
+  host lists; a command of a page goes to the host as `browser.cdp`, and the answer and the page's
+  events go back with the engine's own `sessionId`. An unknown session answers Chrome's own "Session
+  with given id not found.", the phrase the engine recovers on. The logic stays where pytest proves
+  it with the real engine, and the app opens no port. A request with an `Origin` or a strange `Host`
+  is refused (a page in a browser can open a local WebSocket), and so is a wrong path.
+- **A tab belongs to a conversation and a home, whoever opens it**: the user in the panel (the
+  conversation on screen), the agent, or a pop-up of another tab. The strip shows the tabs of the
+  conversation and home on screen; the others stay alive and hidden. The engine sees all of its
+  conversation's tabs and no one else's, the one on the user's screen first, so the agent can go on
+  where the user signed in. A new conversation's tabs pass to it when it gets its id. Each home has
+  its own partition (`persist:atlas-browser-<key>`, the key a hash of the machine and the home's
+  name, so no name becomes a folder): a login in the work home is not in the personal one.
+- **The agent never takes the user's place on screen**: the engine opens a tab of its own in the
+  background, and `new_tab()` never navigates over the user's page. The first page the agent opens
+  in a conversation on screen opens the panel on the Browser tab and selects it; the next ones enter
+  the strip in the background, marked as opened by Atlas; `Target.activateTarget` brings one
+  forward. A conversation off the screen never opens the panel.
+- **`profile` mode in the app browser when a host is accepted, else Chrome**; `clean` and
+  `headless` always in Chrome. The description sends reading and searching to `web_fetch` and
+  `web_search`, and keeps `headless` for when the user asks for no window: in the manual proof of
+  27/10/2026 a model asked for a page's title chose `headless`, since it was "for reading", and
+  the user saw nothing. The engine's session is its own (`atlas-app-<hash>`), in the profile
+  mode's workspace folder, so the agent's files stay when the browser changes; its first call in a
+  conversation in this server's life restarts it, since an old daemon would hold a token no longer
+  known. A call after the browser changed says the tabs of the earlier calls are not there. **The
+  app gone in the middle of a call** (only with a server that outlives the app) fails the call, with
+  no retry in Chrome, since the code may have sent a form: the result says the next call runs in
+  Chrome, where the user may have to sign in again.
+- **What it may reach**: the endpoint lets through only a list of DevTools domains (`Page`,
+  `Runtime`, `DOM`, `Input`, `Network`, `Emulation`, `Accessibility` and the like; never `Target`,
+  `Browser`, `Storage`, `IO`, `SystemInfo`, nor `DOMStorage`, `IndexedDB` and `CacheStorage`, which
+  take any origin), and the main process checks the same list (`cdpAllowed`), tested on one shared
+  table. Within those domains, what reaches past the page is refused too: `Page.setDownloadBehavior`
+  and `Page.close`; the cookies and the cache of the home's partition, every site's and every
+  conversation's (`Network.getAllCookies`, `getCookies`, which takes any URL, `setCookie`,
+  `setCookies`, `deleteCookies`, `clearBrowserCookies`, `clearBrowserCache`); and certificate
+  errors ignored for every page (`Security.setIgnoreCertificateErrors` and its two older forms).
+  `Page.navigate` and `Target.createTarget` go through `browser_exec`'s own rules on the
+  wire too (only `http(s)` and `about:blank`, no cloud metadata address, no URL with a secret of the
+  vault), and every partition cancels any request to a cloud metadata address, whatever made it.
+- **Left out**: frames of another process (`iframe_target` finds none); the app browser of this
+  machine lent to a server on another; one place to sign in, since a site signed into in the app is
+  not in Atlas's Chrome and the other way round; the engine's `atlas-app-*` daemons a server killed
+  by force leaves behind, until each conversation's next first call replaces its own. A new version
+  of browser-harness may use a `Target.*` the endpoint does not answer: the version stays pinned,
+  and the engine's test below fails before a user sees it.
+- **Proved** (25/10/2026) by `tests/browser` (the rules; `test_endpoint.py`, the real CDP client against the
+  endpoint and a fake host; `test_endpoint_engine.py`, the real engine against the endpoint with a
+  host backed by a real headless Chrome or Edge: a page read and filled with accents, a screenshot,
+  the network idle, the user's tab listed first and never navigated over, the desktop layout
+  emulated, a tab closed under the engine; and `test_browser.py`, the routing),
+  `tests/server/test_browser_host.py` (the proof, the requests reaching the host's connection alone,
+  the host lost mid-call), Vitest on the rules, the host and the strip, and
+  `e2e/browser-agent.spec.ts` with the real app, `atlas serve`, the engine and the fake model: the
+  panel opening on the agent's first page, the user's tab listed by the agent of its conversation
+  and of no other, the second tab in the background until activated.
 
 ## Bots — decided 2026-10-13
 
@@ -3616,6 +3715,14 @@ the right keeps its place with another use, the terminal and the previews in tab
     out: read_file, web_fetch and the browser read. A URL's normalizing alone would take a
     relative `page.html` for a bare domain (`https://page.html`); a name that is a file of
     the folder is the file.
+- **The Browser tab** (proposed by a contributor on 24/10/2026; Browser, The app browser, above): a
+  real browser beside the conversation, a native view laid over the panel, with tabs on top, an
+  address bar, an empty page that offers the local servers a conversation showed or a quick look
+  found on the common ports (only with the server on this computer), a button that widens it over
+  the conversation, the globe on the panel's strip and Ctrl+Shift+B (⇧⌘B on a Mac). The view hides
+  with the panel, with another tab of it and under a dialog or menu, since a native view lies above
+  the page. Only `http(s)` loads; permissions and downloads are refused; a pop-up becomes a tab. Its
+  tabs are the conversation's and the home's on screen, the agent's among them.
 - **The executor's tab** (asked for by the user on 16/10/2026): choosing an executor in the
   sidebar gives the panel a tab with what it has, now its connectors, as its own `/mcp` lists
   them: each MCP server with its state (connected with how many tools, needs login, failed with
@@ -3674,7 +3781,10 @@ the right keeps its place with another use, the terminal and the previews in tab
   conversation drags each between 224 and 640px, the arrows move it, a double click puts it back;
   the conversation keeps its 24rem, and a narrower window narrows both rails before it (below 960px
   the panel lies over it, as before). A width dragged is kept in the window's storage, as the theme
-  is (`store/layout.ts`).
+  is (`store/layout.ts`). **The Browser tab goes wider** (asked for in the contributor's manual
+  proof on 27/10/2026, as a page of the web wants room): on it the panel drags past 640px, as far as
+  the conversation keeps its 24rem; on any other tab it shows within 640px again, the wider width
+  kept for the browser.
 - **An executor's session opens its folder in VS Code** (asked for by the user on 18/10/2026), a
   button in its header: by VS Code's own link, `vscode://file/<folder>`, which its installer
   registers, so no shell runs and `code` need not be on the PATH (`electron/editor.ts`). Only with
@@ -4351,7 +4461,8 @@ never the server itself.
 - **Unchanged**: the token in the WebSocket's subprotocol, never the URL; the Host and Origin
   guards; the vault bound to its machine; one server per home.
 - **Left out**: a folder chosen in the system's dialog for a remote machine (typed, as now); taking
-  over a remote machine's browser; syncing a home across machines (a backup moves one).
+  over a remote machine's browser; lending this machine's app browser to another machine's server
+  (the host proof refuses it); syncing a home across machines (a backup moves one).
 - **Proved** by `tests/instances` (the code; the guards: a peer off the tailnet refused, one on it
   let in, no token refused; the service definitions of the three systems), the real service on
   Windows and Linux in CI (on, the server up by itself, off, gone), the e2e with the real app, two

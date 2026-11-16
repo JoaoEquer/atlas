@@ -330,7 +330,8 @@ class _Shared:
     last_active: datetime | None = None
     #: The process's subagents, made once the assistant is.
     subagents: "Subagents | None" = None
-    #: The browser, when a Chrome, Edge or Chromium is installed (step 14).
+    #: The browser: Chrome, Edge or Chromium when one is installed, and the app's own while it
+    #: lends it (step 14).
     browser: Browser | None = None
     #: The messages between the home's agents, made once the assistant is.
     messages: "AgentMessages | None" = None
@@ -415,7 +416,7 @@ class _Shared:
             WebFetch(self.spill).tool(),
             *(
                 []
-                if browser is None or self.browser is None
+                if browser is None or self.browser is None or not self.browser.available
                 else [self.browser.tool(conversation_id, sees_images=browser)]
             ),
             # Through the package: its module of the same name would read as an import of it.
@@ -555,7 +556,8 @@ class Assistant:
         executors by name, from the plugins that drive them (`set_executors`); by default none;
         `on_workbench` hears every change on the workbench, which belongs to no conversation.
         `chrome` is the browser's program; by default `[browser] chrome`, or the Chrome, Edge or
-        Chromium installed, and with none the conversations have no browser."""
+        Chromium installed; with none, the conversations have a browser only while the app lends
+        its own."""
         database = Database(home.database_file)
         usage = SkillUsage(database)
         library = SkillLibrary(home.skills_folder, usage, creator=MAIN_AGENT)
@@ -621,15 +623,8 @@ class Assistant:
             program = list(settings.browser.chrome)
         else:
             program = None if (found := _installed_browser()) is None else [str(found)]
-        self.browser = self._shared.browser = (
-            None
-            if program is None
-            else Browser(
-                home.browser_folder,
-                program,
-                redact=vault.redact,
-                engine=browser_engine,
-            )
+        self.browser = self._shared.browser = Browser(
+            home.browser_folder, program, redact=vault.redact, engine=browser_engine
         )
         self.conversations = self._shared.conversations
         self.proposals = self._shared.proposals
@@ -965,8 +960,7 @@ class Assistant:
         await self.messages.close()
         for conversation in list(self._open.values()):
             await conversation.close()
-        if self.browser is not None:
-            await self.browser.close()
+        await self.browser.close()
         if self._sdks is not None:
             await asyncio.gather(self._sdks, return_exceptions=True)
         if self._mcp_start is not None:
@@ -1070,7 +1064,7 @@ class Assistant:
         library's skills."""
         shared = self._shared
         toolset, commands, _ = shared.tools(
-            "", [], _nobody, None, browser=None if self.browser is None else True
+            "", [], _nobody, None, browser=True if self.browser.available else None
         )
         await commands.close()
         tools = {

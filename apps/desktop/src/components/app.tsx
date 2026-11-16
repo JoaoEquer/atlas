@@ -27,7 +27,9 @@ import {
   DRAFT,
   keyScreenShown
 } from '@/store/app'
-import { $panelWidth, $sidebarWidth, toggleSidebar } from '@/store/layout'
+import { $browserExpanded, browserHost, followBrowser, toggleBrowser } from '@/store/browser'
+import { followScreen } from '@/store/browser-screen'
+import { $panelWide, $panelWidth, $sidebarWidth, shownWidth, toggleSidebar } from '@/store/layout'
 import { $firstRun, firstRunOf } from '@/store/setup'
 import { $terminals, openTerminal, refreshTerminalAvailable, terminalAvailable, togglePanel } from '@/store/terminals'
 import { EMPTY_THREAD } from '@/store/thread'
@@ -120,12 +122,25 @@ export function App() {
   }, [executorsOn, home, keyed, read.workbench, state])
   const keyBand = state === 'open' && later && keyScreenShown(options, false, null)
   // The rails' widths, which styles.css gives the sidebar and the side panel.
-  const panelWidth = useStore($panelWidth)
+  const panelWidth = shownWidth(useStore($panelWidth), useStore($panelWide))
   const sidebarWidth = useStore($sidebarWidth)
+  // The browser asked to take the conversation's place (store/browser.ts).
+  const expanded = useStore($browserExpanded)
   const widths = {
     '--panel-width': `${String(panelWidth)}px`,
     '--sidebar-width': `${String(sidebarWidth)}px`
   } as CSSProperties
+
+  // The browser's tabs and the pages the agent opens, for as long as the app is open: the panel need not show it.
+  useEffect(() => {
+    const stops = [followBrowser(), followScreen()]
+
+    return () => {
+      for (const stop of stops) {
+        stop()
+      }
+    }
+  }, [])
 
   // Whether the server's machine opens terminals, asked each time a connection opens (another
   // machine's may not); Ctrl+` shows or hides it, Ctrl+B the sidebar.
@@ -146,6 +161,18 @@ export function App() {
       ) {
         event.preventDefault()
         toggleSidebar()
+      }
+
+      // Ctrl+Shift+B for the browser, and ⇧⌘B on a Mac.
+      if (
+        (event.ctrlKey || (MAC && event.metaKey)) &&
+        event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'b' &&
+        browserHost()
+      ) {
+        event.preventDefault()
+        toggleBrowser()
       }
 
       if (event.ctrlKey && event.key === '`') {
@@ -175,7 +202,12 @@ export function App() {
   }
 
   return (
-    <div className="relative flex h-full bg-background text-foreground" data-connection={state} style={widths}>
+    <div
+      className="relative flex h-full bg-background text-foreground"
+      data-connection={state}
+      data-panel-expanded={expanded ? '' : undefined}
+      style={widths}
+    >
       <Sidebar />
       <main className="main-pane flex min-w-0 flex-1 flex-col">
         <TabStrip />

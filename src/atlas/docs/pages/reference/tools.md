@@ -52,8 +52,8 @@ receives live in the code: `src/atlas/tools/`, and `src/atlas/browser/` for `bro
 
 - **A bot** gets only the tools its definition lists (`tools`) and the MCP servers it names; with
   no list it gets them all. It writes its own memory and skills, and the home's profile is shared.
-- **"With a browser"** means a Chrome, Edge or Chromium is installed, or `[browser] chrome` names
-  one.
+- **"With a browser"** means a Chrome, Edge or Chromium is installed, `[browser] chrome` names
+  one, or the app lends its own browser, open on the server's computer.
 - **The background review** (ARCHITECTURE, Memory) runs on the conversation's tools, but its gate
   lets through only `use_skill`, `read_file`, `find_files`, `skill_manage` and, when the memory is
   due, `memory`. There a replace or a remove becomes a proposal the user approves.
@@ -161,15 +161,22 @@ instructions.
 
 ### `browser_exec` — deferred, failure-tolerant
 
-Drives Atlas's own Chrome (ARCHITECTURE, Browser). `code` is Python with the browser helpers
+For a page that has to be used: clicked, filled, signed into or seen working; its description sends
+searching and reading to `web_search` and `web_fetch`. Drives the browser beside the conversation
+when the app is open on the server's computer, and Atlas's own Chrome otherwise (ARCHITECTURE,
+Browser and The app browser). `code` is Python with the browser helpers
 imported: `new_tab`, `goto_url`, `wait_for_load`, `page_info`, `js`, `fill_input`, `click_at_xy`,
 `capture_screenshot`, raw `cdp`, `ensure_real_tab`. The browser and the workspace folder
 (`$BH_AGENT_WORKSPACE`) last across calls; Python variables do not. A screenshot path printed in
 the output brings the image to a model that sees images. At a login, a CAPTCHA or a payment the
-agent stops and asks the user to do it in the browser window.
+agent stops and asks the user to do it in the browser. In the app's browser the agent also sees
+the tabs the user opened in the conversation, the one on screen first, and never navigates over
+one: it opens its own.
 
 - `code` (required): start it with a one-line comment naming the step.
-- `mode`: `profile` (default: the user's signed-in profile), `clean` or `headless`.
+- `mode`: `profile` (default: the app's browser when it is lent, otherwise Atlas's signed-in Chrome
+  profile), `clean` or `headless` (both always in Chrome; `headless` only when the user asks for no
+  window).
 - `timeout_s`: default 300, at most 1,800.
 
 ## Memory, skills and the past
