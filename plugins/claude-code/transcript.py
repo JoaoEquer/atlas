@@ -262,7 +262,13 @@ def _visible(record: dict[str, Any]) -> bool:
     if record.get("type") not in ("user", "assistant"):
         return False
     hidden = ("isMeta", "isSidechain", "teamName", "isCompactSummary")
-    return not any(record.get(key) for key in hidden)
+    if any(record.get(key) for key in hidden):
+        return False
+    # A background task's notice (`<task-notification>`) Claude Code keeps as a user line: the
+    # harness's, never the user's words, so the conversation does not show it as theirs.
+    origin = record.get("origin")
+    kind = cast("dict[str, Any]", origin).get("kind") if isinstance(origin, dict) else None
+    return kind != "task-notification"
 
 
 def _entries(record: dict[str, Any], questions: set[str]) -> list[TranscriptEntry]:

@@ -441,6 +441,36 @@ describe("the executors tab's folders as an instance changes", () => {
   })
 })
 
+describe("the side panel's executor as the session on screen goes on on another account", () => {
+  it('follows the session to the account it went on on, and leaves an executor chosen apart', async () => {
+    let hear: (event: EventParams) => void = () => undefined
+    const client = Object.assign(quietClient(), {
+      call: () => new Promise(() => undefined),
+      onEvent: (handler: (event: EventParams) => void) => {
+        hear = handler
+
+        return () => undefined
+      }
+    })
+    stop = startApp({ client: () => client, shell: { focus: () => undefined, notify: () => undefined } })
+    await openHome('work')
+    const session = current()
+    const row = { executor: 'claude-code@home', folder: 'C:/work/shop', instance_id: 'in-1', state: 'working' }
+    session.$workbench.set({ executors: [], instances: [row as InstanceRow] })
+    session.openInstance('in-1')
+    expect(session.$openExecutor.get()).toBe('claude-code@home')
+
+    // The plan's limit was reached: it went on on the other account, and the panel with it.
+    hear({ conversation_id: '', payload: { ...row, executor: 'claude-code' }, type: 'workbench.update' })
+    expect(session.$openExecutor.get()).toBe('claude-code')
+
+    // Another executor chosen in the sidebar stays chosen when the session moves again.
+    session.$openExecutor.set('codex')
+    hear({ conversation_id: '', payload: { ...row, executor: 'claude-code@home' }, type: 'workbench.update' })
+    expect(session.$openExecutor.get()).toBe('codex')
+  })
+})
+
 describe('a backup from the app (step 10c)', () => {
   /** A client whose `home.backup` answers `answer`, keeping each call with its deadline. */
   function backupClient(answer: () => Promise<unknown>, calls: unknown[][]): AtlasClient {
