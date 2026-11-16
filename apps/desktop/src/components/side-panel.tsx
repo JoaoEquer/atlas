@@ -37,6 +37,7 @@ import {
   type TerminalTab,
   togglePanel
 } from '@/store/terminals'
+import { $paints, hexOf } from '@/store/theme'
 import { workspaceAt } from '@/store/workspaces'
 
 import { BrowserView } from './browser-view'
@@ -381,9 +382,22 @@ function TerminalView({ active, tab }: { active: boolean; tab: TerminalTab }) {
       cursorBlink: true,
       fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, monospace',
       fontSize: 12,
-      scrollback: 2000,
-      theme: { background: '#0a0a0a' }
+      scrollback: 2000
     })
+    // The terminal draws on its own canvas, so it is given the colors its box is painted with (the
+    // dark look's, or a dark theme's), again at each paint.
+    const recolor = () => {
+      const style = getComputedStyle(box)
+      const color = (token: string) => hexOf(style.getPropertyValue(`--${token}`).trim())
+      term.options.theme = {
+        background: color('background'),
+        foreground: color('foreground'),
+        cursor: color('foreground'),
+        selectionBackground: color('selected')
+      }
+    }
+    recolor()
+    const stopPaints = $paints.listen(recolor)
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.loadAddon(new Unicode11Addon())
@@ -424,6 +438,7 @@ function TerminalView({ active, tab }: { active: boolean; tab: TerminalTab }) {
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      stopPaints()
       stopData()
       typed.dispose()
       term.dispose()

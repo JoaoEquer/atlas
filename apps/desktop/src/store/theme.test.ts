@@ -20,6 +20,7 @@ async function opened(stored: Record<string, string> = {}) {
   }
   document.documentElement.removeAttribute('style')
   document.documentElement.classList.remove('dark')
+  document.head.querySelector('style[data-plugin-theme]')?.remove()
   const { vi } = await import('vitest')
   vi.resetModules()
 
@@ -101,5 +102,39 @@ describe('a theme a plugin brings', () => {
     theme.setTheme('plugin:sand:dusk')
 
     expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
+
+  it('carries a dark theme into the parts kept dark, and takes it off with the theme', async () => {
+    const theme = await opened()
+    const dusk: PluginThemeRow = {
+      ...SAND,
+      name: 'dusk',
+      base: 'dark',
+      colors: { background: '#1a1714', subtle: 'url(https://x.test/a.png)', '--evil': '#fff' }
+    }
+    theme.setPluginThemes([dusk])
+    theme.setTheme('plugin:sand:dusk')
+
+    const rule = () => document.head.querySelector('style[data-plugin-theme]')?.textContent
+    expect(rule()).toBe(':root .dark { --background: #1a1714; }')
+
+    theme.setTheme('dark')
+    expect(rule()).toBeUndefined()
+  })
+
+  it('leaves the parts kept dark alone under a light theme', async () => {
+    const theme = await opened()
+    theme.setPluginThemes([SAND])
+    theme.setTheme('plugin:sand:sand')
+
+    expect(document.head.querySelector('style[data-plugin-theme]')).toBeNull()
+  })
+
+  it('counts each paint, for a terminal to take the colors again', async () => {
+    const theme = await opened()
+    const before = theme.$paints.get()
+    theme.setTheme('dark')
+
+    expect(theme.$paints.get()).toBe(before + 1)
   })
 })

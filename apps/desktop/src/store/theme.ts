@@ -105,11 +105,15 @@ function resolved(choice: ThemeChoice, row: PluginThemeRow | undefined): Theme {
 
 let known = false
 let painted: string[] = []
+/** The rule that carries a dark theme into the parts kept dark (a terminal), made when first needed. */
+let darkParts: HTMLStyleElement | undefined
 
 /** What the user chose. */
 export const $themeChoice = atom<ThemeChoice>(chosen())
 /** The look on screen. */
 export const $theme = atom<Theme>(resolved(chosen(), pluginTheme(chosen(), false)))
+/** Counts the paints, for what reads the painted colors (a terminal's own canvas). */
+export const $paints = atom(0)
 
 function paint(theme: Theme, row: PluginThemeRow | undefined): void {
   const root = document.documentElement
@@ -119,13 +123,55 @@ function paint(theme: Theme, row: PluginThemeRow | undefined): void {
     root.style.removeProperty(property)
   }
   painted = []
+  const colors: string[] = []
   for (const [token, color] of Object.entries(row?.colors ?? {})) {
     if (TOKENS.has(token) && HEX.test(color)) {
       root.style.setProperty(`--${token}`, color)
       painted.push(`--${token}`)
+      colors.push(`--${token}: ${color};`)
     }
   }
+  paintDarkParts(row?.base === 'dark' ? colors : [])
   paintTitleBar()
+  $paints.set($paints.get() + 1)
+}
+
+/**
+ * A part kept dark in both looks (the terminal, a command's output) takes the `dark` class, whose
+ * colors would cover a dark theme's on the root: under a dark theme it takes the theme's. Only the
+ * names and hex colors checked above reach the rule, so it is data as the root's are.
+ */
+function paintDarkParts(colors: string[]): void {
+  if (colors.length === 0) {
+    darkParts?.remove()
+    darkParts = undefined
+    return
+  }
+
+  darkParts ??= document.createElement('style')
+  darkParts.dataset.pluginTheme = ''
+  darkParts.textContent = `:root .dark { ${colors.join(' ')} }`
+  document.head.append(darkParts)
+}
+
+/** A CSS color as `#rrggbb`, through a canvas, which turns any CSS color into one. */
+export function hexOf(color: string): string | undefined {
+  if (!color || /^#[0-9a-f]{6}$/i.test(color)) {
+    return color || undefined
+  }
+
+  const context = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+
+  if (!context) {
+    return undefined
+  }
+
+  context.clearRect(0, 0, 1, 1)
+  context.fillStyle = color
+  context.fillRect(0, 0, 1, 1)
+  const [red = 0, green = 0, blue = 0] = context.getImageData(0, 0, 1, 1).data
+
+  return `#${[red, green, blue].map(value => value.toString(16).padStart(2, '0')).join('')}`
 }
 
 /**
@@ -135,22 +181,18 @@ function paint(theme: Theme, row: PluginThemeRow | undefined): void {
  */
 function paintTitleBar(): void {
   const bridge = (window as { atlas?: AtlasBridge }).atlas
-  const context = bridge?.titleBar && document.createElement('canvas').getContext('2d', { willReadFrequently: true })
 
-  if (!bridge?.titleBar || !context) {
+  if (!bridge?.titleBar) {
     return
   }
 
   const style = getComputedStyle(document.documentElement)
-  const hex = (token: string) => {
-    context.clearRect(0, 0, 1, 1)
-    context.fillStyle = style.getPropertyValue(`--${token}`).trim()
-    context.fillRect(0, 0, 1, 1)
-    const [red = 0, green = 0, blue = 0] = context.getImageData(0, 0, 1, 1).data
+  const ground = hexOf(style.getPropertyValue('--subtle').trim())
+  const text = hexOf(style.getPropertyValue('--foreground').trim())
 
-    return `#${[red, green, blue].map(value => value.toString(16).padStart(2, '0')).join('')}`
+  if (ground && text) {
+    bridge.titleBar(ground, text)
   }
-  bridge.titleBar(hex('subtle'), hex('foreground'))
 }
 
 function show(): void {
