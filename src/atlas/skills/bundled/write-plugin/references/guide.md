@@ -887,7 +887,9 @@ A plugin can bring colors for the app (`atlas.api` 24). A theme is data: one fil
 ```
 
 - `base` is the look the theme sits on, `light` or `dark`: the app keeps its own light and dark
-  classes, and the theme repaints steps of the palette over it.
+  classes, and the theme repaints steps of the palette over it. The parts the app keeps dark in
+  both looks (the terminal, a command's output) take a `dark` theme's colors too, and keep the
+  app's own dark under a `light` one.
 - `colors` names the app's own colors and gives each a hex color (`#rgb`, `#rrggbb` or
   `#rrggbbaa`). The app paints every screen with these names and no others: `background`,
   `foreground`, `soft`, `muted-foreground`, `faint`, `subtle`, `raised`, `muted`, `hover`,
